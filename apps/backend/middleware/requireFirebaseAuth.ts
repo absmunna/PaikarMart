@@ -85,6 +85,8 @@ export async function requireFirebaseAuth(req: Request, res: Response, next: Nex
   }
 }
 
+export const ensureAuth = requireFirebaseAuth;
+
 export async function optionalFirebaseAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.header('authorization') || '';
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -112,3 +114,4 @@ export async function optionalFirebaseAuth(req: Request, res: Response, next: Ne
     res.status(401).json({ error: 'Invalid or expired authentication token.' });
   }
 }
+
