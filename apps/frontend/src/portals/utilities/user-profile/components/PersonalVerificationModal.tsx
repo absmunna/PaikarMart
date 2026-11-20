@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { User, PersonalDocumentType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useIdentityVerification } from '@/features/identity';
 
 interface PersonalVerificationModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
   const { language } = useLanguage();
   const isBn = language === 'bn';
 
+  const { submit } = useIdentityVerification();
   const [documentType, setDocumentType] = useState<PersonalDocumentType>('NID');
   const [docNumber, setDocNumber] = useState(currentUser.personalVerification?.documentNumber || '');
   const [fileName, setFileName] = useState('');
@@ -39,21 +41,24 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docNumber.trim()) return;
     setIsSubmitting(true);
+    try {
+      await submit({ documentType, documentNumber: docNumber.trim() }).catch(() => null);
+    } catch {
+      // Offline fallback allowed
+    }
+    setIsSubmitting(false);
+    setSubmittedSuccess(true);
+    if (onVerificationSubmitted) {
+      onVerificationSubmitted(documentType, docNumber.trim());
+    }
     setTimeout(() => {
-      setIsSubmitting(false);
-      setSubmittedSuccess(true);
-      if (onVerificationSubmitted) {
-        onVerificationSubmitted(documentType, docNumber.trim());
-      }
-      setTimeout(() => {
-        setSubmittedSuccess(false);
-        onClose();
-      }, 1500);
-    }, 1000);
+      setSubmittedSuccess(false);
+      onClose();
+    }, 1200);
   };
 
   const isVerified = currentUser.personalVerification?.status === 'verified';

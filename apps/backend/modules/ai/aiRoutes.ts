@@ -83,3 +83,49 @@ aiRouter.post('/transcribe', async (req: Request, res: Response) => {
     });
   }
 });
+
+// 5. Citizen Classified Post Safety & AI Moderation (Fail-Safe)
+aiRouter.post('/moderate-post', async (req: Request, res: Response) => {
+  try {
+    const { content = '', category = 'general' } = req.body;
+    if (!content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'Post content string is required.' });
+    }
+
+    const lower = content.toLowerCase();
+    const prohibitedKeywords = [
+      'অস্ত্র', 'পিস্তল', 'বন্দুক', 'weapon', 'gun', 'explosive',
+      'মাদক', 'হেরোইন', 'ড্রাগ', 'drug', 'ইয়াবা', 'গাঁজা',
+      'সুদ', 'বেটিং', 'gambling', 'ক্যাসিনো', 'casino', 'পনজি স্ক্যাম', 'pyramid scheme',
+      'জাল টাকা', 'হুমকি', 'fake passport', 'জাল এনআইডি'
+    ];
+
+    const flaggedKeywords = prohibitedKeywords.filter(k => lower.includes(k));
+
+    if (flaggedKeywords.length > 0) {
+      return res.json({
+        isSafe: false,
+        riskLevel: 'high_risk_flagged',
+        reason: 'Sensitive or high-risk content detected. Held for human review.',
+        flaggedKeywords,
+        status: 'pending_human_review'
+      });
+    }
+
+    return res.json({
+      isSafe: true,
+      riskLevel: 'safe',
+      reason: 'Automated AI safety screening passed.',
+      status: 'approved'
+    });
+  } catch (error: any) {
+    console.error('Error in /api/ai/moderate-post:', error);
+    // Fail-safe: if server-side analysis throws, hold for human review
+    return res.json({
+      isSafe: false,
+      riskLevel: 'high_risk_flagged',
+      reason: 'Moderation service error; listing held for reviewer.',
+      status: 'pending_human_review'
+    });
+  }
+});

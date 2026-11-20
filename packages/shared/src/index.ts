@@ -95,6 +95,20 @@ export function canAccessSellerCentral(user?: {
   return true;
 }
 
+export type PersonalDocumentType = 'NID' | 'Passport' | 'Birth Certificate' | 'Student ID';
+
+export type PersonalVerificationStatus = 'unverified' | 'pending' | 'verified';
+
+export interface PersonalVerificationInfo {
+  status: PersonalVerificationStatus;
+  documentType?: PersonalDocumentType;
+  documentNumber?: string;
+  verifiedAt?: string;
+  verificationBadge?: string;
+}
+
+export type CitizenPostCategory = 'general' | 'homemade' | 'bid' | 'property_rent' | 'used_goods';
+
 export interface User {
   id: string;
   name: string;
@@ -103,6 +117,15 @@ export interface User {
   avatar: string;
   role: UserRole;
   isVendor: boolean;
+  profession?: string;
+  education?: string;
+  skills?: string[];
+  personalVerification?: PersonalVerificationInfo;
+  activeCapabilities?: ('shop' | 'service' | 'creator')[];
+  canPostHomemade?: boolean;
+  canParticipateBids?: boolean;
+  canPostRental?: boolean;
+  canPostUsedGoods?: boolean;
   kycStatus?: KycStatus;
   trustLevel?: TrustLevel;
   location: string;
@@ -142,8 +165,13 @@ export interface SocialPost {
   authorId?: string;
   authorName: string;
   authorHandle?: string;
+  authorAvatar?: string;
+  authorVerified?: boolean;
   content: string;
   timestamp: string;
+  citizenCategory?: CitizenPostCategory;
+  aiSafetyVerified?: boolean;
+  aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged';
   reactionsCount: {
     like: number;
     love: number;

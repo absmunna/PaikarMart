@@ -154,8 +154,10 @@ export interface WalletTransaction {
 
 export type PersonalDocumentType = 'NID' | 'Passport' | 'Birth Certificate' | 'Student ID';
 
+export type PersonalVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+
 export interface PersonalVerificationInfo {
-  status: 'unverified' | 'pending' | 'verified';
+  status: PersonalVerificationStatus;
   documentType?: PersonalDocumentType;
   documentNumber?: string;
   verifiedAt?: string;

@@ -26,6 +26,12 @@ create table if not exists public.profiles (
   wallet_balance numeric(12,2) default 0.00 check (wallet_balance >= 0.00),
   reward_points int default 0 check (reward_points >= 0),
   is_verified boolean default false,
+  profession text,
+  education text,
+  skills text[],
+  citizen_verification_status text default 'unverified' check (citizen_verification_status in ('unverified', 'pending', 'verified', 'rejected')),
+  citizen_doc_type text,
+  citizen_doc_number text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -46,6 +52,24 @@ create table if not exists public.private_user_details (
   payout_account_no text,
   payout_routing_no text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- ==============================================================================
+-- 3B. Personal Identity Verifications (Citizen KYC Audit Trail)
+-- NID, Passport, Birth Registration, Student ID for Personal Accounts
+-- ==============================================================================
+create table if not exists public.identity_verifications (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  document_type text not null check (document_type in ('NID', 'Passport', 'Birth Certificate', 'Student ID')),
+  document_number text not null,
+  document_front_url text,
+  document_back_url text,
+  status text not null default 'submitted' check (status in ('submitted', 'under_review', 'verified', 'rejected')),
+  rejection_reason text,
+  verified_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 create table if not exists public.saved_addresses (
@@ -255,6 +279,9 @@ create table if not exists public.social_posts (
   shares_count int default 0 check (shares_count >= 0),
   is_sponsored boolean default false,
   ad_network text,
+  citizen_category text default 'general' check (citizen_category in ('general', 'homemade', 'bid', 'property_rent', 'used_goods')),
+  ai_safety_status text default 'safe' check (ai_safety_status in ('safe', 'low_risk', 'high_risk_flagged', 'pending_human_review')),
+  ai_risk_flags text[],
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

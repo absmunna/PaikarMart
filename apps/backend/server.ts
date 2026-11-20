@@ -236,15 +236,17 @@ Respond ONLY in valid JSON format:
     console.error('Gemini AI Verification fallback:', err);
   }
 
-  // Graceful fallback when API key is pending or network is restricted
+  // Fail-Safe security fallback: when AI audit is unavailable or network is restricted,
+  // hold for manual review rather than automatically approving unverified content.
   res.json({
     success: true,
-    confidenceScore: 98,
-    isApproved: true,
-    auditNotes: 'Automated AI Vision audit passed (Instant Verification): High confidence score, verified taxonomy.',
+    confidenceScore: 50,
+    isApproved: false,
+    status: 'pending_human_review',
+    auditNotes: 'AI audit service queued listing for human verification (Fail-Safe Security Policy).',
     titleEn: title,
     titleBn: title,
-    suggestedTags: [category, brand || 'Verified SKU']
+    suggestedTags: [category, brand || 'Pending Review']
   });
 });
 

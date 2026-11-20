@@ -789,6 +789,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             />
           </div>
 
+          {/* My Business / আমার ব্যবসা Entry Point */}
+          <button
+            type="button"
+            onClick={() => {
+              if (currentUser.isVendor) {
+                onSelectTab('vendor-dash');
+              } else {
+                onOpenVendorModal();
+              }
+            }}
+            className={`hidden lg:flex items-center gap-1.5 h-9 sm:h-10 px-3 rounded-xl border text-xs font-bold transition-all active-scale cursor-pointer shrink-0 ${
+              currentTab === 'vendor-dash'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25 hover:bg-amber-500/20'
+            }`}
+            title={isBn ? 'আমার ব্যবসা ও স্টোর পরিচালনা' : 'My Business & Store Management'}
+            aria-label={isBn ? 'আমার ব্যবসা' : 'My Business'}
+          >
+            <Store className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>{isBn ? 'আমার ব্যবসা' : 'My Business'}</span>
+          </button>
+
           {/* Super Admin Control Center Button (Authenticated Admins Only) */}
           {Boolean(firebaseUser) && onOpenSuperAdminModal && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
             <button
