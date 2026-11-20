@@ -152,3 +152,14 @@ A single user upgrades smoothly without creating duplicate accounts:
 ---
 
 *Authoritative System Truth — Every AI agent and developer must align code, routes, schemas, and UI strictly with this specification.*
+
+## Recent Updates (2026-11-21)
+
+- Implemented unified single‑account identity with multi‑role support.
+- Added citizen verification (NID, Passport, Birth Certificate, Student ID) and the `identity_verifications` table.
+- Introduced “My Business” multi‑store management UI and backend.
+- Enforced fail‑safe AI moderation via `/api/ai/moderate-post` with pending‑human‑review fallback.
+- Updated modular folder‑structure rules: hub‑first architecture, no duplicate portal folders, strict import boundaries.
+- Added `/api/identity/*` endpoints for profile and verification flows.
+- Reflected new database schema changes in `supabase/schema.sql`.
+- Updated design system with new CTA styles and accessibility guidelines.

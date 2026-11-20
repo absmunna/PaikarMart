@@ -252,3 +252,14 @@ Resolved items from prior audits (P0/P1 backend auth/price/KYC hardening, `Vendo
 3. **Deeper Child Portal & Production Integrations:** Configure live Supabase/Payment callbacks to enable persistent Wallet/Escrow transactions and progressive child-portal consolidation inside hubs without duplicating full portal pages.
 
 
+
+## Recent Updates (2026-11-21)
+
+- Implemented unified single‑account identity with multi‑role support.
+- Added citizen verification (NID, Passport, Birth Certificate, Student ID) and the `identity_verifications` table.
+- Introduced “My Business” multi‑store management UI and backend.
+- Enforced fail‑safe AI moderation via `/api/ai/moderate-post` with pending‑human‑review fallback.
+- Updated modular folder‑structure rules: hub‑first architecture, no duplicate portal folders, strict import boundaries.
+- Added `/api/identity/*` endpoints for profile and verification flows.
+- Reflected new database schema changes in `supabase/schema.sql`.
+- Updated design system with new CTA styles and accessibility guidelines.

@@ -111,3 +111,13 @@ PaikarMart supports **Single-Server Monolithic Cloud Run / Render** deployment A
 * [x] Harden and deploy `firestore.rules` (Zero-Trust + Zero-PII `public_profiles` + strict `request.time` & owner checks).
 * [x] Align `vercel.json` (`apps/frontend/dist`), `firebase.json` (`firestore.rules`), `render.yaml` (`node server.js`), and `package.json` (`start: node server.js`).
 * [x] Confirm all 3 build/typecheck gates exit `0` (`npm run build`, `npm run lint`, backend `npx tsc --noEmit`).
+
+## Recent Updates (2026-11-21)
+
+- Added unified single‑account identity with citizen verification flow.
+- Implemented multi‑store "My Business" UI and backend endpoints.
+- Integrated fail‑safe AI moderation (pending‑human‑review fallback).
+- Updated modular folder‑structure rules to enforce hub‑first architecture.
+- Added `/api/identity/*` routes and database `identity_verifications` table.
+- Reflected schema changes in `supabase/schema.sql` and deployment docs.
+- Extended design system with new CTA styles and accessibility guidelines.

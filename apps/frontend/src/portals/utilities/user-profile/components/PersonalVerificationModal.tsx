@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  ShieldCheck, 
-  FileText, 
-  CheckCircle2, 
-  Upload, 
-  Car, 
-  ShoppingBag, 
-  Gavel, 
-  Home, 
-  Package, 
-  AlertCircle 
+import {
+  X,
+  ShieldCheck,
+  FileText,
+  CheckCircle2,
+  Upload,
+  Car,
+  ShoppingBag,
+  Gavel,
+  Home,
+  Package,
+  AlertCircle
 } from 'lucide-react';
 import { User, PersonalDocumentType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -66,7 +66,7 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-scaleIn max-h-[90vh] overflow-y-auto no-scrollbar">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--pm-border)] pb-4">
           <div className="flex items-center gap-2.5">
@@ -78,8 +78,8 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
                 {isBn ? 'ব্যক্তিগত নাগরিক ভেরিফিকেশন' : 'Personal Citizen Verification'}
               </h3>
               <p className="text-xs text-[var(--pm-muted)]">
-                {isBn 
-                  ? 'একক অ্যাকাউন্টে সেবা গ্রহণ ও নাগরিক বিক্রির সুবিধা সক্রিয় করুন' 
+                {isBn
+                  ? 'একক অ্যাকাউন্টে সেবা গ্রহণ ও নাগরিক বিক্রির সুবিধা সক্রিয় করুন'
                   : 'Unlock citizen trade & on-demand services for your single account'}
               </p>
             </div>
@@ -152,17 +152,16 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
                     key={type}
                     type="button"
                     onClick={() => setDocumentType(type)}
-                    className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex items-center justify-between cursor-pointer ${
-                      documentType === type 
-                        ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] shadow-xs' 
+                    className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex items-center justify-between cursor-pointer ${documentType === type
+                        ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] shadow-xs'
                         : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
-                    }`}
+                      }`}
                   >
                     <span>
                       {type === 'NID' ? (isBn ? 'জাতীয় পরিচয়পত্র (NID)' : 'National ID (NID)') :
-                       type === 'Passport' ? (isBn ? 'পাসপোর্ট (Passport)' : 'Passport') :
-                       type === 'Birth Certificate' ? (isBn ? 'জন্মনিবন্ধন সনদ' : 'Birth Certificate') :
-                       (isBn ? 'শিক্ষার্থী আইডি (Student Card)' : 'Student ID Card')}
+                        type === 'Passport' ? (isBn ? 'পাসপোর্ট (Passport)' : 'Passport') :
+                          type === 'Birth Certificate' ? (isBn ? 'জন্মনিবন্ধন সনদ' : 'Birth Certificate') :
+                            (isBn ? 'শিক্ষার্থী আইডি (Student Card)' : 'Student ID Card')}
                     </span>
                     {documentType === type && <CheckCircle2 className="w-3.5 h-3.5" />}
                   </button>
@@ -211,8 +210,8 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                {isBn 
-                  ? 'আপনার আপলোডকৃত ডকুমেন্ট সম্পূর্ণ সুরক্ষিত ও এনক্রিপ্টেড থাকবে। এটি কোনো পাবলিক প্রোফাইলে দেখা যাবে না।' 
+                {isBn
+                  ? 'আপনার আপলোডকৃত ডকুমেন্ট সম্পূর্ণ সুরক্ষিত ও এনক্রিপ্টেড থাকবে। এটি কোনো পাবলিক প্রোফাইলে দেখা যাবে না।'
                   : 'Your document is securely encrypted and will never be displayed publicly.'}
               </span>
             </div>
