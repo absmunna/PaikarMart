@@ -18,10 +18,15 @@ import { WholesaleFilterBar, WholesaleSupplierFilter, MOQFilter } from '@/portal
 import { SearchGroundingWidget, MapsGroundingWidget } from '@/features/ai';
 import { useB2BRFQStore, PurchaseOrderDraft, RFQModal, SampleRequestModal, ExportDutyCalculator } from '@/features/b2b';
 import { useWalletStore } from '@/features/wallet';
-import { PortalBannerCarousel } from '@/design-system/components';
+import {
+  MarketplaceGridSkeleton,
+  PortalBannerCarousel,
+} from '@/design-system/components';
+import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
 
 interface WholesalePortalProps {
   items: CommerceItem[];
+  isLoading?: boolean;
   onAddToCart: (item: CommerceItem, quantity: number, isWholesale: boolean) => void;
   onSelectTab?: (tab: PortalTab) => void;
   externalSearchQuery?: string;
@@ -30,6 +35,7 @@ interface WholesalePortalProps {
 
 export const WholesalePortal: React.FC<WholesalePortalProps> = ({
   items,
+  isLoading = false,
   onAddToCart,
   onSelectTab,
   externalSearchQuery = '',
@@ -40,10 +46,15 @@ export const WholesalePortal: React.FC<WholesalePortalProps> = ({
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
   const [selectedSupplierCategory, setSelectedSupplierCategory] = useState<WholesaleSupplierFilter>('all');
   const [selectedMOQ, setSelectedMOQ] = useState<MOQFilter>('all');
+  const { trackProductView, trackSearchQuery } = useEngagementAnalytics();
 
   useEffect(() => {
     setSearchQuery(externalSearchQuery);
   }, [externalSearchQuery]);
+
+  useEffect(() => {
+    trackSearchQuery(searchQuery, { portal: 'wholesale' });
+  }, [searchQuery, trackSearchQuery]);
 
   useEffect(() => {
     if (
@@ -341,15 +352,23 @@ export const WholesalePortal: React.FC<WholesalePortalProps> = ({
       </div>
 
       {/* 6. Wholesale Products Grid */}
-      {filteredItems.length > 0 ? (
+      {isLoading ? (
+        <MarketplaceGridSkeleton variant="wholesale" count={6} />
+      ) : filteredItems.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredItems.map((item) => (
             <WholesaleProductCard
               key={item.id}
               product={item}
               onAddToCart={onAddToCart}
-              onRequestRFQ={(product) => setActiveRFQProduct(product)}
-              onRequestSample={(product) => setActiveSampleProduct(product)}
+              onRequestRFQ={(product) => {
+                trackProductView(product, 'wholesale_rfq_modal');
+                setActiveRFQProduct(product);
+              }}
+              onRequestSample={(product) => {
+                trackProductView(product, 'wholesale_sample_modal');
+                setActiveSampleProduct(product);
+              }}
             />
           ))}
         </div>

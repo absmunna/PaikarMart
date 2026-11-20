@@ -27,6 +27,7 @@ export const ROUTE_PATHS = {
   GUIDE: '/portal/guide',
   DEMAND: '/portal/demand',
   NEARBY: '/portal/nearby',
+  WISHLIST: '/portal/wishlist',
   SETTINGS: '/settings',
 } as const;
 
@@ -51,6 +52,7 @@ export const PORTAL_TAB_ROUTES: Record<PortalTab, string> = {
   guide: ROUTE_PATHS.GUIDE,
   demand: ROUTE_PATHS.DEMAND,
   nearby: ROUTE_PATHS.NEARBY,
+  wishlist: ROUTE_PATHS.WISHLIST,
 };
 
 export function resolveTabFromPath(pathname: string): PortalTab {
@@ -66,6 +68,7 @@ export function resolveTabFromPath(pathname: string): PortalTab {
   if (pathname.startsWith('/portal/seller')) return 'vendor-dash';
   if (pathname.startsWith('/portal/demand')) return 'demand';
   if (pathname.startsWith('/portal/nearby')) return 'nearby';
+  if (pathname.startsWith('/portal/wishlist')) return 'wishlist';
   if (pathname.startsWith('/portal/profile')) return 'profile';
   if (pathname.startsWith('/portal/notifications')) return 'notifications';
   if (pathname.startsWith('/portal/orders')) return 'orders';

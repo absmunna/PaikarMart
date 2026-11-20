@@ -88,3 +88,182 @@ export const ProductDetailsSkeleton = () => (
     </div>
   </div>
 );
+
+interface MarketplaceCardSkeletonProps {
+  variant?: 'retail' | 'wholesale';
+}
+
+export const MarketplaceCardSkeleton: React.FC<MarketplaceCardSkeletonProps> = ({
+  variant = 'retail',
+}) => {
+  if (variant === 'wholesale') {
+    return (
+      <div
+        aria-hidden="true"
+        className="bg-[var(--pm-card)] rounded-2xl border border-[var(--pm-border)] overflow-hidden flex flex-col animate-pulse shadow-xs"
+      >
+        <div className="relative aspect-4/3 bg-[var(--pm-surface)]">
+          <div className="absolute top-2.5 left-2.5 h-6 w-28 rounded-lg bg-[var(--pm-card)]/70 border border-[var(--pm-border)]" />
+          <div className="absolute top-2.5 right-2.5 h-6 w-20 rounded-lg bg-[var(--pm-card)]/70 border border-[var(--pm-border)]" />
+          <div className="absolute bottom-2.5 right-2.5 h-6 w-24 rounded-lg bg-[var(--pm-card)]/70 border border-[var(--pm-border)]" />
+        </div>
+        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+          <div className="space-y-2">
+            <div className="h-3 w-2/3 rounded-md bg-[var(--pm-surface)]" />
+            <div className="h-4 w-5/6 rounded-md bg-[var(--pm-surface)]" />
+            <div className="h-3 w-full rounded-md bg-[var(--pm-surface)]" />
+            <div className="h-3 w-4/5 rounded-md bg-[var(--pm-surface)]" />
+          </div>
+          <div className="pt-2 border-t border-[var(--pm-border)] space-y-3">
+            <div className="flex items-end justify-between">
+              <div className="space-y-1.5">
+                <div className="h-2.5 w-20 rounded bg-[var(--pm-surface)]" />
+                <div className="h-5 w-24 rounded-md bg-[var(--pm-surface)]" />
+              </div>
+              <div className="h-4 w-20 rounded-md bg-[var(--pm-surface)]" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-9 rounded-xl bg-[var(--pm-surface)]" />
+              <div className="h-9 rounded-xl bg-[var(--pm-surface)]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className="p-2.5 rounded-[2rem] bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between space-y-2.5 animate-pulse"
+    >
+      <div className="space-y-2.5">
+        <div className="relative aspect-[4/3] rounded-[1.5rem] bg-[var(--pm-surface)] overflow-hidden">
+          <div className="absolute top-2 left-2 h-4 w-14 rounded-full bg-[var(--pm-card)]/80 border border-[var(--pm-border)]" />
+          <div className="absolute bottom-2 right-2 h-4 w-10 rounded-full bg-[var(--pm-card)]/80 border border-[var(--pm-border)]" />
+        </div>
+        <div className="space-y-2 px-0.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="h-3 w-28 rounded-md bg-[var(--pm-surface)]" />
+            <div className="h-2.5 w-12 rounded-md bg-[var(--pm-surface)]" />
+          </div>
+          <div className="h-4 w-5/6 rounded-md bg-[var(--pm-surface)]" />
+          <div className="space-y-1.5">
+            <div className="h-2.5 w-full rounded bg-[var(--pm-surface)]" />
+            <div className="h-2.5 w-3/4 rounded bg-[var(--pm-surface)]" />
+          </div>
+          <div className="flex items-center justify-between pt-0.5">
+            <div className="h-2.5 w-16 rounded bg-[var(--pm-surface)]" />
+            <div className="h-2.5 w-14 rounded bg-[var(--pm-surface)]" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2.5 pt-2.5 border-t border-[var(--pm-border)] px-0.5">
+        <div className="flex items-end justify-between">
+          <div className="space-y-1.5">
+            <div className="h-2 w-10 rounded bg-[var(--pm-surface)]" />
+            <div className="h-5 w-20 rounded-md bg-[var(--pm-surface)]" />
+          </div>
+          <div className="h-7 w-20 rounded-xl bg-[var(--pm-surface)]" />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="h-8 rounded-xl bg-[var(--pm-surface)]" />
+          <div className="h-8 rounded-xl bg-[var(--pm-surface)]" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface MarketplaceGridSkeletonProps {
+  count?: number;
+  variant?: 'retail' | 'wholesale';
+}
+
+export const MarketplaceGridSkeleton: React.FC<MarketplaceGridSkeletonProps> = ({
+  count = 6,
+  variant = 'retail',
+}) => (
+  <div
+    role="status"
+    aria-busy="true"
+    aria-label="Loading marketplace catalog"
+    className={
+      variant === 'wholesale'
+        ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5'
+        : 'grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4'
+    }
+  >
+    <span className="sr-only">Loading marketplace catalog...</span>
+    {Array.from({ length: count }).map((_, index) => (
+      <MarketplaceCardSkeleton key={index} variant={variant} />
+    ))}
+  </div>
+);
+
+interface SocialPostSkeletonProps {
+  showMedia?: boolean;
+}
+
+export const SocialPostSkeleton: React.FC<SocialPostSkeletonProps> = ({
+  showMedia = true,
+}) => (
+  <article
+    aria-hidden="true"
+    className="bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-6 shadow-sm space-y-4 animate-pulse"
+  >
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="w-11 h-11 rounded-full bg-[var(--pm-surface)] shrink-0" />
+        <div className="space-y-2 flex-1 max-w-[220px]">
+          <div className="h-3.5 w-3/4 rounded-md bg-[var(--pm-surface)]" />
+          <div className="h-2.5 w-1/2 rounded-md bg-[var(--pm-surface)]" />
+        </div>
+      </div>
+      <div className="h-7 w-16 rounded-full bg-[var(--pm-surface)] shrink-0" />
+    </div>
+
+    <div className="space-y-2 px-1">
+      <div className="h-3.5 w-full rounded-md bg-[var(--pm-surface)]" />
+      <div className="h-3.5 w-11/12 rounded-md bg-[var(--pm-surface)]" />
+      <div className="h-3.5 w-2/3 rounded-md bg-[var(--pm-surface)]" />
+    </div>
+
+    {showMedia && (
+      <div className="aspect-[16/9] rounded-2xl sm:rounded-[1.5rem] bg-[var(--pm-surface)] border border-[var(--pm-border)]" />
+    )}
+
+    <div className="flex items-center justify-between pt-1">
+      <div className="h-3 w-24 rounded bg-[var(--pm-surface)]" />
+      <div className="h-3 w-28 rounded bg-[var(--pm-surface)]" />
+    </div>
+
+    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[var(--pm-border)]">
+      <div className="h-9 rounded-xl bg-[var(--pm-surface)]" />
+      <div className="h-9 rounded-xl bg-[var(--pm-surface)]" />
+      <div className="h-9 rounded-xl bg-[var(--pm-surface)]" />
+    </div>
+  </article>
+);
+
+interface SocialFeedListSkeletonProps {
+  count?: number;
+}
+
+export const SocialFeedListSkeleton: React.FC<SocialFeedListSkeletonProps> = ({
+  count = 3,
+}) => (
+  <div
+    role="status"
+    aria-busy="true"
+    aria-label="Loading community feed posts"
+    className="space-y-4 sm:space-y-6"
+  >
+    <span className="sr-only">Loading community feed posts...</span>
+    {Array.from({ length: count }).map((_, index) => (
+      <SocialPostSkeleton key={index} showMedia={index % 2 === 0} />
+    ))}
+  </div>
+);
+

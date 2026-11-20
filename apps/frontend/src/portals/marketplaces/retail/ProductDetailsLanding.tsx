@@ -1,15 +1,18 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ShieldCheck, ArrowLeft, Heart, Share2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, Heart, Share2, AlertCircle, Scale, Check } from 'lucide-react';
 import { CommerceItem, User, Order } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { ProductDetailsSkeleton } from '@/design-system/components';
+import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
+import { useProductComparison, useWishlist } from '@/features/marketplace';
 
 interface ProductDetailsLandingProps {
   currentUser: User;
   onUpdateUser: (user: User) => void;
   onOrderPlaced: (order: Order) => void;
   commerceItems: CommerceItem[];
+  isLoading?: boolean;
   onOpenAuthModal?: (tab?: 'login' | 'register') => void;
 }
 
@@ -18,14 +21,97 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
   onUpdateUser,
   onOrderPlaced,
   commerceItems,
+  isLoading = false,
   onOpenAuthModal,
 }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { language } = useLanguage();
   const isBn = language === 'bn';
+  const { trackProductView } = useEngagementAnalytics({ userId: currentUser.id });
+  const { isCompared, toggleCompare } = useProductComparison();
+  const { isWishlisted, toggleWishlist } = useWishlist();
 
-  const product = commerceItems.find((item) => item.id === id) || commerceItems[0];
+  const matchedProduct = id
+    ? commerceItems.find((item) => item.id === id)
+    : commerceItems[0];
+  const product = matchedProduct || (!isLoading ? commerceItems[0] : undefined);
+
+  React.useEffect(() => {
+    if (product?.id) {
+      trackProductView(product, 'product_details_page');
+    }
+  }, [product, trackProductView]);
+
+  React.useEffect(() => {
+    if (!product || typeof document === 'undefined') return;
+
+    const prevTitle = document.title;
+    const canonicalEl = document.querySelector('link[rel="canonical"]');
+    const prevCanonical = canonicalEl?.getAttribute('href') || '';
+    const productUrl = `${window.location.origin}/hub/marketplace/product/${encodeURIComponent(product.id)}`;
+
+    document.title = `${product.title} — PaikarMart`;
+    if (canonicalEl) {
+      canonicalEl.setAttribute('href', productUrl);
+    }
+
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute('content', productUrl);
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', `${product.title} — PaikarMart`);
+
+    const scriptId = 'paikarmart-product-jsonld';
+    let scriptEl = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!scriptEl) {
+      scriptEl = document.createElement('script');
+      scriptEl.id = scriptId;
+      scriptEl.type = 'application/ld+json';
+      document.head.appendChild(scriptEl);
+    }
+
+    scriptEl.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.title,
+      description: product.description || `${product.title} from ${product.storeName} on PaikarMart.`,
+      image: product.imageUrl ? [product.imageUrl] : undefined,
+      category: product.category,
+      sku: product.id,
+      brand: {
+        '@type': 'Brand',
+        name: product.storeName || 'PaikarMart Verified Seller',
+      },
+      offers: {
+        '@type': 'Offer',
+        url: productUrl,
+        priceCurrency: 'BDT',
+        price: String(product.price),
+        availability: 'https://schema.org/InStock',
+      },
+      ...(typeof product.rating === 'number' && typeof product.reviewsCount === 'number'
+        ? {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: String(product.rating),
+              reviewCount: String(Math.max(1, product.reviewsCount)),
+            },
+          }
+        : {}),
+    });
+
+    return () => {
+      document.title = prevTitle;
+      if (canonicalEl && prevCanonical) {
+        canonicalEl.setAttribute('href', prevCanonical);
+      }
+      document.getElementById(scriptId)?.remove();
+    };
+  }, [product]);
+
+  if (!product && isLoading) {
+    return <ProductDetailsSkeleton />;
+  }
 
   if (!product) {
     return (
@@ -39,12 +125,40 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-28 px-4 pt-6 animate-fadeIn">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] text-xs font-bold cursor-pointer">
           <ArrowLeft className="w-4 h-4" />
           <span>{isBn ? 'ফিরে যান' : 'Back'}</span>
         </button>
-        <span className="text-xs font-black uppercase text-[var(--pm-accent)]">{product.category}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggleWishlist(product)}
+            aria-pressed={isWishlisted(product.id)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+              isWishlisted(product.id)
+                ? 'bg-rose-500 text-white border-rose-500'
+                : 'bg-[var(--pm-card)] border-[var(--pm-border)] text-[var(--pm-text)] hover:border-rose-500 hover:text-rose-500'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${isWishlisted(product.id) ? 'fill-white' : ''}`} />
+            <span>{isWishlisted(product.id) ? (isBn ? 'সংরক্ষিত' : 'Saved') : isBn ? 'সেভ করুন' : 'Wishlist'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleCompare(product)}
+            aria-pressed={isCompared(product.id)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+              isCompared(product.id)
+                ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
+                : 'bg-[var(--pm-card)] border-[var(--pm-border)] text-[var(--pm-text)] hover:border-[var(--pm-accent)]'
+            }`}
+          >
+            {isCompared(product.id) ? <Check className="w-3.5 h-3.5" /> : <Scale className="w-3.5 h-3.5 text-[var(--pm-accent)]" />}
+            <span>{isCompared(product.id) ? (isBn ? 'তুলনায় যুক্ত' : 'In Compare') : isBn ? 'তুলনা করুন' : 'Compare'}</span>
+          </button>
+          <span className="text-xs font-black uppercase text-[var(--pm-accent)]">{product.category}</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[var(--pm-card)] p-6 rounded-3xl border border-[var(--pm-border)] shadow-md">

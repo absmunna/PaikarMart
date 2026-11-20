@@ -16,16 +16,25 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
   onUpdateUser = () => {},
 }) => {
   const { language } = useLanguage();
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, refetchProfile } = useAuth();
   const [name, setName] = useState(currentUser.name);
   const [handle, setHandle] = useState(currentUser.handle || '@alexrivera');
   const [email] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
-  const [bio, setBio] = useState('Product enthusiast, wholesale sourcer, and passionate creator on PaikarMart.');
+  const [bio, setBio] = useState(currentUser.bio || 'Product enthusiast, wholesale sourcer, and passionate creator on PaikarMart.');
   const [location, setLocation] = useState(currentUser.location || 'Dhaka, Bangladesh');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!isSaving) {
+      setName(currentUser.name);
+      setHandle(currentUser.handle || '@alexrivera');
+      setPhone(currentUser.phone || '');
+      setLocation(currentUser.location || 'Dhaka, Bangladesh');
+    }
+  }, [currentUser.id, currentUser.name, currentUser.handle, currentUser.phone, currentUser.location, isSaving]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +54,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
           location,
           emailVerified: firebaseUser.emailVerified,
         }).catch((err) => console.warn('Firestore user profile sync warning:', err));
+        await refetchProfile().catch(() => {});
       }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Profile sync failed.');

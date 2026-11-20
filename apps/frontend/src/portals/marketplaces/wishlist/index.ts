@@ -1,0 +1,1 @@
+export { WishlistPortal } from './WishlistPortal';

@@ -25,6 +25,7 @@ const MARKETPLACE_CHILD_VIEWS: Record<string, React.ComponentType<MarketplacePor
 
 interface MarketplacePortalProps {
   items: CommerceItem[];
+  isLoading?: boolean;
   onAddToCart: (item: CommerceItem, quantity: number, isWholesale: boolean) => void;
   onBuyNow?: (item: CommerceItem, quantity: number, isWholesale: boolean) => void;
   onSelectTab?: (tab: PortalTab) => void;
@@ -40,6 +41,7 @@ interface MarketplacePortalProps {
 
 export const MarketplaceMixedFeed: React.FC<MarketplacePortalProps> = ({
   items,
+  isLoading = false,
   onAddToCart,
   onBuyNow,
   onSelectTab,
@@ -105,6 +107,7 @@ export const MarketplaceMixedFeed: React.FC<MarketplacePortalProps> = ({
 
   const sharedPortalProps: MarketplacePortalBaseProps = {
     items: fullDiscoveryItems,
+    isLoading,
     onAddToCart,
     onBuyNow,
     onSelectTab,
@@ -125,6 +128,7 @@ export const MarketplaceMixedFeed: React.FC<MarketplacePortalProps> = ({
     return (
       <WholesalePortal
         items={items}
+        isLoading={isLoading}
         onAddToCart={onAddToCart}
         onSelectTab={onSelectTab}
         externalSearchQuery={externalSearchQuery}

@@ -1,10 +1,10 @@
-# PaikarMart Web · Production Deployment Guide (Firebase Hosting + Render + Supabase + Firebase Auth)
+# PaikarMart Web · Production Deployment Guide (Vercel + Render + Supabase + Firebase Auth)
 
 This document outlines the exact architecture and step-by-step deployment instructions to run **PaikarMart Web** with:
-- **Frontend**: Firebase Hosting (Free Tier)
+- **Frontend**: Vercel (Free Hobby Plan · Vite React SPA)
 - **Backend**: Render Free Web Service (`paikarmart-backend`)
 - **Database**: Supabase PostgreSQL (`SUPABASE_URL`, `SUPABASE_ANON_KEY`)
-- **Authentication**: Firebase Auth (Google Sign-In + Email/Password + Email Verification)
+- **Authentication & Security Rules**: Firebase Auth + Firestore Security Rules (`firestore.rules`)
 
 ---
 
@@ -12,10 +12,10 @@ This document outlines the exact architecture and step-by-step deployment instru
 
 | Component | Target Platform | Configuration & Secret Keys Required |
 | :--- | :--- | :--- |
-| **Frontend UI (Vite SPA)** | **Firebase Hosting** | `firebase.json` (`apps/frontend/dist`), `VITE_API_BASE_URL=https://paikarmart-backend.onrender.com` |
-| **Backend API (Node.js Express)** | **Render Web Service** | `render.yaml`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `FIREBASE_PROJECT_ID` |
-| **Database & Persistence** | **Supabase PostgreSQL** | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, Drizzle ORM migrations (`src/db/*`) |
-| **Authentication & KYC** | **Firebase Auth & Firestore** | `firebase-applet-config.json`, Google Cloud Project credentials |
+| **Frontend UI (Vite SPA)** | **Vercel** | `vercel.json` (`npm run build:frontend` → `apps/frontend/dist`), `/api/*` rewrite to Render |
+| **Backend API (Node.js Express)** | **Render Web Service** | `render.yaml`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_PROJECT_ID`, `CORS_ORIGINS` |
+| **Database & Persistence** | **Supabase PostgreSQL** | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `supabase/schema.sql` |
+| **Authentication & KYC** | **Firebase Auth & Firestore** | `firebase-applet-config.json`, `firebase.json` (Firestore/Storage rules only) |
 
 ---
 
@@ -31,31 +31,34 @@ This document outlines the exact architecture and step-by-step deployment instru
    - `PORT`: `10000`
    - `SUPABASE_URL`: Your Supabase Project URL
    - `SUPABASE_ANON_KEY`: Your Supabase Anon Public Key
+   - `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase Service Role Key
    - `FIREBASE_PROJECT_ID`: Your Firebase Project ID
+   - `CORS_ORIGINS`: `https://your-app.vercel.app` (your Vercel production & custom domains)
    - `GEMINI_API_KEY`: (Optional) For AI auditor / assistant features
 
-### Step 2: Frontend Deployment on Firebase Hosting
-1. Install Firebase CLI locally if not already installed:
+### Step 2: Frontend Deployment on Vercel
+1. Connect your GitHub repository to **Vercel** (root directory `.`), or deploy with the Vercel CLI:
    ```bash
-   npm install -g firebase-tools
-   firebase login
+   npx vercel --prod
    ```
-2. Build the frontend for production with the Render backend API base URL:
-   ```bash
-   export VITE_API_BASE_URL=https://paikarmart-backend.onrender.com
-   npm run build
-   ```
-3. Deploy hosting rules and static files to Firebase:
-   ```bash
-   firebase deploy --only hosting
-   ```
-   *(Ensure `firebase.json` points public directory to `apps/frontend/dist`)*
+2. Vercel automatically reads `vercel.json`:
+   - **Build Command**: `npm run build:frontend`
+   - **Output Directory**: `apps/frontend/dist`
+   - **Rewrites**: Proxies `/api/(.*)` to `https://paikarmart-backend.onrender.com/api/$1` and falls back SPA routes to `/index.html`.
+   - **Headers**: Includes `Cross-Origin-Opener-Policy: same-origin-allow-popups` for Firebase Google Sign-In popups.
+3. Configure Environment Variables in **Vercel Project Settings**:
+   - `VITE_SUPABASE_URL` & `VITE_SUPABASE_ANON_KEY`
+   - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`
+   - `VITE_API_BASE_URL` (leave empty to route `/api/*` via `vercel.json` proxy, or set `https://paikarmart-backend.onrender.com`)
 
 ### Step 3: Database & Auth Sync Verification
-1. **Supabase SQL**: Ensure tables (`vendors`, `kyc_applications`, `escrows`, `wallets`, `messages`) are migrated and active on Supabase.
-2. **Firebase Auth**: In the Firebase Console (Authentication > Sign-in method), ensure **Google** and **Email/Password** are enabled.
-3. **End-to-End Test**:
-   - Register a new account with email/password or Google sign-in.
-   - Verify email address using the email verification button in the Auth modal.
-   - Upgrade to a Seller/Merchant account via KYC onboarding.
-   - Test B2B wholesale orders, escrow release, and live service bookings.
+1. **Firebase Console Authorized Domains**: Add your `your-app.vercel.app` (and custom domain) under **Firebase Console → Authentication → Settings → Authorized domains** so Google Sign-In works in production.
+2. **Firestore Rules Only (No Firebase Hosting)**:
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+3. **Supabase SQL**: Ensure tables in `supabase/schema.sql` (`profiles`, `vendor_memberships`, `stores`, `orders`, `saved_addresses`, etc.) are active on Supabase.
+4. **End-to-End Test**:
+   - Sign in with Google or Email/Password on your Vercel URL.
+   - Verify `useFirebaseSupabaseSync` fetches/provisions the user profile via `/api/auth/profile`.
+   - Test profile updates, cart persistence across reloads, and checkout flows.

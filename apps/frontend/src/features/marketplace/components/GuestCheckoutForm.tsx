@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Phone, Mail, MapPin, AlertCircle } from 'lucide-react';
+import {
+  loadGuestCheckoutDraft,
+  saveGuestCheckoutDraft,
+  clearGuestCheckoutDraft,
+} from '@/shared/hooks/useGuestSessionPersistence';
 
 interface GuestCheckoutFormProps {
   onVerify: (data: { name: string; phone: string; email: string; address: string }) => Promise<boolean>;
@@ -16,16 +21,13 @@ interface GuestCheckoutFormProps {
 }
 
 export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, onComplete, disabled = false, disabledMessage }) => {
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    phone: '', 
-    email: '', 
-    address: '',
-    courier: 'Pathao Express',
-    paymentMethod: 'Cash on Delivery'
-  });
+  const [formData, setFormData] = useState(() => loadGuestCheckoutDraft());
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    saveGuestCheckoutDraft(formData);
+  }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +46,7 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
     if (!isNewUser) {
       setError('An account with this phone or email already exists. Please log in.');
     } else {
+      clearGuestCheckoutDraft();
       onComplete(formData);
     }
   };

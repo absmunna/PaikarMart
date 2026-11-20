@@ -14,16 +14,30 @@ function requireAdminDatabase(res: Response): boolean {
 authRouter.get('/profile', requireFirebaseAuth, async (_req: Request, res: Response) => {
   if (!requireAdminDatabase(res)) return;
   const uid = res.locals.auth.uid;
-  const { data, error } = await supabaseAdmin!
+  const joined = await supabaseAdmin!
     .from('profiles')
     .select('*, vendor_memberships(*, stores(*))')
     .eq('auth_uid', uid)
     .maybeSingle();
-  if (error) {
+
+  if (!joined.error) {
+    res.json({ success: true, profile: joined.data || null });
+    return;
+  }
+
+  // Fallback if vendor_memberships/stores tables or PostgREST FK relationships are not yet provisioned
+  const plain = await supabaseAdmin!
+    .from('profiles')
+    .select('*')
+    .eq('auth_uid', uid)
+    .maybeSingle();
+
+  if (plain.error) {
     res.status(500).json({ error: 'Unable to load the authenticated profile.' });
     return;
   }
-  res.json({ success: true, profile: data || null });
+
+  res.json({ success: true, profile: plain.data || null });
 });
 
 authRouter.put('/profile', requireFirebaseAuth, async (req: Request, res: Response) => {

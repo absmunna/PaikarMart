@@ -86,7 +86,7 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
 }) => {
   const { openSettings } = useSettings();
   const { t, language } = useLanguage();
-  const { firebaseUser, signInWithGoogle, signOut: firebaseSignOut, loading: authLoading } = useAuth();
+  const { firebaseUser, signInWithGoogle, signOut: firebaseSignOut, loading: authLoading, refetchProfile } = useAuth();
   const isBn = language === 'bn';
   const isDeveloperOrSuperAdmin = isGovernanceRole(currentUser.role);
 
@@ -97,6 +97,14 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
   const [avatar, setAvatar] = useState(currentUser.avatar);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setName(currentUser.name);
+      setLocation(currentUser.location);
+      setAvatar(currentUser.avatar);
+    }
+  }, [currentUser.id, currentUser.name, currentUser.location, currentUser.avatar, isEditing]);
   
   // Tracking expand state for orders - active orders expanded by default
   const [expandedTrackingOrders, setExpandedTrackingOrders] = useState<Record<string, boolean>>(() => {
@@ -171,6 +179,7 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
           location,
           phone: currentUser.phone,
         }).catch((err) => console.warn('Supabase profile sync warning:', err));
+        await refetchProfile().catch(() => {});
       }
 
       onUpdateUser({

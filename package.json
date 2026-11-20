@@ -7,6 +7,7 @@
     "dev": "tsx apps/backend/server.ts",
     "start": "node server.js",
     "build": "vite build --config apps/frontend/vite.config.ts && esbuild apps/backend/server.ts --bundle --platform=node --packages=external --format=esm --outfile=server.js",
+    "build:frontend": "vite build --config apps/frontend/vite.config.ts",
     "build:server": "esbuild apps/backend/server.ts --bundle --platform=node --packages=external --format=esm --outfile=server.js",
     "preview": "vite preview --config apps/frontend/vite.config.ts",
     "clean": "rm -rf apps/frontend/dist apps/backend/server.js server.js",

@@ -41,7 +41,17 @@ import {
 } from '@/design-system/components';
 import { AuthPortalModal } from '@/features/auth';
 
-import { CartCheckoutDrawer, CategoryBar, fetchCatalogResult, type PortalFilterType } from '@/features/marketplace';
+import {
+  CartCheckoutDrawer,
+  CategoryBar,
+  CompareTrayBar,
+  ProductComparisonModal,
+  ProductComparisonProvider,
+  WishlistProvider,
+  fetchCatalogResult,
+  type PortalFilterType
+} from '@/features/marketplace';
+import { fetchSocialFeedResult } from '@/features/social';
 import { WalletModal } from '@/portals/utilities/wallet';
 import { NotificationsModal } from '@/portals/utilities/notifications-center';
 import { MessagingCenterModal } from '@/features/messaging';
@@ -55,6 +65,16 @@ import { AppRouteManifest } from '@/app/router/routeManifest';
 import { useTheme, useLanguage, useLocationSettings, useAuth } from '@/contexts';
 import { SettingsModal, SettingsSectionId } from '@/portals/utilities/settings-center';
 import { useGlobalOverlayScrollLock } from '@/shared/hooks/useBodyScrollLock';
+import {
+  loadPersistedCart,
+  savePersistedCart,
+  loadPersistedNavState,
+  savePersistedNavState,
+  resolveRestorableGuestPath,
+  useGuestCartTabSync,
+  type PersistedNavigationState,
+} from '@/shared/hooks/useGuestSessionPersistence';
+import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
 
 function AppInner() {
   useGlobalOverlayScrollLock();
@@ -85,7 +105,18 @@ function AppInner() {
     navigate(PORTAL_TAB_ROUTES[tab] || ROUTE_PATHS.SOCIAL);
   };
 
-  const [initialSettingsSection, setInitialSettingsSection] = useState<SettingsSectionId>('account_profile');
+  const initialNavRef = React.useRef<PersistedNavigationState | null>(null);
+  if (!initialNavRef.current) {
+    initialNavRef.current = loadPersistedNavState();
+  }
+  const restoredRootRoute = React.useMemo(
+    () => resolveRestorableGuestPath(initialNavRef.current),
+    []
+  );
+
+  const [initialSettingsSection, setInitialSettingsSection] = useState<SettingsSectionId>(
+    () => initialNavRef.current!.initialSettingsSection
+  );
   const [isHubOpen, setIsHubOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -98,13 +129,25 @@ function AppInner() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
   const [quotaExceeded, setQuotaExceeded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [appliedPromoCode, setAppliedPromoCode] = useState('');
-  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('all');
-  const [activePortalFilter, setActivePortalFilter] = useState<PortalFilterType>('all');
-  const [activeLogisticsSubPortal, setActiveLogisticsSubPortal] = useState<'ride' | 'courier' | 'cargo' | 'fleet'>('ride');
-  const [activeServicePortalId, setActiveServicePortalId] = useState('all');
-  const [activeCommerceChildPortalId, setActiveCommerceChildPortalId] = useState('all');
+  const [searchQuery, setSearchQuery] = useState(() => initialNavRef.current!.searchQuery);
+  const [appliedPromoCode, setAppliedPromoCode] = useState(() => initialNavRef.current!.appliedPromoCode);
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>(() => initialNavRef.current!.selectedSubCategory);
+  const [activePortalFilter, setActivePortalFilter] = useState<PortalFilterType>(() => initialNavRef.current!.activePortalFilter);
+  const [activeLogisticsSubPortal, setActiveLogisticsSubPortal] = useState<'ride' | 'courier' | 'cargo' | 'fleet'>(
+    () => initialNavRef.current!.activeLogisticsSubPortal
+  );
+  const [activeServicePortalId, setActiveServicePortalId] = useState(() => initialNavRef.current!.activeServicePortalId);
+  const [activeCommerceChildPortalId, setActiveCommerceChildPortalId] = useState(
+    () => initialNavRef.current!.activeCommerceChildPortalId
+  );
+
+  const { trackCartAdd, trackBuyNow, trackSearchQuery } = useEngagementAnalytics({
+    userId: currentUser.id,
+  });
+
+  useEffect(() => {
+    trackSearchQuery(searchQuery, { portal: currentTab });
+  }, [searchQuery, currentTab, trackSearchQuery]);
 
   const handleCategoryBarPortalSwitch = (portal: PortalFilterType) => {
     const hubQuery =
@@ -158,29 +201,69 @@ function AppInner() {
   );
 
   const [commerceItems, setCommerceItems] = useState<CommerceItem[]>([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(true);
+  const [isFeedLoading, setIsFeedLoading] = useState<boolean>(true);
 
   // Supabase is the authoritative product catalog source.
   // Offline mock catalog is only used when Supabase is unconfigured.
   useEffect(() => {
     const controller = new AbortController();
-    fetchCatalogResult(controller.signal).then((result) => {
-      if (result.source === 'unconfigured') {
-        setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
-        return;
-      }
-      if (result.products.length === 0) {
-        try {
-          localStorage.removeItem('nexsphere_commerce_v1');
-        } catch {
-          // Ignore storage access errors
+    setIsCatalogLoading(true);
+    fetchCatalogResult(controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        if (result.source === 'unconfigured') {
+          setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
+          return;
         }
-      }
-      setCommerceItems(result.products);
-    });
+        if (result.products.length === 0) {
+          try {
+            localStorage.removeItem('nexsphere_commerce_v1');
+          } catch {
+            // Ignore storage access errors
+          }
+        }
+        setCommerceItems(result.products);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsCatalogLoading(false);
+        }
+      });
     return () => controller.abort();
   }, []);
 
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  // Fetch live community feed posts from Express/Supabase and merge with local posts
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsFeedLoading(true);
+    fetchSocialFeedResult(controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        if (result.posts.length > 0) {
+          setPosts((prev) => {
+            const seenIds = new Set<string>();
+            const merged: SocialPost[] = [];
+            // Preserve locally created posts first, then live feed posts
+            for (const post of [...result.posts, ...prev]) {
+              if (!seenIds.has(post.id)) {
+                seenIds.add(post.id);
+                merged.push(post);
+              }
+            }
+            return merged;
+          });
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsFeedLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => loadPersistedCart());
   
   const [orders, setOrders] = useState<Order[]>(() => 
     loadStoredData('ORDERS', INITIAL_ORDERS)
@@ -220,6 +303,41 @@ function AppInner() {
   useEffect(() => {
     saveStoredData('NOTIFICATIONS', notifications);
   }, [notifications]);
+
+  // Persist guest & session cart contents across page reloads
+  useEffect(() => {
+    savePersistedCart(cartItems);
+  }, [cartItems]);
+
+  // Sync cart changes across open browser tabs
+  useGuestCartTabSync(setCartItems);
+
+  // Persist local navigation path, active portal filters, and search/promo state
+  useEffect(() => {
+    const currentPath = `${location.pathname}${location.search}`;
+    savePersistedNavState({
+      lastPath: currentPath,
+      searchQuery,
+      appliedPromoCode,
+      selectedSubCategory,
+      activePortalFilter,
+      activeLogisticsSubPortal,
+      activeServicePortalId,
+      activeCommerceChildPortalId,
+      initialSettingsSection,
+    });
+  }, [
+    location.pathname,
+    location.search,
+    searchQuery,
+    appliedPromoCode,
+    selectedSubCategory,
+    activePortalFilter,
+    activeLogisticsSubPortal,
+    activeServicePortalId,
+    activeCommerceChildPortalId,
+    initialSettingsSection,
+  ]);
 
   // Scope visible notifications: guests are limited to up to 3 public system notices
   const visibleNotifications = React.useMemo(() => {
@@ -349,6 +467,7 @@ function AppInner() {
     isWholesale = false, 
     specialInstructions?: string
   ) => {
+    trackCartAdd(product, quantity, isWholesale);
     setCartItems(prev => {
       const existing = prev.find(i => i.product.id === product.id && i.isWholesale === isWholesale);
       if (existing) {
@@ -368,6 +487,7 @@ function AppInner() {
     isWholesale = false,
     specialInstructions?: string
   ) => {
+    trackBuyNow(product, quantity, isWholesale);
     handleAddToCart(product, quantity, isWholesale, specialInstructions);
     setIsCartOpen(true);
   };
@@ -404,6 +524,7 @@ function AppInner() {
 
   const handleClearCart = () => {
     setCartItems([]);
+    setAppliedPromoCode('');
   };
 
   const handleOrderPlaced = (newOrder: Order) => {
@@ -510,7 +631,9 @@ function AppInner() {
   });
 
   return (
-    <div className="min-h-screen max-w-full overflow-x-clip bg-[var(--pm-bg)] text-[var(--pm-text)] flex flex-col selection:bg-[var(--pm-accent)] selection:text-[var(--pm-accent-fg)] transition-colors">
+    <WishlistProvider catalogItems={commerceItems}>
+      <ProductComparisonProvider catalogItems={commerceItems}>
+      <div className="min-h-screen max-w-full overflow-x-clip bg-[var(--pm-bg)] text-[var(--pm-text)] flex flex-col selection:bg-[var(--pm-accent)] selection:text-[var(--pm-accent-fg)] transition-colors">
       
       {/* Google Maps Quota Exhaustion Warning Banner */}
       {quotaExceeded && (
@@ -664,11 +787,14 @@ function AppInner() {
 
           <AppRouteManifest
             currentTab={currentTab}
+            defaultRootRoute={restoredRootRoute}
             currentUser={currentUser}
             setCurrentUser={setCurrentUser}
             posts={posts}
             filteredPosts={filteredPosts}
             commerceItems={commerceItems}
+            isCatalogLoading={isCatalogLoading}
+            isFeedLoading={isFeedLoading}
             orders={orders}
             bookings={bookings}
             notifications={notifications}
@@ -875,7 +1001,13 @@ function AppInner() {
         onUpdateUser={setCurrentUser}
       />
 
+      {/* 17. Side-by-Side Product Comparison Floating Tray & Modal */}
+      <CompareTrayBar />
+      <ProductComparisonModal onAddToCart={handleAddToCart} />
+
     </div>
+      </ProductComparisonProvider>
+    </WishlistProvider>
   );
 }
 

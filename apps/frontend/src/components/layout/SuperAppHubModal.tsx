@@ -14,10 +14,12 @@ import {
   Zap,
   CheckCircle2,
   Users,
-  Layers
+  Layers,
+  Heart
 } from 'lucide-react';
 import { PortalTab } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 
 interface SuperAppHubModalProps {
   isOpen: boolean;
@@ -37,6 +39,7 @@ export const SuperAppHubModal: React.FC<SuperAppHubModalProps> = ({
   isVendor,
 }) => {
   const { language } = useLanguage();
+  const { wishlistCount } = useWishlist();
   const isBn = language === 'bn';
 
   if (!isOpen) return null;
@@ -125,6 +128,18 @@ export const SuperAppHubModal: React.FC<SuperAppHubModalProps> = ({
       badge: isBn ? 'টুলস ও অ্যাকাউন্ট' : 'Cockpit Hub',
       accentColor: 'from-slate-500/20 to-indigo-500/10 text-slate-700 dark:text-slate-300',
       actionLabel: isBn ? 'ইউটিলিটি খুলুন' : 'Open Utility'
+    },
+    {
+      id: 'wishlist',
+      tab: 'wishlist' as PortalTab,
+      title: isBn ? 'উইশলিস্ট' : 'Saved Wishlist',
+      tagline: isBn
+        ? 'পছন্দের রিটেইল ও পাইকারি পণ্য সংরক্ষণ করুন এবং পরে অর্ডার করুন।'
+        : 'Save favorite retail and wholesale products to compare or buy later.',
+      icon: Heart,
+      badge: isBn ? `${wishlistCount}টি সংরক্ষিত` : `${wishlistCount} Saved`,
+      accentColor: 'from-rose-500/20 to-pink-500/10 text-rose-600 dark:text-rose-400',
+      actionLabel: isBn ? 'উইশলিস্ট দেখুন' : 'View Wishlist'
     }
   ];
 

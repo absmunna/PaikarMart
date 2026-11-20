@@ -91,6 +91,22 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidWishlistItem(data) {
+      return data.keys().hasAll(['id', 'userId', 'productId', 'productTitle', 'productPrice', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'productId', 'productTitle', 'productPrice', 'imageUrl', 'category', 'storeName', 'tradeMode', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        isValidId(data.productId) &&
+        data.productTitle is string && data.productTitle.size() >= 1 && data.productTitle.size() <= 200 &&
+        data.productPrice is number && data.productPrice >= 0 && data.productPrice <= 100000000 &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 512)) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 80)) &&
+        (!('storeName' in data) || (data.storeName is string && data.storeName.size() <= 120)) &&
+        (!('tradeMode' in data) || data.tradeMode in ['retail', 'wholesale']) &&
+        data.createdAt is timestamp &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
     // 4. Test Connection Health Check Document
     match /test/{docId} {
       allow get: if true;
@@ -205,6 +221,34 @@ service cloud.firestore {
     match /admins/{userId} {
       allow get: if isValidId(userId) && isOwner(userId);
       allow list, create, update, delete: if false;
+    }
+
+    // 9. User Wishlists (Owner-Isolated Saved Products)
+    match /wishlists/{wishlistId} {
+      allow get: if isSignedIn() && isValidId(wishlistId) &&
+        (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(wishlistId) &&
+        isValidWishlistItem(incoming()) &&
+        incoming().id == wishlistId &&
+        incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidId(wishlistId) &&
+        isValidWishlistItem(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().productId == existing().productId &&
+        incoming().createdAt == existing().createdAt &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time) && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['productTitle', 'productPrice', 'imageUrl', 'category', 'storeName', 'tradeMode', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(wishlistId) &&
+        (existing().userId == request.auth.uid || isAdmin());
     }
   }
 }

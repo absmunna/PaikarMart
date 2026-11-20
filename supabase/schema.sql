@@ -401,6 +401,26 @@ create table if not exists public.prescription_uploads (
 );
 
 -- ==============================================================================
+-- 12B-3. Engagement Analytics Events Table (Merchant Insights)
+-- ==============================================================================
+create table if not exists public.analytics (
+  id uuid primary key default uuid_generate_v4(),
+  event_type text not null check (event_type in ('product_view', 'cart_add', 'search_query', 'buy_now')),
+  session_id text not null,
+  user_id text,
+  product_id text,
+  product_title text,
+  store_id text,
+  store_name text,
+  category text,
+  search_query text,
+  quantity int not null default 1 check (quantity >= 1),
+  price_bdt numeric(12,2),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- ==============================================================================
 -- 12C. Zero-PII Public Handle Projection View (Safe Public Showcase)
 -- Excludes email, phone, wallet_balance, and private_user_details
 -- ==============================================================================
@@ -455,6 +475,7 @@ alter table public.service_bookings enable row level security;
 alter table public.retail_vouchers enable row level security;
 alter table public.product_questions enable row level security;
 alter table public.prescription_uploads enable row level security;
+alter table public.analytics enable row level security;
 
 -- ------------------------------------------------------------------------------
 -- HELPER FUNCTIONS FOR CLEAN & SECURE MULTI-ROLE & AUTH EVALUATION
@@ -1045,6 +1066,23 @@ create policy "Customers can submit prescription or grocery list uploads"
     or auth.uid() is not null
   );
 
+-- ------------------------------------------------------------------------------
+-- 16. ENGAGEMENT ANALYTICS RLS
+-- ------------------------------------------------------------------------------
+create policy "Shoppers and guests can log engagement analytics events"
+  on public.analytics for insert
+  with check (
+    event_type in ('product_view', 'cart_add', 'search_query', 'buy_now')
+  );
+
+create policy "Vendors and admins can view engagement analytics insights"
+  on public.analytics for select
+  using (
+    public.has_role('vendor')
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
 -- ==============================================================================
 -- INDEXES FOR HIGH PERFORMANCE QUERIES
 -- ==============================================================================
@@ -1068,4 +1106,7 @@ create index if not exists idx_service_bookings_customer on public.service_booki
 create index if not exists idx_retail_vouchers_code on public.retail_vouchers(code);
 create index if not exists idx_product_questions_product on public.product_questions(product_id);
 create index if not exists idx_prescription_uploads_customer on public.prescription_uploads(customer_id);
+create index if not exists idx_analytics_event_created on public.analytics(event_type, created_at desc);
+create index if not exists idx_analytics_store_created on public.analytics(store_id, created_at desc);
+create index if not exists idx_analytics_product_id on public.analytics(product_id);
 

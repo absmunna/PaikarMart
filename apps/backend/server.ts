@@ -22,6 +22,7 @@ import { vendorRouter } from './modules/vendors/vendorRoutes.js';
 import { retailRouter } from './modules/retail/retailRoutes.js';
 import { authRouter } from './modules/auth/authRoutes.js';
 import { catalogRouter } from './modules/catalog/catalogRoutes.js';
+import { analyticsRouter } from './modules/analytics/analyticsRoutes.js';
 import { requireFirebaseAuth } from './middleware/requireFirebaseAuth.js';
 import { checkDatabaseConnection, getStoredFeedPosts, insertStoredPost, supabaseAdmin } from './services/dbService.js';
 
@@ -97,6 +98,7 @@ app.use('/api/vendors', vendorRouter);
 app.use('/api/retail', retailRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/catalog', catalogRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // In-memory fallback data store for offline or pre-configured dev environments
 let serverPosts = [
@@ -105,7 +107,7 @@ let serverPosts = [
     authorName: 'PaikarMart System',
     authorAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=150&h=150&q=80',
     timestamp: 'Just now',
-    content: 'Welcome to PaikarMart Social Commerce Super App! Powered by Express API on Render, Supabase PostgreSQL, and Firebase Auth & Hosting.',
+    content: 'Welcome to PaikarMart Social Commerce Super App! Powered by Vercel Frontend, Express API on Render, Supabase PostgreSQL, and Firebase Auth.',
     reactionsCount: { like: 12, love: 5, care: 2 },
     sharesCount: 1,
     comments: []
@@ -129,7 +131,7 @@ app.get('/api/health', async (_req: Request, res: Response) => {
       courierWebhooksReady: isCourierWebhookConfigured(),
       firebaseProject: process.env.FIREBASE_PROJECT_ID || 'project-233907df-3a7c-4179-9a0',
       auth: 'Firebase Authentication (Spark Free Tier)',
-      frontend: 'Firebase Hosting / Vercel / Unified SPA'
+      frontend: 'Vercel (Vite React SPA)'
     }
   });
 });

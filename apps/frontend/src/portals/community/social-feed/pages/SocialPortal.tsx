@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StoriesTray } from '@/portals/community/social-feed/components/StoriesTray';
 import { PostComposer } from '@/portals/community/social-feed/components/PostComposer';
 import { FeedPostCard } from '@/features/social';
-import { AdMobBanner } from '@/design-system/components';
+import {
+  AdMobBanner,
+  SocialFeedListSkeleton,
+  SocialPostSkeleton,
+} from '@/design-system/components';
 import { INITIAL_STORIES } from '@/data/mockData';
 import { User, SocialPost, CommerceItem, ReactionType, PostType, TaggedProduct } from '@/types';
 
@@ -10,6 +14,7 @@ interface SocialPortalProps {
   currentUser: User;
   posts: SocialPost[];
   commerceItems: CommerceItem[];
+  isLoading?: boolean;
   onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
@@ -20,6 +25,7 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
   currentUser,
   posts,
   commerceItems,
+  isLoading = false,
   onCreatePost,
   onReactToPost,
   onAddComment,
@@ -34,13 +40,13 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
-    if (!sentinel || visibleCount >= posts.length) return;
+    if (isLoading || !sentinel || visibleCount >= posts.length) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) setVisibleCount((count) => Math.min(count + 5, posts.length));
     }, { rootMargin: '280px 0px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [posts.length, visibleCount]);
+  }, [isLoading, posts.length, visibleCount]);
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-2 animate-fadeIn">
@@ -61,25 +67,30 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
       <AdMobBanner />
 
       {/* Feed Posts List */}
-      <div className="space-y-4 sm:space-y-6">
-        {posts.slice(0, visibleCount).map((post) => (
-          <FeedPostCard
-            key={post.id}
-            post={post}
-            currentUser={currentUser}
-            onReact={onReactToPost}
-            onAddComment={onAddComment}
-            onAddToCart={onAddToCart}
-            commerceItems={commerceItems}
-          />
-        ))}
-        
-        {visibleCount < posts.length && (
-          <div ref={loadMoreRef} className="h-10 flex items-center justify-center text-xs font-semibold text-[var(--pm-muted)]" aria-live="polite">
-            Loading older posts…
-          </div>
-        )}
-      </div>
+      {isLoading ? (
+        <SocialFeedListSkeleton count={3} />
+      ) : (
+        <div className="space-y-4 sm:space-y-6">
+          {posts.slice(0, visibleCount).map((post) => (
+            <FeedPostCard
+              key={post.id}
+              post={post}
+              currentUser={currentUser}
+              onReact={onReactToPost}
+              onAddComment={onAddComment}
+              onAddToCart={onAddToCart}
+              commerceItems={commerceItems}
+            />
+          ))}
+
+          {visibleCount < posts.length && (
+            <div ref={loadMoreRef} aria-label="Loading older posts" aria-live="polite">
+              <SocialPostSkeleton showMedia={false} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
+

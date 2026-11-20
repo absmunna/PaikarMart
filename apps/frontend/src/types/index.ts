@@ -17,6 +17,7 @@ export type PortalTab =
   | 'guide'
   | 'demand'
   | 'nearby'
+  | 'wishlist'
   | 'community-hub'
   | 'utility-hub';
 

@@ -43,6 +43,9 @@ export async function setDefaultSavedAddress(id: string): Promise<SavedAddress> 
 
 export async function fetchAuthenticatedProfile(): Promise<unknown | null> {
   const response = await fetch(`${API_BASE}/api/auth/profile`, { headers: await authHeaders() });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const errPayload = await response.json().catch(() => ({}));
+    throw new Error(errPayload?.error || `Profile fetch failed (${response.status})`);
+  }
   return (await response.json()).profile || null;
 }

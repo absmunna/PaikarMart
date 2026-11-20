@@ -59,6 +59,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [showConversion, setShowConversion] = useState(false);
   const [guestData, setGuestData] = useState<any>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // States for registered user quick checkout
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -106,7 +107,24 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
   }, [isOpen, initialPromoCode]);
 
+  useEffect(() => {
+    if (!isOpen || items.length === 0) {
+      setShowClearConfirm(false);
+    }
+  }, [isOpen, items.length]);
+
   if (!isOpen) return null;
+
+  const handleConfirmClearAll = () => {
+    onClearCart();
+    setPromoCode('');
+    setAppliedCode(null);
+    setDiscount(0);
+    setFreeShippingPromo(false);
+    setPromoStatus(null);
+    setCheckoutError(null);
+    setShowClearConfirm(false);
+  };
 
   const baseDeliveryFee = subtotal > 0 ? (subtotal > 2000 ? 0 : 60) : 0;
   const deliveryFee = freeShippingPromo ? 0 : baseDeliveryFee;
@@ -211,26 +229,77 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       <div role="dialog" aria-modal="true" aria-labelledby="bag-title" className="relative w-full max-w-lg bg-[var(--pm-card)] text-[var(--pm-text)] border-l border-[var(--pm-border)] shadow-2xl h-full flex flex-col justify-between overflow-y-auto">
 
         {/* Header */}
-        <div className="p-5 border-b border-[var(--pm-border)] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-[var(--pm-accent)]" />
-            <h2 id="bag-title" className="text-lg font-bold text-[var(--pm-text)]">
+        <div className="p-5 border-b border-[var(--pm-border)] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShoppingBag className="w-5 h-5 text-[var(--pm-accent)] shrink-0" />
+            <h2 id="bag-title" className="text-lg font-bold text-[var(--pm-text)] truncate">
               Your Unified Bag ({items.reduce((a, b) => a + b.quantity, 0)})
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmedOrder(null);
-              setCheckoutError(null);
-              onClose();
-            }}
-            aria-label="Close bag"
-            className="p-1.5 rounded-full text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-surface)] cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {items.length > 0 && !confirmedOrder && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-[var(--pm-danger)] hover:bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/25 transition-colors cursor-pointer"
+                title="Empty entire shopping bag"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear All</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmedOrder(null);
+                setCheckoutError(null);
+                setShowClearConfirm(false);
+                onClose();
+              }}
+              aria-label="Close bag"
+              className="p-1.5 rounded-full text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-surface)] cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Clear All Confirmation Prompt */}
+        {showClearConfirm && items.length > 0 && !confirmedOrder && (
+          <div
+            role="alertdialog"
+            aria-label="Confirm clearing shopping bag"
+            className="mx-5 mt-4 p-3.5 rounded-2xl bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 flex flex-col gap-3 animate-fadeIn"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-[var(--pm-danger)] shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-bold text-[var(--pm-text)]">
+                  Empty your entire shopping bag?
+                </p>
+                <p className="text-[var(--pm-muted)] mt-0.5">
+                  This will remove all {items.reduce((a, b) => a + b.quantity, 0)} item(s) and reset any applied promo code.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--pm-text)] bg-[var(--pm-card)] border border-[var(--pm-border)] hover:bg-[var(--pm-surface)] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearAll}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-[var(--pm-danger)] hover:opacity-90 cursor-pointer"
+              >
+                Empty Bag
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Confirmed Order State */}
         {confirmedOrder ? (

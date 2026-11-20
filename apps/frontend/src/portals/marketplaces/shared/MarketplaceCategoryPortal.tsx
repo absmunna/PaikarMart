@@ -10,10 +10,15 @@ import {
   VoucherDealsStrip,
   type PortalFilterType,
 } from '@/features/marketplace';
-import { PromotionalAdCard } from '@/design-system/components';
+import {
+  MarketplaceCardSkeleton,
+  MarketplaceGridSkeleton,
+  PromotionalAdCard,
+} from '@/design-system/components';
 
 export interface MarketplacePortalBaseProps {
   items: CommerceItem[];
+  isLoading?: boolean;
   onAddToCart: (item: CommerceItem, quantity: number, isWholesale: boolean) => void;
   onBuyNow?: (item: CommerceItem, quantity: number, isWholesale: boolean) => void;
   onSelectTab?: (tab: PortalTab) => void;
@@ -48,6 +53,7 @@ interface MarketplaceCategoryPortalProps extends MarketplacePortalBaseProps {
 export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps> = ({
   config,
   items,
+  isLoading = false,
   onAddToCart,
   onBuyNow,
   onSelectTab,
@@ -210,7 +216,13 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
       <div className="px-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-black tracking-tight text-[var(--pm-text)]">
-            {isBn ? `${filteredItems.length}টি পণ্য পাওয়া গেছে` : `${filteredItems.length} Products Found`}
+            {isLoading
+              ? isBn
+                ? 'পণ্য লোড হচ্ছে...'
+                : 'Loading Catalog...'
+              : isBn
+              ? `${filteredItems.length}টি পণ্য পাওয়া গেছে`
+              : `${filteredItems.length} Products Found`}
           </h2>
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] text-[10px] font-bold">
             <Zap className="w-3 h-3" />
@@ -254,7 +266,9 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
         />
       )}
 
-      {visibleItems.length > 0 ? (
+      {isLoading ? (
+        <MarketplaceGridSkeleton count={6} />
+      ) : visibleItems.length > 0 ? (
         <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {visibleItems.map((item: any, idx: number) => {
             const isWholesale = item.tradeMode === 'wholesale';
@@ -310,9 +324,19 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
         </div>
       )}
 
-      {visibleCount < filteredItems.length && (
-        <div ref={loadMoreRef} className="h-10 flex items-center justify-center text-xs font-semibold text-[var(--pm-muted)]">
-          {isBn ? 'আরও পণ্য লোড হচ্ছে…' : 'Loading more products…'}
+      {!isLoading && visibleCount < filteredItems.length && (
+        <div
+          ref={loadMoreRef}
+          aria-label={isBn ? 'আরও পণ্য লোড হচ্ছে' : 'Loading more products'}
+          className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-1"
+        >
+          <MarketplaceCardSkeleton />
+          <div className="hidden xs:block">
+            <MarketplaceCardSkeleton />
+          </div>
+          <div className="hidden lg:block">
+            <MarketplaceCardSkeleton />
+          </div>
         </div>
       )}
 

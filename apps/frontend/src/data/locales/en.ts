@@ -10,6 +10,7 @@ export const en = {
     profile: 'Profile',
     superHub: 'Hub',
     nearby: 'Nearby',
+    wishlist: 'Wishlist',
     searchPlaceholder: 'Search products, creators, services...',
     settings: 'Settings',
     cart: 'Cart',

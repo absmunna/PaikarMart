@@ -39,12 +39,14 @@ import {
   User as UserIcon,
   HelpCircle,
   ExternalLink,
+  Heart,
 } from 'lucide-react';
 import { PortalTab, SettingsSectionId, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { useLocationSettings } from '@/contexts/LocationContext';
 import { useAuth } from '@/features/auth';
+import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 
 export interface UnifiedSidebarProps {
   mode: 'desktop' | 'drawer';
@@ -108,6 +110,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   const { themeMode, setThemeMode } = useTheme();
   const { activeLocation, radarRadiusKm, detectLiveLocation, isLocating } = useLocationSettings();
   const { firebaseUser, signOut } = useAuth();
+  const { wishlistCount } = useWishlist();
   const isBn = language === 'bn';
 
   // Collapsible category section states
@@ -182,6 +185,14 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
     { id: 'explore', labelEn: 'Super App Hub', labelBn: 'সুপার অ্যাপ হাব', badgeEn: 'All', badgeBn: 'সব', icon: Grid },
     { id: 'commerce', labelEn: 'Marketplace Hub', labelBn: 'মার্কেটপ্লেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: ShoppingBag },
     { id: 'wholesale', labelEn: 'Wholesale Hub (B2B)', labelBn: 'হোলসেল হাব (পাইকারি)', badgeEn: 'MOQ', badgeBn: 'পাইকারি', icon: Package },
+    {
+      id: 'wishlist',
+      labelEn: 'Wishlist',
+      labelBn: 'উইশলিস্ট',
+      badgeEn: String(wishlistCount),
+      badgeBn: String(wishlistCount),
+      icon: Heart,
+    },
     { id: 'services', labelEn: 'Services Hub', labelBn: 'সার্ভিসেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Wrench },
     { id: 'community-hub', labelEn: 'Community Hub', labelBn: 'কমিউনিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Sparkles },
     { id: 'utility-hub', labelEn: 'Utility Hub', labelBn: 'ইউটিলিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Layers },
@@ -613,9 +624,11 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
                     {(portal.badgeBn || portal.badgeEn) && (
                       <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${
+                        className={`text-[10px] font-semibold font-mono tabular-nums px-2 py-0.5 rounded-md shrink-0 ${
                           isActive
                             ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                            : portal.id === 'wishlist' && wishlistCount > 0
+                            ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold'
                             : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
                         }`}
                       >

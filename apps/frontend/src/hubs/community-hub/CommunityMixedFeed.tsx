@@ -19,6 +19,7 @@ interface CommunityMixedFeedProps {
   currentUser: User;
   posts: SocialPost[];
   commerceItems: CommerceItem[];
+  isLoading?: boolean;
   onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
@@ -32,6 +33,7 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
   currentUser,
   posts,
   commerceItems,
+  isLoading = false,
   onCreatePost,
   onReactToPost,
   onAddComment,
@@ -170,6 +172,7 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
             currentUser={currentUser}
             posts={posts}
             commerceItems={commerceItems}
+            isLoading={isLoading}
             onCreatePost={onCreatePost}
             onReactToPost={onReactToPost}
             onAddComment={onAddComment}

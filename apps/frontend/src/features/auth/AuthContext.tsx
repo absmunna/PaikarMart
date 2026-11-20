@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   auth, 
   signInWithGoogle as firebaseGoogleSignIn, 
   signOutFirebase, 
-  onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordReset,
@@ -17,14 +16,23 @@ import {
 import { User, UserRole } from '@/types';
 import { CURRENT_USER } from '@/data/mockData';
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
-import { syncAuthenticatedProfile, fetchAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
+import { syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
+import {
+  useFirebaseSupabaseSync,
+  type SupabaseUserProfile
+} from '@/features/auth/hooks/useFirebaseSupabaseSync';
 
 interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   currentUser: User;
   setCurrentUser: React.Dispatch<React.SetStateAction<User>>;
+  supabaseProfile: SupabaseUserProfile | null;
+  isSynced: boolean;
+  syncError: Error | null;
+  lastSyncedAt: Date | null;
   loading: boolean;
   isFirebaseReady: boolean;
+  refetchProfile: () => Promise<SupabaseUserProfile | null>;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, selectedRole?: UserRole) => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
@@ -37,7 +45,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const storedUser = loadStoredData<User>('USER', CURRENT_USER);
     console.log('[AuthContext:Init] Hydrating stored user from localStorage:', {
@@ -50,176 +57,114 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     return storedUser;
   });
-  const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
   const isFirebaseReady = isFirebaseConfigured();
+
+  const handleSyncSuccess = useCallback((profile: SupabaseUserProfile, user: FirebaseUser) => {
+    const stored = loadStoredData<User>('USER', CURRENT_USER);
+    const resolvedRole: UserRole = profile.role || stored.role || 'consumer';
+    const isVendorUser = Boolean(
+      resolvedRole === 'vendor' ||
+      stored.isVendor ||
+      (Array.isArray(profile.vendor_memberships) && profile.vendor_memberships.length > 0)
+    );
+
+    const syncedUser: User = {
+      ...stored,
+      id: user.uid,
+      name: user.displayName || profile.name || stored.name || 'PaikarMart User',
+      email: user.email || profile.email || stored.email || '',
+      handle: profile.handle || (user.email ? `@${user.email.split('@')[0]}` : stored.handle || `@user_${user.uid.slice(0, 6)}`),
+      avatar: user.photoURL || profile.avatar_url || stored.avatar,
+      role: resolvedRole,
+      isVendor: isVendorUser,
+      kycStatus: profile.kyc_status || stored.kycStatus || 'none',
+      trustLevel: profile.trust_level ?? stored.trustLevel,
+      vendorProfile: stored.vendorProfile,
+      balance: typeof profile.wallet_balance === 'number' ? profile.wallet_balance : (stored.balance ?? 0),
+      rewardPoints: typeof profile.reward_points === 'number' ? profile.reward_points : (stored.rewardPoints ?? 0),
+      location: profile.location || stored.location || 'Dhaka, Bangladesh',
+      phone: profile.phone || stored.phone,
+    };
+
+    console.log('[AuthContext:FirebaseSupabaseSync] Cross-platform identity synced:', {
+      id: syncedUser.id,
+      name: syncedUser.name,
+      role: syncedUser.role,
+      isVendor: syncedUser.isVendor,
+      balance: syncedUser.balance,
+    });
+
+    setCurrentUser(syncedUser);
+    saveStoredData('USER', syncedUser);
+  }, []);
+
+  const handleSyncError = useCallback((err: Error) => {
+    console.warn('[AuthContext:FirebaseSupabaseSync] Supabase sync fallback active:', err.message);
+    const activeFirebaseUser = auth.currentUser;
+    if (!activeFirebaseUser) return;
+
+    const stored = loadStoredData<User>('USER', CURRENT_USER);
+    const fallbackHandle = activeFirebaseUser.email
+      ? `@${activeFirebaseUser.email.split('@')[0]}`
+      : stored.handle || `@user_${activeFirebaseUser.uid.slice(0, 6)}`;
+
+    const fallbackUser: User = {
+      ...stored,
+      id: activeFirebaseUser.uid,
+      name: activeFirebaseUser.displayName || stored.name || 'PaikarMart User',
+      email: activeFirebaseUser.email || stored.email || '',
+      handle: fallbackHandle,
+      avatar: activeFirebaseUser.photoURL || stored.avatar,
+    };
+
+    setCurrentUser(fallbackUser);
+    saveStoredData('USER', fallbackUser);
+  }, []);
+
+  const {
+    firebaseUser,
+    supabaseProfile,
+    isLoading: syncLoading,
+    isSynced,
+    error: syncError,
+    lastSyncedAt,
+    refetch: refetchProfile,
+  } = useFirebaseSupabaseSync({
+    autoCreateMissing: true,
+    autoPersistToStorage: true,
+    autoSyncFirestore: true,
+    enableRealtime: true,
+    onSyncSuccess: handleSyncSuccess,
+    onSyncError: handleSyncError,
+  });
 
   useEffect(() => {
     void validateFirestoreConnection();
-
-    console.log('[AuthContext:Lifecycle] Initializing onAuthStateChanged subscriber...');
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('[AuthContext:onAuthStateChanged] Event fired. Firebase User:', user ? {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        emailVerified: user.emailVerified,
-      } : null);
-
-      setFirebaseUser(user);
-
-      if (user) {
-        // Load whatever state is stored locally to avoid clobbering role, vendor, or balance
-        const stored = loadStoredData<User>('USER', CURRENT_USER);
-
-        // Attempt to fetch fresh profile from backend (Supabase PostgreSQL)
-        let backendProfile: any = null;
-        try {
-          backendProfile = await fetchAuthenticatedProfile();
-          console.log('[AuthContext:onAuthStateChanged] Fetched backend profile:', backendProfile);
-        } catch (fetchErr) {
-          console.warn('[AuthContext:onAuthStateChanged] Backend profile fetch warning:', fetchErr);
-        }
-
-        const resolvedRole: UserRole = (backendProfile?.role as UserRole) || stored.role || 'consumer';
-        const isVendorUser = Boolean(
-          resolvedRole === 'vendor' ||
-          stored.isVendor ||
-          (Array.isArray(backendProfile?.vendor_memberships) && backendProfile.vendor_memberships.length > 0)
-        );
-        const resolvedHandle = user.email
-          ? `@${user.email.split('@')[0]}`
-          : stored.handle || `@user_${user.uid.slice(0, 6)}`;
-
-        const syncedUser: User = {
-          ...stored,
-          id: user.uid,
-          name: user.displayName || backendProfile?.name || stored.name || 'PaikarMart User',
-          email: user.email || backendProfile?.email || stored.email || '',
-          handle: resolvedHandle,
-          avatar: user.photoURL || backendProfile?.avatar_url || stored.avatar,
-          role: resolvedRole,
-          isVendor: isVendorUser,
-          kycStatus: backendProfile?.kyc_status || stored.kycStatus || 'none',
-          vendorProfile: stored.vendorProfile,
-          balance: typeof backendProfile?.wallet_balance === 'number' ? backendProfile.wallet_balance : (stored.balance ?? 0),
-          rewardPoints: typeof backendProfile?.reward_points === 'number' ? backendProfile.reward_points : (stored.rewardPoints ?? 0),
-          location: backendProfile?.location || stored.location || 'Dhaka, Bangladesh',
-        };
-
-        console.log('[AuthContext:onAuthStateChanged] Persisting synced user to state and localStorage:', {
-          id: syncedUser.id,
-          name: syncedUser.name,
-          role: syncedUser.role,
-          isVendor: syncedUser.isVendor,
-          balance: syncedUser.balance,
-        });
-
-        setCurrentUser(syncedUser);
-        saveStoredData('USER', syncedUser);
-
-        // Background sync to backend and Firestore
-        void syncAuthenticatedProfile({
-          name: syncedUser.name,
-          handle: syncedUser.handle,
-          avatar: syncedUser.avatar,
-          location: syncedUser.location,
-        }).catch((err) => console.warn('[AuthContext] Backend sync warning:', err));
-
-        void syncUserProfileToFirestore({
-          id: user.uid,
-          email: user.email || '',
-          name: syncedUser.name,
-          handle: resolvedHandle,
-          role: resolvedRole,
-          avatar: syncedUser.avatar,
-          location: syncedUser.location,
-          emailVerified: user.emailVerified,
-        }).catch((err) => console.warn('[AuthContext] Firestore sync warning:', err));
-      } else {
-        console.log('[AuthContext:onAuthStateChanged] No authenticated user detected (Guest mode active).');
-      }
-
-      setLoading(false);
-    });
-
-    return () => {
-      console.log('[AuthContext:Lifecycle] Cleaning up onAuthStateChanged subscriber.');
-      unsubscribe();
-    };
   }, []);
 
   const signInWithGoogle = async () => {
     try {
       console.log('[AuthContext:GoogleSignIn] Initiating signInWithGoogle popup...');
-      setLoading(true);
+      setActionLoading(true);
       const user = await firebaseGoogleSignIn();
       console.log('[AuthContext:GoogleSignIn] Firebase popup completed. User:', user ? { uid: user.uid, email: user.email } : null);
 
       if (user) {
-        let backendProfile: any = null;
-        try {
-          backendProfile = await fetchAuthenticatedProfile();
-          console.log('[AuthContext:GoogleSignIn] Fetched backend profile:', backendProfile);
-        } catch {
-          // ignore
-        }
-
-        const stored = loadStoredData<User>('USER', CURRENT_USER);
-        const resolvedRole: UserRole = (backendProfile?.role as UserRole) || stored.role || 'consumer';
-        const isVendorUser = Boolean(
-          resolvedRole === 'vendor' ||
-          stored.isVendor ||
-          (Array.isArray(backendProfile?.vendor_memberships) && backendProfile.vendor_memberships.length > 0)
-        );
-        const resolvedHandle = user.email ? `@${user.email.split('@')[0]}` : '@user';
-
-        const syncedUser: User = {
-          ...stored,
-          id: user.uid,
-          name: user.displayName || backendProfile?.name || stored.name || 'Google User',
-          email: user.email || backendProfile?.email || stored.email || '',
-          handle: resolvedHandle,
-          avatar: user.photoURL || backendProfile?.avatar_url || stored.avatar,
-          role: resolvedRole,
-          isVendor: isVendorUser,
-          balance: typeof backendProfile?.wallet_balance === 'number' ? backendProfile.wallet_balance : (stored.balance ?? 0),
-          location: stored.location || 'Dhaka, Bangladesh',
-        };
-
-        console.log('[AuthContext:GoogleSignIn] Setting currentUser and saving to storage:', syncedUser);
-        setCurrentUser(syncedUser);
-        saveStoredData('USER', syncedUser);
-
-        void syncAuthenticatedProfile({
-          name: syncedUser.name,
-          handle: resolvedHandle,
-          avatar: syncedUser.avatar,
-          location: syncedUser.location,
-        }).catch((err) => console.warn('[AuthContext:GoogleSignIn] Profile API sync warning:', err));
-
-        void syncUserProfileToFirestore({
-          id: user.uid,
-          email: user.email || '',
-          name: syncedUser.name,
-          handle: resolvedHandle,
-          role: resolvedRole,
-          avatar: syncedUser.avatar,
-          location: syncedUser.location,
-          emailVerified: user.emailVerified,
-        }).catch((err) => console.warn('[AuthContext:GoogleSignIn] Firestore sync warning:', err));
+        await refetchProfile();
       }
     } catch (err) {
       console.error('[AuthContext:GoogleSignIn] Google Sign-in error:', err);
       throw err;
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const signUpWithEmail = async (email: string, pass: string, name: string, selectedRole: UserRole = 'consumer') => {
     try {
       console.log('[AuthContext:Register] Starting email registration for:', { email, name, selectedRole });
-      setLoading(true);
+      setActionLoading(true);
       const creds = await createUserWithEmailAndPassword(auth, email, pass);
       console.log('[AuthContext:Register] Firebase Auth User successfully created. UID:', creds.user.uid);
 
@@ -242,14 +187,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(newUser);
         saveStoredData('USER', newUser);
 
-        void syncAuthenticatedProfile({
+        await syncAuthenticatedProfile({
           name: newUser.name,
           handle: newUser.handle,
           avatar: newUser.avatar,
           location: newUser.location,
         }).catch((err) => console.warn('[AuthContext:Register] Profile API sync warning:', err));
 
-        void syncUserProfileToFirestore({
+        await syncUserProfileToFirestore({
           id: creds.user.uid,
           email: email,
           name: name,
@@ -259,66 +204,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           location: newUser.location,
           emailVerified: creds.user.emailVerified,
         }).catch((err) => console.warn('[AuthContext:Register] Firestore sync warning:', err));
+
+        await refetchProfile();
       }
     } catch (err) {
       console.error('[AuthContext:Register] Email Registration Failed:', err);
       throw err;
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const signInWithEmail = async (email: string, pass: string) => {
     try {
       console.log('[AuthContext:Login] Attempting email sign-in for:', email);
-      setLoading(true);
+      setActionLoading(true);
       const creds = await signInWithEmailAndPassword(auth, email, pass);
       console.log('[AuthContext:Login] Firebase credentials validated. User UID:', creds.user.uid);
 
       if (creds.user) {
-        let backendProfile: any = null;
-        try {
-          backendProfile = await fetchAuthenticatedProfile();
-          console.log('[AuthContext:Login] Backend profile on login:', backendProfile);
-        } catch (fetchErr) {
-          console.warn('[AuthContext:Login] Backend profile fetch warning:', fetchErr);
-        }
-
-        const stored = loadStoredData<User>('USER', CURRENT_USER);
-        const resolvedRole: UserRole = (backendProfile?.role as UserRole) || stored.role || 'consumer';
-        const isVendorUser = Boolean(
-          resolvedRole === 'vendor' ||
-          stored.isVendor ||
-          (Array.isArray(backendProfile?.vendor_memberships) && backendProfile.vendor_memberships.length > 0)
-        );
-
-        const loggedInUser: User = {
-          ...stored,
-          id: creds.user.uid,
-          name: creds.user.displayName || backendProfile?.name || stored.name || 'Registered User',
-          email: email,
-          handle: `@${email.split('@')[0]}`,
-          role: resolvedRole,
-          isVendor: isVendorUser,
-          kycStatus: backendProfile?.kyc_status || stored.kycStatus,
-          balance: typeof backendProfile?.wallet_balance === 'number' ? backendProfile.wallet_balance : (stored.balance ?? 0),
-        };
-
-        console.log('[AuthContext:Login] Setting loggedInUser and persisting:', loggedInUser);
-        setCurrentUser(loggedInUser);
-        saveStoredData('USER', loggedInUser);
-
-        void syncAuthenticatedProfile({
-          name: loggedInUser.name,
-          handle: loggedInUser.handle,
-          location: loggedInUser.location,
-        }).catch((err) => console.warn('[AuthContext:Login] Profile API sync warning:', err));
+        await refetchProfile();
       }
     } catch (err) {
       console.error('[AuthContext:Login] Email Login Failed:', err);
       throw err;
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -334,16 +245,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('[AuthContext:Reload] Reloading auth.currentUser...');
       await auth.currentUser.reload();
       console.log('[AuthContext:Reload] Reload complete. emailVerified:', auth.currentUser.emailVerified);
-      setFirebaseUser({ ...auth.currentUser });
+      await refetchProfile();
     }
   };
 
   const signOut = async () => {
     try {
       console.log('[AuthContext:SignOut] Signing out of Firebase...');
-      setLoading(true);
+      setActionLoading(true);
       await signOutFirebase();
-      setFirebaseUser(null);
       const guestUser: User = {
         ...CURRENT_USER,
         role: 'consumer',
@@ -359,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[AuthContext:SignOut] Sign-out failed:', err);
       throw err;
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -369,8 +279,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser,
         currentUser,
         setCurrentUser,
-        loading,
+        supabaseProfile,
+        isSynced,
+        syncError,
+        lastSyncedAt,
+        loading: actionLoading || syncLoading,
         isFirebaseReady,
+        refetchProfile,
         signInWithGoogle,
         signUpWithEmail,
         signInWithEmail,

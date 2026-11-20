@@ -10,10 +10,15 @@ import {
   Minus,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Scale,
+  Check,
+  Heart
 } from 'lucide-react';
 import { CommerceItem } from '@/types';
 import { BulkTierPricingTable } from '@/features/b2b';
+import { useProductComparison } from '@/features/marketplace/hooks/useProductComparison';
+import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 
 interface WholesaleProductCardProps {
   product: CommerceItem;
@@ -31,6 +36,10 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
   const moq = product.minWholesaleQty || 20;
   const [quantity, setQuantity] = useState(moq);
   const [showTiers, setShowTiers] = useState(false);
+  const { isCompared, toggleCompare } = useProductComparison();
+  const { isWishlisted, toggleWishlist } = useWishlist();
+  const compared = isCompared(product.id);
+  const wishlisted = isWishlisted(product.id);
 
   // Calculate current unit price based on tiered pricing or default discount
   const currentUnitPrice = React.useMemo(() => {
@@ -77,19 +86,53 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
         />
 
         {/* B2B Trust Bar Overlay */}
-        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between">
+        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-medium text-white shadow-xs">
             <Building2 className="w-3 h-3 text-emerald-400" />
             <span className="truncate max-w-[120px]">{product.storeName}</span>
           </div>
 
-          <div className="px-2.5 py-1 rounded-lg bg-[var(--pm-success)] text-[11px] font-bold text-white shadow-xs font-mono tabular-nums">
-            MOQ: {moq} pcs
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="px-2.5 py-1 rounded-lg bg-[var(--pm-success)] text-[11px] font-bold text-white shadow-xs font-mono tabular-nums">
+              MOQ: {moq} pcs
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleWishlist(product);
+              }}
+              aria-pressed={wishlisted}
+              aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
+              title={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
+              className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                wishlisted
+                  ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
+                  : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-rose-500 hover:text-rose-500'
+              }`}
+            >
+              <Heart className={`w-3.5 h-3.5 ${wishlisted ? 'fill-white' : ''}`} />
+            </button>
           </div>
         </div>
 
-        {/* Quick Sample Action */}
+        {/* Quick Compare & Sample Actions */}
         <button
+          type="button"
+          onClick={() => toggleCompare(product)}
+          aria-pressed={compared}
+          className={`absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-lg border shadow-xs text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+            compared
+              ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
+              : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
+          }`}
+        >
+          {compared ? <Check className="w-3 h-3" /> : <Scale className="w-3 h-3 text-[var(--pm-accent)]" />}
+          {compared ? 'Compared' : 'Compare'}
+        </button>
+
+        <button
+          type="button"
           onClick={() => onRequestSample(product)}
           className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-lg pm-glass text-[11px] font-semibold text-[var(--pm-text)] border border-[var(--pm-border)] shadow-xs flex items-center gap-1 transition-colors cursor-pointer"
         >

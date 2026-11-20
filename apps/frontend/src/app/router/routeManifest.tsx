@@ -48,14 +48,20 @@ const DemandBoardPortal = React.lazy(() =>
 const NearbyRadarPortal = React.lazy(() =>
   import('@/portals/shared/nearby-radar').then((m) => ({ default: m.NearbyRadarPortal }))
 );
+const WishlistPortal = React.lazy(() =>
+  import('@/portals/marketplaces/wishlist').then((m) => ({ default: m.WishlistPortal }))
+);
 
 export interface AppRouteManifestProps {
   currentTab: PortalTab;
+  defaultRootRoute?: string;
   currentUser: User;
   setCurrentUser: React.Dispatch<React.SetStateAction<User>>;
   posts: SocialPost[];
   filteredPosts: SocialPost[];
   commerceItems: CommerceItem[];
+  isCatalogLoading?: boolean;
+  isFeedLoading?: boolean;
   orders: Order[];
   bookings: ServiceBooking[];
   notifications: AppNotification[];
@@ -97,11 +103,14 @@ export interface AppRouteManifestProps {
 
 export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
   currentTab,
+  defaultRootRoute = ROUTE_PATHS.SOCIAL,
   currentUser,
   setCurrentUser,
   posts,
   filteredPosts,
   commerceItems,
+  isCatalogLoading = false,
+  isFeedLoading = false,
   orders,
   bookings,
   notifications,
@@ -143,7 +152,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
   return (
     <React.Suspense fallback={currentTab === 'feed' ? <FeedSkeleton /> : <PortalSkeleton />}>
       <Routes>
-        <Route path={ROUTE_PATHS.ROOT} element={<Navigate to={ROUTE_PATHS.SOCIAL} replace />} />
+        <Route path={ROUTE_PATHS.ROOT} element={<Navigate to={defaultRootRoute} replace />} />
 
         <Route
           path={ROUTE_PATHS.EXPLORE}
@@ -166,6 +175,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
               currentUser={currentUser}
               posts={filteredPosts}
               commerceItems={commerceItems}
+              isLoading={isFeedLoading}
               onCreatePost={onCreatePost}
               onReactToPost={onReactToPost}
               onAddComment={onAddComment}
@@ -179,6 +189,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
           element={
             <MarketplaceHub
               items={commerceItems}
+              isLoading={isCatalogLoading}
               onAddToCart={onAddToCart}
               onBuyNow={onBuyNow}
               onSelectTab={setCurrentTab}
@@ -201,6 +212,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
           element={
             <WholesalePortal
               items={commerceItems}
+              isLoading={isCatalogLoading}
               onAddToCart={onAddToCart}
               onSelectTab={setCurrentTab}
               externalSearchQuery={searchQuery}
@@ -217,6 +229,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
               onUpdateUser={setCurrentUser}
               onOrderPlaced={onOrderPlaced}
               commerceItems={commerceItems}
+              isLoading={isCatalogLoading}
               onOpenAuthModal={onOpenAuthModal}
             />
           }
@@ -268,6 +281,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
               currentUser={currentUser}
               posts={filteredPosts}
               commerceItems={commerceItems}
+              isLoading={isFeedLoading}
               onCreatePost={onCreatePost}
               onReactToPost={onReactToPost}
               onAddComment={onAddComment}
@@ -475,7 +489,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                 onSelectTab={setCurrentTab}
                 currentUser={currentUser}
                 onUpdateUser={setCurrentUser}
-                onClose={() => navigate(ROUTE_PATHS.ROOT)}
+                onClose={() => navigate(ROUTE_PATHS.SOCIAL)}
               />
             </AuthGuard>
           }
@@ -500,6 +514,17 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
               commerceItems={commerceItems}
               onAddToCart={(item, qty, isWholesale) => onAddToCart(item, qty, isWholesale)}
               onBookService={onBookService}
+              onSelectTab={setCurrentTab}
+            />
+          }
+        />
+
+        <Route
+          path={ROUTE_PATHS.WISHLIST}
+          element={
+            <WishlistPortal
+              onAddToCart={onAddToCart}
+              onBuyNow={onBuyNow}
               onSelectTab={setCurrentTab}
             />
           }

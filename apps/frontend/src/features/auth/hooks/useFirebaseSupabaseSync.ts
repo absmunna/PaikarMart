@@ -106,6 +106,9 @@ export interface UseFirebaseSupabaseSyncReturn {
 
 export const FIREBASE_SUPABASE_SYNC_EVENT = 'firebase-supabase-synced';
 
+// Deduplicate concurrent fetches for the same Firebase UID across multiple hook consumers
+const inFlightProfileFetches = new Map<string, Promise<any>>();
+
 /**
  * useFirebaseSupabaseSync
  *
@@ -197,7 +200,6 @@ export function useFirebaseSupabaseSync(
         rewardPoints: profile.reward_points ?? stored.rewardPoints ?? 0,
         location: profile.location || stored.location || 'Dhaka, Bangladesh',
         phone: profile.phone || stored.phone,
-        isEmailVerified: fUser.emailVerified,
       };
 
       if (autoPersistToStorage) {
@@ -237,64 +239,98 @@ export function useFirebaseSupabaseSync(
   );
 
   /**
-   * Fetch user profile from Supabase with fallback strategies
+   * Fetch user profile from Supabase with fallback strategies and in-flight deduplication
    */
   const fetchProfileFromSupabase = useCallback(
-    async (userToFetch: FirebaseUser): Promise<SupabaseUserProfile | null> => {
-      console.log('[useFirebaseSupabaseSync:Fetch] Triggering Supabase profile fetch for UID:', userToFetch.uid);
+    async (userToFetch: FirebaseUser, forceFresh = false): Promise<SupabaseUserProfile | null> => {
+      const uid = userToFetch.uid;
+      console.log('[useFirebaseSupabaseSync:Fetch] Triggering Supabase profile fetch for UID:', uid);
 
-      let rawProfile: any = null;
       let fetchError: Error | null = null;
 
-      // Primary Strategy: Authenticated Backend Proxy using verified Firebase ID token
-      try {
-        rawProfile = await fetchAuthenticatedProfile();
-        console.log('[useFirebaseSupabaseSync:Fetch] Profile received from backend proxy:', rawProfile);
-      } catch (err: any) {
-        console.warn('[useFirebaseSupabaseSync:Fetch] Backend proxy query failed:', err);
-        fetchError = err instanceof Error ? err : new Error(String(err));
-      }
+      const executeFetch = async (): Promise<any> => {
+        let rawProfile: any = null;
+        let confirmedMissing = false;
 
-      // Secondary Strategy: Direct Supabase Client Query if backend didn't return data & Supabase is configured
-      if (!rawProfile && isSupabaseConfigured()) {
+        // Primary Strategy: Authenticated Backend Proxy using verified Firebase ID token
         try {
-          console.log('[useFirebaseSupabaseSync:Fetch] Attempting direct Supabase client query...');
-          const { data, error: sbError } = await supabase
-            .from('profiles')
-            .select('*, vendor_memberships(*, stores(*))')
-            .eq('auth_uid', userToFetch.uid)
-            .maybeSingle();
-
-          if (!sbError && data) {
-            rawProfile = data;
-            console.log('[useFirebaseSupabaseSync:Fetch] Direct Supabase query succeeded:', rawProfile);
-          } else if (sbError) {
-            console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase query notice:', sbError.message);
+          rawProfile = await fetchAuthenticatedProfile();
+          if (rawProfile === null) {
+            confirmedMissing = true;
           }
-        } catch (directErr) {
-          console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase client error:', directErr);
+          console.log('[useFirebaseSupabaseSync:Fetch] Profile received from backend proxy:', rawProfile);
+        } catch (err: any) {
+          console.warn('[useFirebaseSupabaseSync:Fetch] Backend proxy query failed:', err);
+          fetchError = err instanceof Error ? err : new Error(String(err));
         }
+
+        // Secondary Strategy: Direct Supabase Client Query if backend didn't return data & Supabase is configured
+        if (!rawProfile && isSupabaseConfigured()) {
+          try {
+            console.log('[useFirebaseSupabaseSync:Fetch] Attempting direct Supabase client query...');
+            let { data, error: sbError } = await supabase
+              .from('profiles')
+              .select('*, vendor_memberships(*, stores(*))')
+              .eq('auth_uid', uid)
+              .maybeSingle();
+
+            if (sbError) {
+              const fallback = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('auth_uid', uid)
+                .maybeSingle();
+              data = fallback.data;
+              sbError = fallback.error;
+            }
+
+            if (!sbError && data) {
+              rawProfile = data;
+              fetchError = null;
+              console.log('[useFirebaseSupabaseSync:Fetch] Direct Supabase query succeeded:', rawProfile);
+            } else if (!sbError && data === null) {
+              confirmedMissing = true;
+            } else if (sbError) {
+              console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase query notice:', sbError.message);
+            }
+          } catch (directErr) {
+            console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase client error:', directErr);
+          }
+        }
+
+        // Auto-Provision Strategy: Only when a lookup confirmed no profile exists yet in Supabase
+        if (!rawProfile && confirmedMissing && autoCreateMissing) {
+          try {
+            console.log('[useFirebaseSupabaseSync:Fetch] No Supabase profile found. Auto-provisioning profile...');
+            const initialName = userToFetch.displayName || 'PaikarMart User';
+            const initialHandle = userToFetch.email ? `@${userToFetch.email.split('@')[0]}` : `@user_${uid.slice(0, 6)}`;
+            const initialAvatar = userToFetch.photoURL || undefined;
+
+            rawProfile = await syncAuthenticatedProfile({
+              name: initialName,
+              handle: initialHandle,
+              avatar: initialAvatar,
+              location: 'Dhaka, Bangladesh',
+            });
+            fetchError = null;
+            console.log('[useFirebaseSupabaseSync:Fetch] Auto-provisioned Supabase profile:', rawProfile);
+          } catch (provisionErr) {
+            console.warn('[useFirebaseSupabaseSync:Fetch] Auto-provisioning notice:', provisionErr);
+          }
+        }
+
+        return rawProfile;
+      };
+
+      let promise = !forceFresh ? inFlightProfileFetches.get(uid) : undefined;
+      if (!promise) {
+        promise = executeFetch().finally(() => {
+          inFlightProfileFetches.delete(uid);
+        });
+        inFlightProfileFetches.set(uid, promise);
       }
 
-      // Auto-Provision Strategy: If no profile exists yet in Supabase for this Firebase user
-      if (!rawProfile && autoCreateMissing) {
-        try {
-          console.log('[useFirebaseSupabaseSync:Fetch] No Supabase profile found. Auto-provisioning profile...');
-          const initialName = userToFetch.displayName || 'PaikarMart User';
-          const initialHandle = userToFetch.email ? `@${userToFetch.email.split('@')[0]}` : `@user_${userToFetch.uid.slice(0, 6)}`;
-          const initialAvatar = userToFetch.photoURL || undefined;
-
-          rawProfile = await syncAuthenticatedProfile({
-            name: initialName,
-            handle: initialHandle,
-            avatar: initialAvatar,
-            location: 'Dhaka, Bangladesh',
-          });
-          console.log('[useFirebaseSupabaseSync:Fetch] Auto-provisioned Supabase profile:', rawProfile);
-        } catch (provisionErr) {
-          console.warn('[useFirebaseSupabaseSync:Fetch] Auto-provisioning notice:', provisionErr);
-        }
-      }
+      const rawProfile = await promise;
 
       if (rawProfile) {
         const mappedProfile = mapRawToSupabaseProfile(rawProfile, userToFetch);
@@ -330,7 +366,7 @@ export function useFirebaseSupabaseSync(
     }
     setIsLoading(true);
     try {
-      return await fetchProfileFromSupabase(currentAuthUser);
+      return await fetchProfileFromSupabase(currentAuthUser, true);
     } finally {
       setIsLoading(false);
     }

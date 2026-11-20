@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /settings
+Disallow: /portal/wallet
+Disallow: /portal/orders
+Disallow: /portal/seller
+Disallow: /portal/messages
+Disallow: /portal/notifications
+Disallow: /portal/profile
+Disallow: /api/
+
+Sitemap: https://paikarmart.vercel.app/sitemap.xml

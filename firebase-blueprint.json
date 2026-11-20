@@ -169,6 +169,61 @@
         }
       },
       "required": ["id", "recipientId", "title", "message", "read", "createdAt"]
+    },
+    "WishlistItem": {
+      "title": "Wishlist Item",
+      "description": "Owner-isolated saved product entry in user wishlist",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "productId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "productTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "productPrice": {
+          "type": "number"
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "storeName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "tradeMode": {
+          "type": "string",
+          "enum": ["retail", "wholesale"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "productId", "productTitle", "productPrice", "createdAt"]
     }
   },
   "firestore": {
@@ -187,6 +242,10 @@
     "/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User notification records isolated by recipientId"
+    },
+    "/wishlists/{wishlistId}": {
+      "schema": "WishlistItem",
+      "description": "Owner-isolated user saved wishlist items"
     }
   }
 }

@@ -12,6 +12,7 @@ export const bn: TranslationKey = {
     profile: 'প্রোফাইল',
     superHub: 'হাব',
     nearby: 'আশেপাশে',
+    wishlist: 'উইশলিস্ট',
     searchPlaceholder: 'পণ্য, ক্রিয়েটর বা সার্ভিস খুঁজুন...',
     settings: 'সেটিংস',
     cart: 'কার্ট',

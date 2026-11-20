@@ -29,10 +29,18 @@ import {
   User,
   ExternalLink,
   Layers,
-  Sparkles
+  Sparkles,
+  Eye,
+  ShoppingCart,
+  Search,
+  TrendingUp
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { VendorWorkspaceSwitcher } from '@/portals/utilities/seller-central/components/VendorWorkspaceSwitcher';
+import {
+  fetchMerchantInsights,
+  type MerchantInsightsSummary
+} from '@/shared/hooks/useEngagementAnalytics';
 
 interface SellerCentralPortalProps {
   vendorProfile: VendorProfile;
@@ -88,6 +96,7 @@ export const SellerCentralPortal: React.FC<SellerCentralPortalProps> = ({
     } catch {}
   }, [activeVendorId, vendorProfile.id, vendorProfiles]);
   const [analytics, setAnalytics] = useState<VendorAnalyticsSummary | null>(null);
+  const [merchantInsights, setMerchantInsights] = useState<MerchantInsightsSummary | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<'commerce' | 'services' | 'rides' | 'creator' | 'documents'>(
     editProductId ? 'commerce' : 'commerce'
   );
@@ -102,6 +111,9 @@ export const SellerCentralPortal: React.FC<SellerCentralPortalProps> = ({
     let active = true;
     void vendorApiClient.fetchVendorAnalytics(activeVendorProfile.id, currentUser?.id).then((res) => {
       if (active && res) setAnalytics(res);
+    });
+    void fetchMerchantInsights(activeVendorProfile.id).then((summary) => {
+      if (active) setMerchantInsights(summary);
     });
     return () => {
       active = false;
@@ -276,6 +288,115 @@ export const SellerCentralPortal: React.FC<SellerCentralPortalProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Merchant Engagement Insights (Supabase analytics summary) */}
+      {merchantInsights && (
+        <section className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-[var(--pm-text)] flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[var(--pm-accent)]" />
+                <span>{isBn ? 'মার্চেন্ট এনগেজমেন্ট ইনসাইটস' : 'Merchant Engagement Insights'}</span>
+              </h2>
+              <p className="text-xs text-[var(--pm-muted)]">
+                {isBn
+                  ? 'ক্রেতাদের প্রোডাক্ট ভিউ, কার্ট অ্যাড ও সার্চ ট্রেন্ড থেকে প্রাপ্ত রিয়েল-টাইম অ্যানালিটিক্স'
+                  : 'Live shopper funnel insights from product views, cart additions, and search demand'}
+              </p>
+            </div>
+            <span className="text-xs font-mono font-bold text-[var(--pm-accent)]">
+              {isBn ? 'অ্যাড-টু-কার্ট রেট:' : 'Add-to-Cart Rate:'} {merchantInsights.addToCartRatePct}%
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--pm-muted)]">
+                <Eye className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
+                <span>{isBn ? 'প্রোডাক্ট ভিউ' : 'Product Views'}</span>
+              </div>
+              <span className="text-lg font-mono tabular-nums font-bold text-[var(--pm-text)] mt-1 block">
+                {merchantInsights.totalProductViews.toLocaleString()}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--pm-muted)]">
+                <ShoppingCart className="w-3.5 h-3.5 text-[var(--pm-success)]" />
+                <span>{isBn ? 'কার্টে যোগ' : 'Cart Additions'}</span>
+              </div>
+              <span className="text-lg font-mono tabular-nums font-bold text-[var(--pm-success)] mt-1 block">
+                {merchantInsights.totalCartAdditions.toLocaleString()}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--pm-muted)]">
+                <Search className="w-3.5 h-3.5 text-amber-500" />
+                <span>{isBn ? 'সার্চ কোয়েরি' : 'Search Queries'}</span>
+              </div>
+              <span className="text-lg font-mono tabular-nums font-bold text-[var(--pm-text)] mt-1 block">
+                {merchantInsights.totalSearchQueries.toLocaleString()}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--pm-muted)]">
+                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                <span>{isBn ? 'সরাসরি বাই-নাউ' : 'Direct Buy-Now'}</span>
+              </div>
+              <span className="text-lg font-mono tabular-nums font-bold text-[var(--pm-text)] mt-1 block">
+                {merchantInsights.totalBuyNows.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {(merchantInsights.topViewedProducts.length > 0 || merchantInsights.topSearchQueries.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="p-3.5 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[var(--pm-muted)]">
+                  {isBn ? 'সবচেয়ে বেশি দেখা পণ্য' : 'Top Engaged Products'}
+                </h3>
+                {merchantInsights.topViewedProducts.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {merchantInsights.topViewedProducts.slice(0, 4).map((item) => (
+                      <div key={item.productId} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-[var(--pm-text)] truncate">{item.title}</span>
+                        <span className="font-mono text-[11px] text-[var(--pm-muted)] shrink-0">
+                          {item.views} views · {item.cartAdds} cart
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--pm-muted)]">
+                    {isBn ? 'এখনও কোনো প্রোডাক্ট এনগেজমেন্ট রেকর্ড হয়নি।' : 'No product view activity recorded yet.'}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[var(--pm-muted)]">
+                  {isBn ? 'ক্রেতাদের সার্চ চাহিদা' : 'Trending Customer Searches'}
+                </h3>
+                {merchantInsights.topSearchQueries.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {merchantInsights.topSearchQueries.slice(0, 5).map((entry) => (
+                      <div key={entry.query} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-[var(--pm-text)] truncate">“{entry.query}”</span>
+                        <span className="font-mono text-[11px] text-[var(--pm-muted)] shrink-0">
+                          {entry.count}x
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[var(--pm-muted)]">
+                    {isBn ? 'এখনও কোনো সার্চ কোয়েরি রেকর্ড হয়নি।' : 'No search demand queries recorded yet.'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Sub-Dashboard Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar border-b border-[var(--pm-border)] pb-2">
