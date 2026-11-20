@@ -21,6 +21,7 @@ import { logisticsRouter } from './modules/logistics/logisticsRoutes.js';
 import { vendorRouter } from './modules/vendors/vendorRoutes.js';
 import { retailRouter } from './modules/retail/retailRoutes.js';
 import { authRouter } from './modules/auth/authRoutes.js';
+import identityRouter from './modules/identity/identityRoutes.js';
 import { catalogRouter } from './modules/catalog/catalogRoutes.js';
 import { analyticsRouter } from './modules/analytics/analyticsRoutes.js';
 import { requireFirebaseAuth } from './middleware/requireFirebaseAuth.js';
@@ -101,6 +102,11 @@ app.use('/api/catalog', catalogRouter);
 app.use('/api/analytics', analyticsRouter);
 
 // In-memory fallback data store for offline or pre-configured dev environments
+
+// ----- Identity Module -----
+import identityRouter from './modules/identity/identityRoutes.js';
+app.use('/api/identity', identityRouter);
+
 let serverPosts = [
   {
     id: 'post_srv_1',

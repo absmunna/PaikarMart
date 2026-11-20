@@ -1,0 +1,3 @@
+[submodule "PaikarMart-web"]
+	path = PaikarMart-web
+	url = https://github.com/absmunna/PaikarMart-web.git

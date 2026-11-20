@@ -1,0 +1,49 @@
+name: Publish Production Build
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build production files
+        run: npm run build:frontend
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions"
+
+      - name: Ensure prod-build branch exists
+        run: |
+          git fetch origin prod-build || git checkout -b prod-build
+          git checkout prod-build
+
+      - name: Sync built assets
+        run: |
+          rm -rf apps/frontend/dist
+          cp -R apps/frontend/dist ../dist-temp
+          mkdir -p apps/frontend
+          cp -R ../dist-temp apps/frontend/dist
+
+      - name: Commit and push changes
+        run: |
+          git add -f apps/frontend/dist
+          git diff-index --quiet HEAD || git commit -m "Update production build"
+          git push origin prod-build
