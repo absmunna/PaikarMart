@@ -8,14 +8,22 @@ import {
   SocialPostSkeleton,
 } from '@/design-system/components';
 import { INITIAL_STORIES } from '@/data/mockData';
-import { User, SocialPost, CommerceItem, ReactionType, PostType, TaggedProduct } from '@/types';
+import { User, SocialPost, CommerceItem, ReactionType, PostType, TaggedProduct, CitizenPostCategory } from '@/types';
 
 interface SocialPortalProps {
   currentUser: User;
   posts: SocialPost[];
   commerceItems: CommerceItem[];
   isLoading?: boolean;
-  onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
+  onCreatePost: (
+    content: string, 
+    taggedProduct?: TaggedProduct, 
+    mediaUrl?: string, 
+    postType?: PostType,
+    citizenCategory?: CitizenPostCategory,
+    aiSafetyVerified?: boolean,
+    aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged'
+  ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
   onAddToCart: (item: CommerceItem) => void;

@@ -122,7 +122,32 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {post.citizenCategory === 'homemade' && (
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20">
+              🍲 হোমমেড খাবার/পণ্য
+            </span>
+          )}
+          {post.citizenCategory === 'bid' && (
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/20">
+              🔨 পাবলিক নিলাম
+            </span>
+          )}
+          {post.citizenCategory === 'property_rent' && (
+            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-black uppercase tracking-wider border border-purple-500/20">
+              🏢 ফ্ল্যাট ভাড়া / প্রোপার্টি
+            </span>
+          )}
+          {post.citizenCategory === 'used_goods' && (
+            <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[10px] font-black uppercase tracking-wider border border-rose-500/20">
+              📦 সেকেন্ড হ্যান্ড
+            </span>
+          )}
+          {post.aiSafetyVerified && (
+            <span className="px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] text-[9px] font-black uppercase tracking-tighter">
+              ✨ AI Verified
+            </span>
+          )}
           {post.postType === 'demand' && (
             <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-500 text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
               Demand

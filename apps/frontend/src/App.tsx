@@ -11,6 +11,7 @@ import {
   TaggedProduct, 
   VendorProfile,
   PostType,
+  CitizenPostCategory,
   AppNotification
 } from '@/types';
 import { 
@@ -388,18 +389,29 @@ function AppInner() {
   };
 
   // Handlers for Social Feed
-  const handleCreatePost = (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType: PostType = 'regular') => {
+  const handleCreatePost = (
+    content: string, 
+    taggedProduct?: TaggedProduct, 
+    mediaUrl?: string, 
+    postType: PostType = 'regular',
+    citizenCategory: CitizenPostCategory = 'general',
+    aiSafetyVerified: boolean = true,
+    aiRiskAssessment: 'safe' | 'low_risk' | 'high_risk_flagged' = 'safe'
+  ) => {
     const newPost: SocialPost = {
       id: `post_${Date.now()}`,
       authorId: currentUser.id,
       authorName: currentUser.name,
       authorHandle: currentUser.handle,
       authorAvatar: currentUser.avatar,
-      authorVerified: currentUser.isVendor,
+      authorVerified: currentUser.isVendor || currentUser.personalVerification?.status === 'verified',
       timestamp: 'Just now',
       content,
       mediaUrl,
       postType,
+      citizenCategory,
+      aiSafetyVerified,
+      aiRiskAssessment,
       taggedProduct,
       reactionsCount: { like: 0, love: 0, care: 0 },
       sharesCount: 0,

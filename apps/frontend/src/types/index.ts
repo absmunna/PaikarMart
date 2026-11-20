@@ -152,6 +152,18 @@ export interface WalletTransaction {
   referenceId?: string;
 }
 
+export type PersonalDocumentType = 'NID' | 'Passport' | 'Birth Certificate' | 'Student ID';
+
+export interface PersonalVerificationInfo {
+  status: 'unverified' | 'pending' | 'verified';
+  documentType?: PersonalDocumentType;
+  documentNumber?: string;
+  verifiedAt?: string;
+  verificationBadge?: string;
+}
+
+export type CitizenPostCategory = 'general' | 'homemade' | 'bid' | 'property_rent' | 'used_goods';
+
 export interface User {
   id: string;
   name: string;
@@ -163,6 +175,15 @@ export interface User {
   coverImage?: string;
   role: UserRole;
   isVendor: boolean;
+  profession?: string;
+  education?: string;
+  skills?: string[];
+  personalVerification?: PersonalVerificationInfo;
+  activeCapabilities?: ('shop' | 'service' | 'creator')[];
+  canPostHomemade?: boolean;
+  canParticipateBids?: boolean;
+  canPostRental?: boolean;
+  canPostUsedGoods?: boolean;
   kycStatus?: KycStatus;
   trustLevel?: TrustLevel;
   vendorProfile?: VendorProfile;
@@ -218,6 +239,9 @@ export interface SocialPost {
   content: string;
   mediaUrl?: string;
   postType?: PostType;
+  citizenCategory?: CitizenPostCategory;
+  aiSafetyVerified?: boolean;
+  aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged';
   taggedProduct?: TaggedProduct;
   reactionsCount: {
     like: number;

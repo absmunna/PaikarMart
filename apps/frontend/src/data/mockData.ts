@@ -2,13 +2,63 @@ import { User, SocialPost, CommerceItem, Story, CreatorContent, RideOption, AppN
 
 export const CURRENT_USER: User = {
   id: 'usr_001',
-  name: 'Alex Rivera',
-  handle: '@alexrivera',
+  name: 'মুরাদ হোসেন (Murad Hossain)',
+  handle: '@muradhossain',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
   role: 'consumer',
-  isVendor: false,
-  location: 'San Francisco, CA',
-  balance: 384.50,
+  isVendor: true,
+  profession: 'শিক্ষক, রিটেইল শপ ওনার ও কনটেন্ট ক্রিয়েটর',
+  education: 'ঢাকা বিশ্ববিদ্যালয় (M.Sc in Mathematics)',
+  skills: ['গণিত পাঠদান (Teaching)', 'গার্মেন্টস ও ফ্যাশন রিটেলিং', 'ইউটিউব ক্লাস ও ভিডিও রেকর্ডিং', 'ডিজিটাল স্কিলস'],
+  activeCapabilities: ['shop', 'service', 'creator'],
+  canPostHomemade: true,
+  canParticipateBids: true,
+  canPostRental: true,
+  canPostUsedGoods: true,
+  personalVerification: {
+    status: 'verified',
+    documentType: 'NID',
+    documentNumber: '19922692019281',
+    verifiedAt: '2024-01-15',
+    verificationBadge: 'Verified Citizen (স্মার্ট নাগরিক)'
+  },
+  vendorProfile: {
+    id: 'vp_001',
+    handle: '@pathway_fashion',
+    storeName: 'পাথওয়ে টেক্সটাইল ও ক্লোথিং',
+    legalEntityName: 'Pathway Fashion & Apparel Ltd.',
+    businessRegNumber: 'TRAD/DSCC/019284/2023',
+    taxIdentificationNumber: 'TIN-84910284912',
+    category: 'retail',
+    verified: true,
+    sellerTier: 'retail_seller',
+    kycStatus: 'approved',
+    trustLevel: 5,
+    status: 'active',
+    commissionTier: 'Standard 8%',
+    rating: 4.9,
+    totalSales: 148,
+    location: 'ধানমন্ডি, ঢাকা, বাংলাদেশ',
+    createdAt: '2023-08-10',
+    documents: [
+      {
+        id: 'doc_1',
+        type: 'Trade License',
+        fileName: 'trade_license_dhaka_south.pdf',
+        status: 'verified',
+        uploadedAt: '2023-08-11'
+      },
+      {
+        id: 'doc_2',
+        type: 'TIN Certificate',
+        fileName: 'tin_certificate_nbr.pdf',
+        status: 'verified',
+        uploadedAt: '2023-08-11'
+      }
+    ]
+  },
+  location: 'ধানমন্ডি, ঢাকা, বাংলাদেশ',
+  balance: 3840.50,
   rewardPoints: 1250,
   transactions: [
     {

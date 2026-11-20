@@ -31,7 +31,15 @@ import {
   LogIn,
   LogOut,
   ShieldAlert,
-  UserCheck
+  UserCheck,
+  Briefcase,
+  GraduationCap,
+  Award,
+  Car,
+  Gavel,
+  Home,
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { FeedPostCard } from '@/features/social';
 import { OrderTrackingStepper } from '@/portals/utilities/user-profile/components/OrderTrackingStepper';
@@ -239,7 +247,47 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               <p className="text-xs text-[var(--pm-muted)] font-medium">
                 {currentUser.handle || '@alexrivera'} · {currentUser.location} · Trust Level {currentUser.trustLevel ?? (currentUser.isVendor ? 5 : 2)}
               </p>
-              <div className="flex items-center justify-center sm:justify-start gap-1.5 pt-0.5">
+
+              {/* Public Facebook-style Profile Info: Profession & Education */}
+              <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 pt-1 text-[11px] font-semibold text-[var(--pm-text)]">
+                {currentUser.profession && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                    <Briefcase className="w-3 h-3 text-blue-500" />
+                    <span>{currentUser.profession}</span>
+                  </span>
+                )}
+                {currentUser.education && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                    <GraduationCap className="w-3 h-3 text-emerald-500" />
+                    <span>{currentUser.education}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Skills Tags */}
+              {currentUser.skills && currentUser.skills.length > 0 && (
+                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-1.5 pt-0.5">
+                  {currentUser.skills.map((skill, sIdx) => (
+                    <span key={sIdx} className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-muted)]">
+                      #{skill}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-center sm:justify-start flex-wrap gap-1.5 pt-0.5">
+                {currentUser.personalVerification?.status === 'verified' ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/30">
+                    <ShieldCheck className="w-3 h-3 text-blue-500" />
+                    <span>{isBn ? `নাগরিক ভেরিফাইড (${currentUser.personalVerification.documentType})` : `Verified Citizen (${currentUser.personalVerification.documentType})`}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>{isBn ? 'নাগরিক ভেরিফিকেশন অপেক্ষারত' : 'Citizen Verification Pending'}</span>
+                  </span>
+                )}
+
                 {firebaseUser ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--pm-success)] bg-[var(--pm-success-soft)] px-2 py-0.5 rounded-full border border-[var(--pm-success)]/30">
                     <CheckCircle2 className="w-3 h-3" />
@@ -325,15 +373,24 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               <span>{t.nav.settings}</span>
             </button>
 
+            {/* My Business / আমার ব্যবসা Button */}
+            <button
+              onClick={() => {
+                if (currentUser.isVendor && onSelectTab) {
+                  onSelectTab('vendor-dash');
+                } else {
+                  onOpenVendorModal();
+                }
+              }}
+              className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+              title={isBn ? 'বিজনেস একাউন্ট, স্টোর সেটিংস ও প্রোডাক্ট ম্যানেজ করুন' : 'My Business account & storefront'}
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>{isBn ? 'আমার ব্যবসা (My Business)' : 'My Business'}</span>
+            </button>
+
             {currentUser.isVendor ? (
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onSelectTab && onSelectTab('vendor-dash')}
-                  className="px-4 py-2 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Seller Central</span>
-                </button>
                 <Link
                   to={`/u/${encodeURIComponent(normalizeHandle(currentUser.vendorProfile?.handle || currentUser.vendorProfile?.storeName || currentUser.handle || currentUser.name))}`}
                   className="px-3.5 py-2 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] font-bold text-xs flex items-center gap-1.5 transition-colors"
@@ -360,6 +417,107 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Unified Account & Multi-hub Capabilities Showcase */}
+      <div className="bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-3xl p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--pm-border)] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-black text-[var(--pm-text)]">
+                {isBn ? 'একক প্রোফাইল · সমন্বিত বিজনেস ও নাগরিক হাব (Unified Profile)' : 'Single Account · Multi-Role Hub Access'}
+              </h3>
+              <p className="text-[11px] text-[var(--pm-muted)]">
+                {isBn 
+                  ? 'একটি অ্যাকাউন্টেই কেনাকাটা, নিজের কাপড়ের শপ পরিচালনা, সার্ভিস প্রদান ও কনটেন্ট তৈরি' 
+                  : 'Buy products, run your clothing store, provide tutoring, and manage content from one account'}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-[var(--pm-success-soft)] text-[var(--pm-success)] w-fit">
+            {isBn ? 'সক্রিয় ও অনুমোদিত' : 'Active & Verified'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          {/* Shop Card */}
+          <div 
+            onClick={() => onSelectTab && onSelectTab('vendor-dash')}
+            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <Store className="w-4 h-4 text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                {currentUser.vendorProfile?.category || 'Retail/Wholesale'}
+              </span>
+            </div>
+            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
+              {currentUser.vendorProfile?.storeName || (isBn ? 'কাপড়ের দোকান' : 'Clothing Store')}
+            </h4>
+            <p className="text-[10px] text-[var(--pm-muted)]">
+              {isBn ? 'পণ্য মার্কেটপ্লেস ও সেলস ড্যাশবোর্ড' : 'Manage store products & sales'}
+            </p>
+          </div>
+
+          {/* Service Card */}
+          <div 
+            onClick={() => onSelectTab && onSelectTab('services')}
+            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <Wrench className="w-4 h-4 text-blue-500" />
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                {isBn ? 'পেশাদার সেবা' : 'Services'}
+              </span>
+            </div>
+            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
+              {isBn ? 'ক্লাস ও মেন্টরিং সার্ভিস' : 'Tutoring & Services'}
+            </h4>
+            <p className="text-[10px] text-[var(--pm-muted)]">
+              {isBn ? 'বুকিং গ্রহণ ও সেবা প্রদান' : 'Accept on-demand bookings'}
+            </p>
+          </div>
+
+          {/* Content Creator Card */}
+          <div 
+            onClick={() => onSelectTab && onSelectTab('creator')}
+            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <Eye className="w-4 h-4 text-purple-500" />
+              <span className="text-[10px] font-bold text-purple-600 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                {isBn ? 'ক্রিয়েটর' : 'Creator'}
+              </span>
+            </div>
+            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
+              {isBn ? 'ভিডিও ও ক্লাস স্টুডিও' : 'Creator Studio'}
+            </h4>
+            <p className="text-[10px] text-[var(--pm-muted)]">
+              {isBn ? 'ইউটিউব ক্লাস ও কোর্স পোস্ট' : 'Video lectures & tutorials'}
+            </p>
+          </div>
+
+          {/* Citizen Powers Card */}
+          <div 
+            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] group"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                {isBn ? 'নাগরিক সুবিধা' : 'Citizen Access'}
+              </span>
+            </div>
+            <h4 className="text-xs font-black text-[var(--pm-text)] truncate">
+              {isBn ? 'হোমমেড, নিলাম ও ফ্ল্যাট' : 'Homemade, Bids & Rent'}
+            </h4>
+            <p className="text-[10px] text-[var(--pm-muted)]">
+              {isBn ? 'সাধারণ ভেরিফাইড ইউজার হিসেবে পোস্ট' : 'Post citizen listings'}
+            </p>
           </div>
         </div>
       </div>

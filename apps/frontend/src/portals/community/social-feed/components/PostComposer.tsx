@@ -1,27 +1,59 @@
-import React, { useState } from 'react';
-import { Image, Tag, Smile, Send, X, ShoppingBag } from 'lucide-react';
-import { User, CommerceItem, TaggedProduct, PostType } from '@/types';
+import React, { useState, useMemo } from 'react';
+import { Image, Tag, Smile, Send, X, ShoppingBag, ShieldCheck, Sparkles, AlertTriangle, CheckCircle2, Gavel, Home, Package, Utensils } from 'lucide-react';
+import { User, CommerceItem, TaggedProduct, PostType, CitizenPostCategory } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface PostComposerProps {
   currentUser: User;
   commerceItems: CommerceItem[];
-  onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
+  onCreatePost: (
+    content: string, 
+    taggedProduct?: TaggedProduct, 
+    mediaUrl?: string, 
+    postType?: PostType,
+    citizenCategory?: CitizenPostCategory,
+    aiSafetyVerified?: boolean,
+    aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged'
+  ) => void;
+  onOpenVerificationModal?: () => void;
 }
 
 export const PostComposer: React.FC<PostComposerProps> = ({
   currentUser,
   commerceItems,
   onCreatePost,
+  onOpenVerificationModal,
 }) => {
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
+
   const [content, setContent] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<CommerceItem | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [postType, setPostType] = useState<PostType>('regular');
+  const [citizenCategory, setCitizenCategory] = useState<CitizenPostCategory>('general');
+
+  // AI Safety & Moderation Analysis
+  const aiRiskAssessment = useMemo<'safe' | 'low_risk' | 'high_risk_flagged'>(() => {
+    if (!content.trim()) return 'safe';
+    const lower = content.toLowerCase();
+    const highRiskKeywords = ['অস্ত্র', 'গান', 'weapon', 'gun', 'মাদক', 'ড্রাগ', 'drug', 'সুদ', 'বেটিং', 'gambling', 'crypto scam', 'mlm', 'জাল টাকা', 'হুমকি'];
+    const hasHighRisk = highRiskKeywords.some(keyword => lower.includes(keyword));
+    if (hasHighRisk) return 'high_risk_flagged';
+    return 'safe';
+  }, [content]);
+
+  const isCitizenVerified = currentUser.personalVerification?.status === 'verified';
+  const requiresCitizenVerification = citizenCategory !== 'general';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() && !selectedProduct && !mediaPreview) return;
+    if (requiresCitizenVerification && !isCitizenVerified && onOpenVerificationModal) {
+      onOpenVerificationModal();
+      return;
+    }
 
     let tagged: TaggedProduct | undefined = undefined;
     if (selectedProduct) {
@@ -36,12 +68,21 @@ export const PostComposer: React.FC<PostComposerProps> = ({
       };
     }
 
-    onCreatePost(content, tagged, mediaPreview || (selectedProduct ? selectedProduct.imageUrl : undefined), postType);
+    onCreatePost(
+      content, 
+      tagged, 
+      mediaPreview || (selectedProduct ? selectedProduct.imageUrl : undefined), 
+      postType,
+      citizenCategory,
+      aiRiskAssessment === 'safe',
+      aiRiskAssessment
+    );
     setContent('');
     setSelectedProduct(null);
     setShowProductPicker(false);
     setMediaPreview(null);
     setPostType('regular');
+    setCitizenCategory('general');
   };
 
   return (
@@ -67,6 +108,10 @@ export const PostComposer: React.FC<PostComposerProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={
+              citizenCategory === 'homemade' ? (isBn ? "হোমমেড খাবার বা হস্তশিল্পের বিবরণ, উপাদান ও দাম লিখুন..." : "Describe your homemade food or craft...") :
+              citizenCategory === 'bid' ? (isBn ? "নিলামে তুলতে চান? শুরুর বিড মূল্য, বিবরণ ও সময়সীমা লিখুন..." : "Describe item for auction and starting bid...") :
+              citizenCategory === 'property_rent' ? (isBn ? "ফ্ল্যাট ভাড়া বা প্রোপার্টি বিবরণ, ভাড়া ও অবস্থান লিখুন..." : "Rental flat details, rent and location...") :
+              citizenCategory === 'used_goods' ? (isBn ? "ব্যবহৃত পণ্যের অবস্থা, কতদিন ব্যবহার করেছেন এবং কাঙ্ক্ষিত মূল্য..." : "Used item condition, usage period and price...") :
               postType === 'demand' ? "What are you looking for? (Quantity, Budget, Location...)" :
               postType === 'sale' ? "What are you selling? (Price, Condition, Specs...)" :
               `What's on your mind, ${currentUser.name.split(' ')[0]}?`
@@ -74,6 +119,73 @@ export const PostComposer: React.FC<PostComposerProps> = ({
             rows={2}
             className="w-full bg-[var(--pm-surface)] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 text-sm sm:text-[15px] font-medium text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] border border-[var(--pm-border)] resize-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 focus:bg-[var(--pm-input)] transition-all outline-none"
           />
+
+          {/* Citizen Category Selector */}
+          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-black uppercase tracking-wider text-[var(--pm-muted)] mr-1">
+              {isBn ? 'ক্যাটাগরি:' : 'Category:'}
+            </span>
+            {[
+              { id: 'general', labelBn: 'সাধারণ পোস্ট', labelEn: 'General', icon: Sparkles },
+              { id: 'homemade', labelBn: 'হোমমেড খাবার/পণ্য', labelEn: 'Homemade Food', icon: Utensils },
+              { id: 'bid', labelBn: 'পাবলিক নিলাম/বিড', labelEn: 'Public Bid', icon: Gavel },
+              { id: 'property_rent', labelBn: 'ফ্ল্যাট ভাড়া/জমি', labelEn: 'Flat Rent/Property', icon: Home },
+              { id: 'used_goods', labelBn: 'সেকেন্ড হ্যান্ড পণ্য', labelEn: 'Used Goods', icon: Package },
+            ].map((cat) => {
+              const Icon = cat.icon;
+              const isSelected = citizenCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCitizenCategory(cat.id as CitizenPostCategory)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs scale-102'
+                      : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] border border-[var(--pm-border)]'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span>{isBn ? cat.labelBn : cat.labelEn}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Real-time AI Safety Check Alert */}
+          {aiRiskAssessment === 'high_risk_flagged' && (
+            <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+              <span>
+                {isBn 
+                  ? '⚠️ AI নিরাপত্তা সতর্কতা: এই পোস্টে সংবেদনশীল বা উচ্চ ঝুঁকির বিষয় শনাক্ত হয়েছে। লাইভ হওয়ার আগে অতিরিক্ত নিরাপত্তা যাচাই লাগবে।' 
+                  : '⚠️ AI Safety Alert: Sensitive terms detected. Extra manual safety review required before going live.'}
+              </span>
+            </div>
+          )}
+
+          {/* Verification requirement warning for citizen categories */}
+          {requiresCitizenVerification && !isCitizenVerified && (
+            <div className="mt-2.5 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-between gap-2 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 shrink-0 text-blue-500" />
+                <span>
+                  {isBn 
+                    ? 'হোমমেড, নিলাম, ফ্ল্যাট ভাড়া বা ব্যবহৃত পণ্য বিক্রির জন্য নাগরিক ভেরিফিকেশন প্রয়োজন।' 
+                    : 'Citizen verification required to post homemade items, auctions, or flat rent.'}
+                </span>
+              </div>
+              {onOpenVerificationModal && (
+                <button
+                  type="button"
+                  onClick={onOpenVerificationModal}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold shrink-0 hover:bg-blue-700 cursor-pointer"
+                >
+                  {isBn ? 'ভেরিফাই করুন' : 'Verify'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
