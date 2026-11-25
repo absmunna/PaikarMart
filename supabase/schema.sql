@@ -89,6 +89,10 @@ create table if not exists public.saved_addresses (
   street_address text not null,
   apartment text,
   city text not null,
+  division text,
+  district text,
+  upazila text,
+  thana text,
   postal_code text,
   tag text not null default 'home' check (tag in ('home', 'office', 'other')),
   is_default boolean not null default false,
@@ -96,6 +100,10 @@ create table if not exists public.saved_addresses (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+alter table public.saved_addresses add column if not exists division text;
+alter table public.saved_addresses add column if not exists district text;
+alter table public.saved_addresses add column if not exists upazila text;
+alter table public.saved_addresses add column if not exists thana text;
 
 -- ==============================================================================
 -- 4. Vendor Stores Table (Multi-Vendor Business Entities & Hyperlocal Geofence)
@@ -117,6 +125,8 @@ create table if not exists public.stores (
   rating numeric(3,2) default 5.00 check (rating >= 0.00 and rating <= 5.00),
   total_sales numeric(12,2) default 0.00,
   banner_url text,
+  store_address text,
+  service_area jsonb not null default '{}'::jsonb,
   lat numeric(9,6),
   lng numeric(9,6),
   service_radius_km numeric(4,1) default 5.0 check (service_radius_km >= 1.0 and service_radius_km <= 20.0),
@@ -125,6 +135,8 @@ create table if not exists public.stores (
   prep_minutes int default 12 check (prep_minutes >= 0),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+alter table public.stores add column if not exists store_address text;
+alter table public.stores add column if not exists service_area jsonb not null default '{}'::jsonb;
 
 -- 4.1 One account can operate multiple independent vendor stores.
 create table if not exists public.vendor_memberships (

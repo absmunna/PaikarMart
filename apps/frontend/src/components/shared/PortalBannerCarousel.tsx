@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Sparkles, ArrowRight, Tag, Zap, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, ArrowRight } from 'lucide-react';
+import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
 
 export interface BannerSlide {
   id: string;
@@ -20,6 +21,7 @@ interface PortalBannerCarouselProps {
   portalType: 'market' | 'wholesale' | 'services' | 'transit' | 'creator' | 'explore' | 'wallet' | 'orders';
   isBn: boolean;
   onCtaClick?: (slideId: string) => void;
+  className?: string;
 }
 
 const PORTAL_SLIDES: Record<string, BannerSlide[]> = {
@@ -213,7 +215,8 @@ const PORTAL_SLIDES: Record<string, BannerSlide[]> = {
 export const PortalBannerCarousel: React.FC<PortalBannerCarouselProps> = ({
   portalType,
   isBn,
-  onCtaClick
+  onCtaClick,
+  className = '',
 }) => {
   const slides = PORTAL_SLIDES[portalType] || PORTAL_SLIDES.market;
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -238,76 +241,77 @@ export const PortalBannerCarousel: React.FC<PortalBannerCarouselProps> = ({
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-[2rem] bg-gradient-to-r ${currentSlide.bgGradient} p-5 sm:p-6 text-white shadow-lg transition-all duration-500`}>
-      <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
-
-      <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1.5 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-wider">
-            <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
-            <span>{isBn ? currentSlide.tagBn : currentSlide.tagEn}</span>
+    <SponsoredFeedCard
+      label={isBn ? currentSlide.tagBn : currentSlide.tagEn}
+      className={`transition-shadow duration-500 ${className}`}
+    >
+      <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--pm-accent-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--pm-accent)]">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>{isBn ? currentSlide.tagBn : currentSlide.tagEn}</span>
+            </span>
+            <h3 className="text-base font-black leading-tight text-[var(--pm-text)] sm:text-lg">
+              {isBn ? currentSlide.titleBn : currentSlide.titleEn}
+            </h3>
+            <p className="max-w-2xl text-sm leading-relaxed text-[var(--pm-muted)]">
+              {isBn ? currentSlide.descBn : currentSlide.descEn}
+            </p>
           </div>
-
-          <h2 className="text-lg sm:text-2xl font-black tracking-tight leading-tight">
-            {isBn ? currentSlide.titleBn : currentSlide.titleEn}
-          </h2>
-
-          <p className="text-xs text-white/90 line-clamp-2 max-w-lg font-medium">
-            {isBn ? currentSlide.descBn : currentSlide.descEn}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0 self-stretch sm:self-auto justify-between sm:justify-start">
           <button
             type="button"
             onClick={() => onCtaClick?.(currentSlide.id)}
-            className="px-4 py-2.5 rounded-xl bg-white text-slate-950 text-xs font-black shadow-md hover:bg-slate-100 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--pm-accent)] px-4 text-xs font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)] cursor-pointer"
           >
             <span>{isBn ? currentSlide.ctaBn : currentSlide.ctaEn}</span>
-            <ArrowRight className="w-3.5 h-3.5 text-slate-950" />
+            <ArrowRight className="h-3.5 w-3.5" />
           </button>
-
-          {slides.length > 1 && (
-            <div className="flex items-center gap-1 bg-black/20 backdrop-blur-md border border-white/20 rounded-xl p-1">
-              <button
-                type="button"
-                onClick={handlePrev}
-                aria-label="Previous slide"
-                className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[10px] font-mono px-1 font-bold">
+        </div>
+        {slides.length > 1 && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--pm-border)] pt-3">
+            <div className="flex items-center gap-1.5">
+              {slides.map((slide, idx) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  aria-label={`Go to slide ${idx + 1}`}
+                  aria-pressed={currentIndex === idx}
+                  className="flex h-10 w-10 items-center justify-center cursor-pointer"
+                >
+                  <span
+                    className={`h-1.5 rounded-full transition-all ${
+                      currentIndex === idx ? 'w-6 bg-[var(--pm-accent)]' : 'w-1.5 bg-[var(--pm-border-strong)]'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="mr-1 text-[11px] font-medium text-[var(--pm-muted)]">
                 {currentIndex + 1}/{slides.length}
               </span>
               <button
                 type="button"
+                onClick={handlePrev}
+                aria-label="Previous slide"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--pm-muted)] transition-colors hover:bg-[var(--pm-card)] hover:text-[var(--pm-text)] cursor-pointer"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 onClick={handleNext}
                 aria-label="Next slide"
-                className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--pm-muted)] transition-colors hover:bg-[var(--pm-card)] hover:text-[var(--pm-text)] cursor-pointer"
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-
-      {/* Indicator dots */}
-      {slides.length > 1 && (
-        <div className="relative z-10 flex items-center justify-center gap-1.5 mt-3">
-          {slides.map((s, idx) => (
-            <button
-              key={s.id}
-              onClick={() => setCurrentIndex(idx)}
-              aria-label={`Go to slide ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                currentIndex === idx ? 'w-6 bg-white' : 'w-1.5 bg-white/40'
-              }`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    </SponsoredFeedCard>
   );
 };

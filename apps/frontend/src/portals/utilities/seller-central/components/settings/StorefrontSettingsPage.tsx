@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Store, Camera, Tag, Mail, Phone, MapPin, Check, Image as ImageIcon } from 'lucide-react';
-import { VendorCategory } from '@/types';
+import { AdministrativeArea, VendorCategory } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { AdministrativeAreaFields } from '@/components/shared/AdministrativeAreaFields';
+import { vendorApiClient } from '@/features/vendors/vendorApiClient';
 
 export const StorefrontSettingsPage: React.FC = () => {
   const { language } = useLanguage();
@@ -12,14 +14,48 @@ export const StorefrontSettingsPage: React.FC = () => {
   const [helplinePhone, setHelplinePhone] = useState('+880 1911-223344');
   const [supportEmail, setSupportEmail] = useState('sales@urbantech.com.bd');
   const [storeAddress, setStoreAddress] = useState('Shop 402, Multiplan Center, Elephant Road, Dhaka');
+  const [serviceArea, setServiceArea] = useState<AdministrativeArea>({ division: 'Dhaka', district: 'Dhaka' });
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const isBn = language === 'bn';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    let active = true;
+    void vendorApiClient.fetchMyKycStatus().then((status) => {
+      if (!active || !status?.verifiedStore) return;
+      const store = status.verifiedStore;
+      if (typeof store.store_address === 'string' && store.store_address) setStoreAddress(store.store_address);
+      if (store.service_area && typeof store.service_area === 'object' && !Array.isArray(store.service_area)) {
+        const area = store.service_area as Record<string, unknown>;
+        setServiceArea({
+          division: typeof area.division === 'string' ? area.division : undefined,
+          district: typeof area.district === 'string' ? area.district : undefined,
+          upazila: typeof area.upazila === 'string' ? area.upazila : undefined,
+          thana: typeof area.thana === 'string' ? area.thana : undefined,
+          postalCode: typeof area.postalCode === 'string' ? area.postalCode : undefined,
+        });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await vendorApiClient.updateStorefrontLocation(storeAddress, serviceArea);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Unable to save storefront location.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -38,7 +74,16 @@ export const StorefrontSettingsPage: React.FC = () => {
       {savedSuccess && (
         <div className="p-3.5 rounded-2xl bg-[var(--pm-success-soft)] border border-[var(--pm-success)]/30 text-[var(--pm-success)] text-xs font-bold flex items-center gap-2 animate-fadeIn">
           <Check className="w-4 h-4 shrink-0" />
-          <span>{isBn ? 'দোকানের তথ্য সফলভাবে সংরক্ষিত হয়েছে!' : 'Store profile updated successfully!'}</span>
+          <span>
+            {isBn
+              ? 'দোকানের ঠিকানা ও সেবার এলাকা সংরক্ষিত হয়েছে।'
+              : 'Store address and service area saved.'}
+          </span>
+        </div>
+      )}
+      {saveError && (
+        <div role="alert" className="rounded-2xl border border-[var(--pm-danger)]/30 bg-[var(--pm-danger-soft)] p-3.5 text-xs font-semibold text-[var(--pm-danger)]">
+          {saveError}
         </div>
       )}
 
@@ -97,6 +142,20 @@ export const StorefrontSettingsPage: React.FC = () => {
               required
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-semibold focus:outline-hidden focus:border-[var(--pm-accent)]"
             />
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-4">
+            <div>
+              <h4 className="text-sm font-bold text-[var(--pm-text)]">
+                {isBn ? 'দোকান বা সেবার আওতাভুক্ত এলাকা' : 'Shop or service coverage area'}
+              </h4>
+              <p className="text-xs text-[var(--pm-muted)]">
+                {isBn
+                  ? 'এই ঠিকানা অনুযায়ী ক্রেতারা আপনার দোকান ও সেবা খুঁজে পাবেন।'
+                  : 'Customers discover your shop and services using this address.'}
+              </p>
+            </div>
+            <AdministrativeAreaFields value={serviceArea} onChange={setServiceArea} isBn={isBn} />
           </div>
 
           <div className="space-y-1.5">
@@ -188,9 +247,12 @@ export const StorefrontSettingsPage: React.FC = () => {
         <div className="flex justify-end pt-2">
           <button
             type="submit"
+            disabled={isSaving}
             className="px-6 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
           >
-            {isBn ? 'দোকানের তথ্য সংরক্ষণ করুন' : 'Save Storefront Profile'}
+            {isSaving
+              ? (isBn ? 'সংরক্ষণ হচ্ছে...' : 'Saving...')
+              : (isBn ? 'এলাকা সংরক্ষণ করুন' : 'Save service area')}
           </button>
         </div>
       </form>

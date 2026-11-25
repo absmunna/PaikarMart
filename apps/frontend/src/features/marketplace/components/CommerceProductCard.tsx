@@ -5,6 +5,7 @@ import { MapPin, Star, ShieldCheck, Minus, Plus, MessageSquare, Wrench, Shopping
 import { CommerceItem, PortalTab } from '@/types';
 import { useProductComparison } from '@/features/marketplace/hooks/useProductComparison';
 import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 
 interface CommerceProductCardProps {
   item: any;
@@ -17,6 +18,7 @@ interface CommerceProductCardProps {
   onAddToCart: (item: CommerceItem, isWholesale: boolean) => void;
   onBuyNow: (item: CommerceItem, isWholesale: boolean) => void;
   onSelectTab?: (tab: PortalTab) => void;
+  showServiceArea?: boolean;
 }
 
 export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
@@ -29,7 +31,8 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
   onQtyChange,
   onAddToCart,
   onBuyNow,
-  onSelectTab
+  onSelectTab,
+  showServiceArea = false
 }) => {
   const navigate = useNavigate();
   const { isCompared, toggleCompare } = useProductComparison();
@@ -40,6 +43,9 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
   const isDemand = item.isDemandRequest || item.badge?.includes('Demand');
   const isUsed = item.isUsedItem || item.badge?.includes('Used');
   const isService = item.type === 'service';
+  const locationLabel = showServiceArea
+    ? formatAdministrativeArea(item.serviceArea) || item.storeAddress
+    : item.proximityDistance;
 
   const handleViewDetails = () => {
     navigate(`/hub/marketplace/product/${item.id}`);
@@ -110,13 +116,13 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
               }}
               aria-pressed={compared}
               aria-label={compared ? (isBn ? 'তুলনা থেকে সরান' : 'Remove from compare') : isBn ? 'তুলনায় যোগ করুন' : 'Add to compare'}
-              className={`px-2 py-1 rounded-full border text-[9px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+              className={`min-h-10 px-2.5 py-1.5 rounded-full border text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
                 compared
                   ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-sm'
                   : 'pm-glass border-[var(--pm-border)] text-[var(--pm-text)] hover:border-[var(--pm-accent)]'
               }`}
             >
-              {compared ? <Check className="w-2.5 h-2.5" /> : <Scale className="w-2.5 h-2.5" />}
+              {compared ? <Check className="w-3.5 h-3.5" /> : <Scale className="w-3.5 h-3.5" />}
               <span>{compared ? (isBn ? 'তুলনায়' : 'Compared') : isBn ? 'তুলনা' : 'Compare'}</span>
             </button>
 
@@ -137,13 +143,13 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
                   ? isBn ? 'উইশলিস্ট থেকে সরান' : 'Remove from wishlist'
                   : isBn ? 'উইশলিস্টে সংরক্ষণ করুন' : 'Save to wishlist'
               }
-              className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+              className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
                 wishlisted
                   ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
                   : 'pm-glass border-[var(--pm-border)] text-[var(--pm-text)] hover:border-rose-500 hover:text-rose-500'
               }`}
             >
-              <Heart className={`w-3.5 h-3.5 ${wishlisted ? 'fill-white' : ''}`} />
+              <Heart className={`w-4 h-4 ${wishlisted ? 'fill-white' : ''}`} />
             </button>
           </div>
 
@@ -168,10 +174,10 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
               <span className="hover:underline truncate">{item.storeName}</span>
               <ShieldCheck className="w-2.5 h-2.5 text-[var(--pm-accent)] shrink-0" />
             </button>
-            {item.proximityDistance && !isWholesale && (
+            {locationLabel && !isWholesale && (
               <div className="flex items-center gap-0.5 text-[8px] font-bold text-[var(--pm-muted)]">
                 <MapPin className="w-2 h-2" />
-                <span>{item.proximityDistance}</span>
+                <span>{locationLabel}</span>
               </div>
             )}
           </div>

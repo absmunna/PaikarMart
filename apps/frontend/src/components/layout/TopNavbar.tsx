@@ -1133,9 +1133,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           {/* MODE 1: FEED / HOME */}
           {mobileConfig.mode === 'feed' && (
             <>
-              <div className="h-14 px-3 flex items-center justify-between gap-2 w-full">
+              <div className="h-14 px-3 flex items-center justify-between gap-1 w-full">
                 {/* Left: Menu & Brand */}
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <button
                     type="button"
                     onClick={onOpenSidebar}
@@ -1147,20 +1147,20 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectTab('feed')}
-                    className="flex items-center gap-2 active:scale-95 transition-transform"
+                    className="flex min-w-0 items-center gap-2 active:scale-95 transition-transform"
                     aria-label="PaikarMart Home"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-[var(--pm-accent)] flex items-center justify-center text-[var(--pm-accent-fg)] font-black text-base shadow-sm">
+                    <div className="w-8 h-8 shrink-0 rounded-lg bg-[var(--pm-accent)] flex items-center justify-center text-[var(--pm-accent-fg)] font-black text-base shadow-sm">
                       P
                     </div>
-                    <span className="font-black text-lg tracking-tight text-[var(--pm-text)]">
+                    <span className="max-w-[5rem] truncate text-sm font-bold tracking-tight text-[var(--pm-text)] min-[440px]:max-w-[6.5rem] min-[440px]:text-lg">
                       PaikarMart
                     </span>
                   </button>
                 </div>
 
                 {/* Right: Search Toggle, Wishlist, Cart, Profile/Login */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => {

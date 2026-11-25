@@ -107,7 +107,8 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
         <button
           type="button"
           onClick={() => setActivePortalId('all')}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+          aria-pressed={activePortalId === 'all'}
+          className={`shrink-0 min-h-10 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
             activePortalId === 'all'
               ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
               : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)]'
@@ -123,7 +124,8 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
               key={portal.id}
               type="button"
               onClick={() => handlePortalSelect(portal.id)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              aria-pressed={isActive}
+              className={`shrink-0 min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                 isActive
                   ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
                   : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]/50'

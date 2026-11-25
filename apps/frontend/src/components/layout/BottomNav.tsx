@@ -49,6 +49,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       key={tabId}
       type="button"
       onClick={onClick}
+      aria-current={isActive ? 'page' : undefined}
       className={`relative flex flex-col items-center justify-center flex-1 min-h-[44px] h-full transition-all active:scale-90 cursor-pointer ${
         isActive
           ? 'text-[var(--pm-accent)] font-black'

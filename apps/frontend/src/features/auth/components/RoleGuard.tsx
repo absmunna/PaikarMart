@@ -84,7 +84,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
           <button
             type="button"
             onClick={onOpenVendorModal}
-            className="px-5 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer active-scale"
+            className="min-h-11 px-5 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer active-scale"
           >
             <Store className="w-4 h-4" />
             <span>{isBn ? '৫-ধাপের মার্চেন্ট KYC শুরু করুন' : 'Start 5-Step Merchant KYC'}</span>
@@ -95,7 +95,7 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
           <button
             type="button"
             onClick={onNavigateHome}
-            className="px-5 py-2.5 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            className="min-h-11 px-5 py-2.5 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
             <span>{isBn ? 'হোম ফিডে ফিরে যান' : 'Return to Feed'}</span>

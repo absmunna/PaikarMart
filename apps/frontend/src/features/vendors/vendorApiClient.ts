@@ -3,6 +3,7 @@ import { auth } from '@/lib/firebase';
 import {
   BusinessDocument,
   BusinessRole,
+  AdministrativeArea,
   KycStatus,
   PayoutAccount,
   SellerTier,
@@ -181,6 +182,16 @@ export const vendorApiClient = {
     } catch {
       return null;
     }
+  },
+
+  async updateStorefrontLocation(storeAddress: string, serviceArea: AdministrativeArea): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/vendors/storefront/location`, {
+      method: 'PATCH',
+      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ storeAddress, serviceArea }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || 'Unable to save storefront location.');
   },
 
   async updateGovernanceRole(params: {

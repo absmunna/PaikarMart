@@ -17,7 +17,7 @@ export async function syncAuthenticatedProfile(payload: { name: string; handle?:
 export async function fetchSavedAddresses(): Promise<SavedAddress[]> {
   const response = await fetch(`${API_BASE}/api/auth/addresses`, { headers: await authHeaders() });
   if (!response.ok) return [];
-  return ((await response.json()).addresses || []).map((item: any) => ({ id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined }));
+  return ((await response.json()).addresses || []).map((item: any) => ({ id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined }));
 }
 
 export async function createSavedAddress(address: Omit<SavedAddress, 'id'>): Promise<SavedAddress> {
@@ -25,7 +25,7 @@ export async function createSavedAddress(address: Omit<SavedAddress, 'id'>): Pro
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Unable to save address.');
   const item = data.address;
-  return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
+  return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
 }
 
 export async function deleteSavedAddress(id: string): Promise<void> {
@@ -38,7 +38,7 @@ export async function setDefaultSavedAddress(id: string): Promise<SavedAddress> 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Unable to set default address.');
   const item = data.address;
-  return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
+  return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
 }
 
 export async function fetchAuthenticatedProfile(): Promise<unknown | null> {

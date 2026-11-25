@@ -1,14 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { APIProvider, Map, AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import { MapPin, Search, Check, X, Compass, Building2, AlertCircle } from 'lucide-react';
-import { BANGLADESH_DIVISIONS, POPULAR_COMMERCIAL_HUBS, CommercialHub } from '@/data/bangladeshLocations';
+import {
+  BANGLADESH_DISTRICTS,
+  BANGLADESH_DIVISIONS,
+  POPULAR_COMMERCIAL_HUBS,
+  CommercialHub,
+} from '@/data/bangladeshLocations';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { AdministrativeAreaFields } from '@/components/shared/AdministrativeAreaFields';
+import type { AdministrativeArea } from '@/types';
+import { inferAdministrativeAreaFromLabel, normalizeAdministrativeArea } from '@/utils/administrativeArea';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentLocation: string;
-  onSelectLocation: (newLocation: string, coordinates?: { lat: number; lng: number }) => void;
+  currentArea?: AdministrativeArea;
+  onSelectLocation: (
+    newLocation: string,
+    coordinates?: { lat: number; lng: number },
+    area?: AdministrativeArea,
+  ) => void;
 }
 
 const DEFAULT_DHAKA_CENTER = { lat: 23.7925, lng: 90.4078 }; // Dhaka Gulshan/Central default
@@ -17,6 +30,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   isOpen,
   onClose,
   currentLocation,
+  currentArea,
   onSelectLocation,
 }) => {
   const { language } = useLanguage();
@@ -24,6 +38,9 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [selectedArea, setSelectedArea] = useState<AdministrativeArea>(
+    () => currentArea ?? inferAdministrativeAreaFromLabel(currentLocation) ?? {},
+  );
   const [selectedPos, setSelectedPos] = useState<{ lat: number; lng: number }>(DEFAULT_DHAKA_CENTER);
   const [addressText, setAddressText] = useState(currentLocation || 'Dhaka, Bangladesh');
   const [isLocating, setIsLocating] = useState(false);
@@ -35,7 +52,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     if (currentLocation) {
       setAddressText(currentLocation);
     }
-  }, [currentLocation]);
+    const area = currentArea ?? inferAdministrativeAreaFromLabel(currentLocation) ?? {};
+    setSelectedArea(area);
+    const division = BANGLADESH_DIVISIONS.find((item) => item.nameEn === area.division);
+    setSelectedDivision(division?.id ?? 'all');
+    if (division) setSelectedPos({ lat: division.lat, lng: division.lng });
+  }, [currentLocation, currentArea]);
 
   const filteredHubs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -82,6 +104,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             const country = data.address?.country || 'Bangladesh';
             if (city) {
               setAddressText(`${city}, ${country}`);
+              setSelectedArea(inferAdministrativeAreaFromLabel(city) ?? {});
               setIsLocating(false);
               return;
             }
@@ -106,6 +129,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const handleHubSelect = (hub: CommercialHub) => {
     setSelectedPos({ lat: hub.lat, lng: hub.lng });
     setAddressText(isBn ? `${hub.areaBn}, ${hub.districtBn}` : `${hub.nameEn}`);
+    const district = BANGLADESH_DISTRICTS.find((item) => item.nameBn === hub.districtBn);
+    setSelectedArea(normalizeAdministrativeArea({ district: district?.nameEn ?? hub.districtBn }) ?? {});
     setLocError(null);
   };
 
@@ -116,13 +141,30 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       if (div) {
         setSelectedPos({ lat: div.lat, lng: div.lng });
         setAddressText(isBn ? `${div.nameBn}, বাংলাদেশ` : `${div.nameEn}, Bangladesh`);
+        setSelectedArea({ division: div.nameEn });
       }
     }
   };
 
   const handleConfirmLocation = () => {
-    onSelectLocation(addressText.trim() || 'Dhaka, Bangladesh', selectedPos);
+    onSelectLocation(addressText.trim() || 'Dhaka, Bangladesh', selectedPos, selectedArea);
     onClose();
+  };
+
+  const handleAreaChange = (area: AdministrativeArea) => {
+    setSelectedArea(area);
+    const district = BANGLADESH_DISTRICTS.find((item) => item.nameEn === area.district);
+    const division = BANGLADESH_DIVISIONS.find(
+      (item) => item.nameEn === area.division || item.id === district?.divisionId,
+    );
+    if (division) {
+      setSelectedDivision(division.id);
+      setSelectedPos({ lat: division.lat, lng: division.lng });
+    }
+    const areaLabel = [area.upazila || area.thana, area.district, area.division]
+      .filter(Boolean)
+      .join(', ');
+    if (areaLabel) setAddressText(areaLabel);
   };
 
   return (
@@ -136,12 +178,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-[var(--pm-text)]">
-                {isBn ? 'ডেলিভারি এলাকা ও মোকাম নির্বাচন' : 'Select Delivery Area & Hub'}
+                {isBn ? 'আপনার এলাকা নির্বাচন করুন' : 'Select your service area'}
               </h3>
               <p className="text-xs text-[var(--pm-muted)]">
                 {isBn
-                  ? 'বাংলাদেশের ৮ বিভাগ, ২১+ পাইকারি মোকাম ও লাইভ জিপিএস রাডার'
-                  : '8 Bangladesh divisions, 21+ wholesale hubs & live GPS radar'}
+                  ? 'বিভাগ, জেলা, উপজেলা/থানা ও পোস্ট কোড অনুযায়ী ঠিকানা বাছাই করুন'
+                  : 'Choose a Bangladesh address by division, district, upazila/thana, and postal code'}
               </p>
             </div>
           </div>
@@ -229,6 +271,13 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                 </button>
               );
             })}
+          </div>
+
+          <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-3">
+            <p className="mb-2 text-xs font-bold text-[var(--pm-text)]">
+              {isBn ? 'ঠিকানা অনুযায়ী লোকাল ফলাফল' : 'Local results by address'}
+            </p>
+            <AdministrativeAreaFields value={selectedArea} onChange={handleAreaChange} isBn={isBn} />
           </div>
         </div>
 

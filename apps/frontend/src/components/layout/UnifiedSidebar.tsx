@@ -45,6 +45,7 @@ import { PortalTab, SettingsSectionId, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { useLocationSettings } from '@/contexts/LocationContext';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 import { useAuth } from '@/features/auth';
 import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
@@ -109,7 +110,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { themeMode, setThemeMode } = useTheme();
-  const { activeLocation, radarRadiusKm, detectLiveLocation, isLocating } = useLocationSettings();
+  const { activeLocation, activeArea, detectLiveLocation, isLocating } = useLocationSettings();
   const { firebaseUser, signOut } = useAuth();
   const { wishlistCount } = useWishlist();
   const isBn = language === 'bn';
@@ -122,10 +123,11 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
     system: boolean;
   }>({
     portals: true,
-    mokams: true,
-    merchant: true,
-    system: true,
+    mokams: false,
+    merchant: false,
+    system: false,
   });
+  const [showAllPortals, setShowAllPortals] = useState(false);
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -178,29 +180,21 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
     id: PortalTab;
     labelEn: string;
     labelBn: string;
-    badgeEn?: string;
-    badgeBn?: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: 'feed', labelEn: 'Social Feed', labelBn: 'সোশ্যাল ফিড', badgeEn: 'Live', badgeBn: 'লাইভ', icon: Newspaper },
-    { id: 'explore', labelEn: 'Super App Hub', labelBn: 'সুপার অ্যাপ হাব', badgeEn: 'All', badgeBn: 'সব', icon: Grid },
-    { id: 'commerce', labelEn: 'Marketplace Hub', labelBn: 'মার্কেটপ্লেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: ShoppingBag },
-    { id: 'wholesale', labelEn: 'Wholesale Hub (B2B)', labelBn: 'হোলসেল হাব (পাইকারি)', badgeEn: 'MOQ', badgeBn: 'পাইকারি', icon: Package },
-    {
-      id: 'wishlist',
-      labelEn: 'Wishlist',
-      labelBn: 'উইশলিস্ট',
-      badgeEn: String(wishlistCount),
-      badgeBn: String(wishlistCount),
-      icon: Heart,
-    },
-    { id: 'services', labelEn: 'Services Hub', labelBn: 'সার্ভিসেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Wrench },
-    { id: 'community-hub', labelEn: 'Community Hub', labelBn: 'কমিউনিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Sparkles },
-    { id: 'utility-hub', labelEn: 'Utility Hub', labelBn: 'ইউটিলিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Layers },
-    { id: 'rides', labelEn: 'Transit & Logistics', labelBn: 'ট্রানজিট ও লজিস্টিকস', badgeEn: 'Express', badgeBn: 'পার্সেল', icon: Car },
-    { id: 'creator', labelEn: 'Creator Studio', labelBn: 'ক্রিয়েটর স্টুডিও', badgeEn: 'OTT', badgeBn: 'ভিডিও', icon: Sparkles },
-    { id: 'messages', labelEn: 'Messages & Quotes', labelBn: 'মেসেজ ও কোটেশন', badgeEn: 'Chat', badgeBn: 'চ্যাট', icon: MessageSquare },
+    { id: 'feed', labelEn: 'Social Feed', labelBn: 'সোশ্যাল ফিড', icon: Newspaper },
+    { id: 'commerce', labelEn: 'Marketplace', labelBn: 'মার্কেটপ্লেস', icon: ShoppingBag },
+    { id: 'explore', labelEn: 'Explore', labelBn: 'এক্সপ্লোর', icon: Grid },
+    { id: 'services', labelEn: 'Services', labelBn: 'সার্ভিসেস', icon: Wrench },
+    { id: 'rides', labelEn: 'Transit', labelBn: 'ট্রানজিট', icon: Car },
+    { id: 'wholesale', labelEn: 'Wholesale', labelBn: 'পাইকারি বাজার', icon: Package },
+    { id: 'community-hub', labelEn: 'Community', labelBn: 'কমিউনিটি', icon: Sparkles },
+    { id: 'utility-hub', labelEn: 'Orders & Wallet', labelBn: 'অর্ডার ও ওয়ালেট', icon: Layers },
+    { id: 'creator', labelEn: 'Creator Studio', labelBn: 'ক্রিয়েটর স্টুডিও', icon: Sparkles },
+    { id: 'messages', labelEn: 'Messages', labelBn: 'মেসেজ', icon: MessageSquare },
   ];
+  const compactPortalList = primaryPortals.filter((portal, index) => index < 5 || portal.id === currentTab);
+  const visiblePortals = showAllPortals ? primaryPortals : compactPortalList;
 
   const commercialMokams: {
     id: string;
@@ -358,6 +352,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => navigateAndClose('profile')}
+                  aria-current={currentTab === 'profile' ? 'page' : undefined}
                   className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     currentTab === 'profile'
                       ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
@@ -371,6 +366,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => navigateAndClose('orders')}
+                  aria-current={currentTab === 'orders' ? 'page' : undefined}
                   className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     currentTab === 'orders'
                       ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
@@ -412,60 +408,43 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           )}
         </div>
 
-        {/* Hyperlocal Radar Bar (Quick Interactive Location & GPS Trigger) */}
-        <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
-                <MapPin className="w-3.5 h-3.5" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-[10px] text-[var(--pm-muted)] block font-semibold">
-                  {isBn ? 'লোকাল রাডার লোকেশন' : 'Hyperlocal Radar Zone'}
-                </span>
-                <span className="text-xs font-bold text-[var(--pm-text)] truncate block">
-                  {activeLocation || 'Dhaka, Bangladesh'}
-                </span>
-              </div>
-            </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
-              {radarRadiusKm}km
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onClose?.();
+              onOpenLocationModal?.();
+            }}
+            aria-label={isBn ? 'লোকেশন পরিবর্তন' : 'Change location'}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] px-3 py-2 text-left hover:bg-[var(--pm-card-hover)]"
+          >
+            <MapPin className="h-4 w-4 shrink-0 text-[var(--pm-accent)]" />
+            <span className="truncate text-xs font-semibold">{activeLocation || 'Dhaka, Bangladesh'}</span>
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+              {formatAdministrativeArea(activeArea, isBn) || (isBn ? 'এলাকা' : 'Area')}
             </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenLocationModal) {
-                  onClose?.();
-                  onOpenLocationModal();
-                }
-              }}
-              className="py-1.5 px-2 rounded-xl bg-[var(--pm-card)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[11px] font-bold text-[var(--pm-text)] hover:text-[var(--pm-accent)] transition-all flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <MapPin className="w-3 h-3 text-[var(--pm-accent)]" />
-              <span className="truncate">{isBn ? 'মোকাম পরিবর্তন' : 'Change Mokam'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => detectLiveLocation()}
-              disabled={isLocating}
-              className="py-1.5 px-2 rounded-xl bg-[var(--pm-card)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[11px] font-bold text-[var(--pm-text)] hover:text-emerald-500 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-            >
-              {isLocating ? (
-                <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
-              ) : (
-                <Navigation className="w-3 h-3 text-emerald-500" />
-              )}
-              <span className="truncate">{isLocating ? (isBn ? 'খুঁজছে...' : 'Locating...') : (isBn ? 'লাইভ GPS' : 'Live GPS')}</span>
-            </button>
-          </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => detectLiveLocation()}
+            disabled={isLocating}
+            aria-label={isBn ? 'লাইভ লোকেশন খুঁজুন' : 'Use live location'}
+            title={isBn ? 'লাইভ GPS' : 'Live GPS'}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-emerald-600 hover:bg-[var(--pm-card-hover)] disabled:opacity-50 dark:text-emerald-400"
+          >
+            {isLocating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Navigation className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
-        {/* 4-Grid Quick Action Matrix with Badges (Cart, Orders, Wallet, Alerts) */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
+          <h4 className="px-1 text-[10px] font-bold text-[var(--pm-muted)]">
+            {isBn ? 'অ্যাকাউন্ট শর্টকাট' : 'Account shortcuts'}
+          </h4>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label={isBn ? 'অ্যাকাউন্ট শর্টকাট' : 'Account shortcuts'}>
           {/* Cart / Bag Button */}
           <button
             type="button"
@@ -490,32 +469,24 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
             )}
           </button>
 
-          {/* Orders Hub */}
+          {/* Wishlist */}
           <button
             type="button"
-            onClick={() => {
-              if (!firebaseUser) {
-                onClose?.();
-                onOpenAuthModal?.('login');
-                return;
-              }
-              navigateAndClose('orders');
-            }}
+            onClick={() => navigateAndClose('wishlist')}
+            aria-current={currentTab === 'wishlist' ? 'page' : undefined}
             className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              currentTab === 'orders'
+              currentTab === 'wishlist'
                 ? 'bg-[var(--pm-accent-soft)] border-[var(--pm-accent)]/40 text-[var(--pm-accent)]'
                 : 'bg-[var(--pm-card)] border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)]'
             }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <Package className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="text-[11px] font-bold truncate">{isBn ? 'অর্ডারস' : 'Orders'}</span>
+              <Heart className="w-4 h-4 text-rose-500 shrink-0" />
+              <span className="text-[11px] font-bold truncate">{isBn ? 'উইশলিস্ট' : 'Wishlist'}</span>
             </div>
-            {!firebaseUser ? (
-              <Lock className="w-3 h-3 text-[var(--pm-muted)] shrink-0" />
-            ) : (
-              <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.2 rounded-md">
-                Live
+            {wishlistCount > 0 && (
+              <span className="text-[10px] font-mono font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.2 rounded-md">
+                {wishlistCount}
               </span>
             )}
           </button>
@@ -579,12 +550,14 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
             )}
           </button>
         </div>
+        </div>
 
         {/* SECTION 1: Core Super App Portals (সুপার অ্যাপ পোর্টাল) */}
         <div className="space-y-1">
           <button
             type="button"
             onClick={() => toggleSection('portals')}
+            aria-expanded={openSections.portals}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -596,7 +569,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
           {openSections.portals && (
             <div className="space-y-1 pt-0.5">
-              {primaryPortals.map((portal) => {
+              {visiblePortals.map((portal) => {
                 const Icon = portal.icon;
                 const isActive = currentTab === portal.id;
                 return (
@@ -604,6 +577,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                     key={portal.id}
                     type="button"
                     onClick={() => navigateAndClose(portal.id)}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-bold text-left transition-all cursor-pointer active:scale-[0.98] ${
                       isActive
                         ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border border-[var(--pm-accent)]/30 shadow-2xs'
@@ -622,23 +596,24 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                       </div>
                       <span className="truncate">{isBn ? portal.labelBn : portal.labelEn}</span>
                     </div>
-
-                    {(portal.badgeBn || portal.badgeEn) && (
-                      <span
-                        className={`text-[10px] font-semibold font-mono tabular-nums px-2 py-0.5 rounded-md shrink-0 ${
-                          isActive
-                            ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
-                            : portal.id === 'wishlist' && wishlistCount > 0
-                            ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold'
-                            : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
-                        }`}
-                      >
-                        {isBn ? portal.badgeBn : portal.badgeEn}
-                      </span>
-                    )}
                   </button>
                 );
               })}
+              {primaryPortals.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllPortals((expanded) => !expanded)}
+                  aria-expanded={showAllPortals}
+                  className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-bold text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)]"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--pm-surface)]">
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showAllPortals ? 'rotate-180' : ''}`} />
+                  </span>
+                  {showAllPortals
+                    ? isBn ? 'কম দেখান' : 'See less'
+                    : isBn ? 'আরও দেখুন' : 'See more'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -650,6 +625,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           <button
             type="button"
             onClick={() => toggleSection('mokams')}
+            aria-expanded={openSections.mokams}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -698,6 +674,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           <button
             type="button"
             onClick={() => toggleSection('merchant')}
+            aria-expanded={openSections.merchant}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -869,6 +846,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           <button
             type="button"
             onClick={() => toggleSection('system')}
+            aria-expanded={openSections.system}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -1041,16 +1019,6 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
         <div className="flex items-center justify-between text-[10px] text-[var(--pm-muted)] pt-0.5">
           <span>PaikarMart v2.6 · Bangladesh</span>
-          {mode === 'drawer' && onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center gap-1 text-[var(--pm-danger)] font-bold hover:underline cursor-pointer"
-            >
-              <LogOut className="w-3 h-3" />
-              <span>{isBn ? 'বন্ধ করুন' : 'Close'}</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

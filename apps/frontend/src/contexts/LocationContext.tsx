@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import type { AdministrativeArea } from '@/types';
+import { inferAdministrativeAreaFromLabel, normalizeAdministrativeArea } from '@/utils/administrativeArea';
 
 export interface LocationPreset {
   name: string;
@@ -36,6 +38,7 @@ export const DEFAULT_PRESETS: LocationPreset[] = [
 
 interface LocationContextType {
   activeLocation: string;
+  activeArea?: AdministrativeArea;
   coordinates: { lat: number; lng: number; accuracy?: number };
   radarRadiusKm: number;
   isLocating: boolean;
@@ -44,7 +47,11 @@ interface LocationContextType {
   presets: LocationPreset[];
   detectLiveLocation: () => Promise<{ name: string; coords: { lat: number; lng: number; accuracy?: number } } | null>;
   toggleContinuousWatch: () => void;
-  setManualLocation: (name: string, coords?: { lat: number; lng: number }) => void;
+  setManualLocation: (
+    name: string,
+    coords?: { lat: number; lng: number },
+    area?: AdministrativeArea,
+  ) => void;
   setRadarRadiusKm: (km: number) => void;
   clearGpsError: () => void;
 }
@@ -53,6 +60,7 @@ const LocationContext = createContext<LocationContextType | undefined>(undefined
 
 const LOCATION_NAME_KEY = 'paikarmart_location_name';
 const LOCATION_COORDS_KEY = 'paikarmart_location_coords';
+const LOCATION_AREA_KEY = 'paikarmart_location_area';
 const RADAR_RADIUS_KEY = 'paikarmart_radar_radius_km';
 
 export const LocationProvider: React.FC<{ 
@@ -65,6 +73,16 @@ export const LocationProvider: React.FC<{
       if (stored) return stored;
     } catch {}
     return 'Dhaka, Bangladesh';
+  });
+
+  const [activeArea, setActiveAreaState] = useState<AdministrativeArea | undefined>(() => {
+    try {
+      const stored = localStorage.getItem(LOCATION_AREA_KEY);
+      if (stored) return normalizeAdministrativeArea(JSON.parse(stored));
+      const storedLocation = localStorage.getItem(LOCATION_NAME_KEY);
+      if (storedLocation) return inferAdministrativeAreaFromLabel(storedLocation);
+    } catch {}
+    return { division: 'Dhaka', district: 'Dhaka' };
   });
 
   const [coordinates, setCoordinatesState] = useState<{ lat: number; lng: number; accuracy?: number }>(() => {
@@ -97,9 +115,11 @@ export const LocationProvider: React.FC<{
     try {
       localStorage.setItem(LOCATION_NAME_KEY, activeLocation);
       localStorage.setItem(LOCATION_COORDS_KEY, JSON.stringify(coordinates));
+      if (activeArea) localStorage.setItem(LOCATION_AREA_KEY, JSON.stringify(activeArea));
+      else localStorage.removeItem(LOCATION_AREA_KEY);
       localStorage.setItem(RADAR_RADIUS_KEY, String(radarRadiusKm));
     } catch {}
-  }, [activeLocation, coordinates, radarRadiusKm]);
+  }, [activeLocation, activeArea, coordinates, radarRadiusKm]);
 
   const setRadarRadiusKm = (km: number) => {
     const clamped = Math.max(1, Math.min(20, Math.round(km)));
@@ -152,8 +172,18 @@ export const LocationProvider: React.FC<{
     return `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
   };
 
-  const setManualLocation = (name: string, coords?: { lat: number; lng: number }) => {
+  const setManualLocation = (
+    name: string,
+    coords?: { lat: number; lng: number },
+    area?: AdministrativeArea,
+  ) => {
     setActiveLocationState(name);
+    setActiveAreaState(
+      normalizeAdministrativeArea({
+        ...inferAdministrativeAreaFromLabel(name),
+        ...normalizeAdministrativeArea(area),
+      }),
+    );
     if (coords) {
       setCoordinatesState({ ...coords, accuracy: undefined });
       onLocationChanged?.(name, coords);
@@ -178,6 +208,7 @@ export const LocationProvider: React.FC<{
 
           const resolvedName = await resolveAddress(latitude, longitude);
           setActiveLocationState(resolvedName);
+          setActiveAreaState(inferAdministrativeAreaFromLabel(resolvedName));
           setIsLocating(false);
 
           onLocationChanged?.(resolvedName, coords);
@@ -228,6 +259,7 @@ export const LocationProvider: React.FC<{
           setCoordinatesState(coords);
           const resolvedName = await resolveAddress(latitude, longitude);
           setActiveLocationState(resolvedName);
+          setActiveAreaState(inferAdministrativeAreaFromLabel(resolvedName));
           onLocationChanged?.(resolvedName, coords);
         },
         (err) => {
@@ -248,6 +280,7 @@ export const LocationProvider: React.FC<{
   const value = useMemo(
     () => ({
       activeLocation,
+      activeArea,
       coordinates,
       radarRadiusKm,
       isLocating,
@@ -260,7 +293,7 @@ export const LocationProvider: React.FC<{
       setRadarRadiusKm,
       clearGpsError,
     }),
-    [activeLocation, coordinates, radarRadiusKm, isLocating, isLiveTracking, gpsError]
+    [activeLocation, activeArea, coordinates, radarRadiusKm, isLocating, isLiveTracking, gpsError]
   );
 
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;

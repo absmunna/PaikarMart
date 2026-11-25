@@ -88,7 +88,8 @@ export const TransitPortal: React.FC<TransitPortalProps> = ({ rideItems, current
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveSubPortal(tab.id)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all active-scale cursor-pointer ${
+                aria-pressed={activeSubPortal === tab.id}
+                className={`min-h-11 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all active-scale cursor-pointer ${
                   activeSubPortal === tab.id
                     ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
                     : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'

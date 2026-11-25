@@ -92,7 +92,7 @@ import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
 function AppInner() {
   useGlobalOverlayScrollLock();
   const { isDark, toggleTheme } = useTheme();
-  const { activeLocation, setManualLocation } = useLocationSettings();
+  const { activeLocation, activeArea, setManualLocation } = useLocationSettings();
   const { language } = useLanguage();
   const isBn = language === 'bn';
   const { firebaseUser, currentUser, setCurrentUser } = useAuth();
@@ -105,6 +105,8 @@ function AppInner() {
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
 
   const currentTab = React.useMemo(() => resolveTabFromPath(location.pathname), [location.pathname]);
+  const shouldShowMarketplaceCategoryBar =
+    location.pathname.replace(/\/+$/, '') === ROUTE_PATHS.MARKETPLACE_HUB;
 
   const setCurrentTab = (tab: PortalTab) => {
     if (tab === 'commerce') {
@@ -864,31 +866,15 @@ function AppInner() {
               </div>
             </div>
             
-            {/* Master 3-Tier Category Bar available across core portals (never on Social Feed) */}
-            {['explore', 'commerce', 'wholesale', 'services', 'rides', 'demand', 'nearby'].includes(currentTab) && !location.pathname.includes('/product/') && (
+            {/* Marketplace browsing owns this shared category rail; other portals provide their own filters. */}
+            {shouldShowMarketplaceCategoryBar && (
               <CategoryBar
                 isBn={isBn}
                 activePortal={activePortalFilter}
                 selectedSubCategory={selectedSubCategory}
                 searchQuery={searchQuery}
-                initialPillar={
-                  currentTab === 'commerce'
-                    ? 'commerce-hub'
-                    : currentTab === 'wholesale'
-                    ? 'wholesale-hub'
-                    : currentTab === 'rides'
-                    ? 'services-logistics-hub'
-                    : currentTab === 'services'
-                    ? 'services-hub'
-                    : 'all'
-                }
-                activeChildPortalId={
-                  currentTab === 'commerce'
-                    ? activeCommerceChildPortalId
-                    : currentTab === 'services'
-                    ? activeServicePortalId
-                    : undefined
-                }
+                initialPillar="commerce-hub"
+                activeChildPortalId={activeCommerceChildPortalId}
                 onPortalSwitch={handleCategoryBarPortalSwitch}
                 onSubCategorySelect={setSelectedSubCategory}
                 onSearchFilter={(kw) => setSearchQuery(kw)}
@@ -898,29 +884,6 @@ function AppInner() {
                     setActiveCommerceChildPortalId('all');
                   } else if (tile.id.startsWith('c-')) {
                     setActiveCommerceChildPortalId(tile.id);
-                  }
-                  if (currentTab === 'services') {
-                    if (tile.id === 'service-all-home') {
-                      setActiveServicePortalId('all');
-                    } else if (tile.id.startsWith('service-')) {
-                      setActiveServicePortalId(tile.id.replace(/^service-/, '').replace(/-home$/, ''));
-                    }
-                  }
-                  if (
-                    tile.id === 's-ride-home' ||
-                    tile.id === 's-emergency-home' ||
-                    tile.id === 'service-ride-home' ||
-                    tile.id === 'service-emergency-home'
-                  ) {
-                    setActiveLogisticsSubPortal('ride');
-                  } else if (
-                    tile.id === 'service-logistics-home' ||
-                    tile.id === 's-transport-home' ||
-                    tile.id === 'service-transport-home'
-                  ) {
-                    setActiveLogisticsSubPortal('courier');
-                  } else if (tile.id === 's-rent-home' || tile.id === 'service-rent-home') {
-                    setActiveLogisticsSubPortal('cargo');
                   }
                 }}
               />
@@ -1101,8 +1064,9 @@ function AppInner() {
         isOpen={isLocationModalOpen}
         onClose={() => setIsLocationModalOpen(false)}
         currentLocation={activeLocation || currentUser.location}
-        onSelectLocation={(newLoc, coords) => {
-          setManualLocation(newLoc, coords);
+        currentArea={activeArea}
+        onSelectLocation={(newLoc, coords, area) => {
+          setManualLocation(newLoc, coords, area);
           setCurrentUser(prev => ({ ...prev, location: newLoc, coordinates: coords }));
         }}
       />

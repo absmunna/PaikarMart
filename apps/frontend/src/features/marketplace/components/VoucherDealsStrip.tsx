@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, Check, Copy, FileText, X } from 'lucide-react';
+import { Tag, Check, Copy, FileText } from 'lucide-react';
 import { retailApiClient, RetailVoucher } from '@/features/marketplace/services/retailApiClient';
+import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
 
 interface VoucherDealsStripProps {
   isBn: boolean;
   appliedVoucherCode?: string;
   onSelectVoucher: (code: string) => void;
   onOpenPrescriptionModal: () => void;
+  className?: string;
 }
 
 export const VoucherDealsStrip: React.FC<VoucherDealsStripProps> = ({
@@ -14,6 +16,7 @@ export const VoucherDealsStrip: React.FC<VoucherDealsStripProps> = ({
   appliedVoucherCode,
   onSelectVoucher,
   onOpenPrescriptionModal,
+  className = '',
 }) => {
   const [vouchers, setVouchers] = useState<RetailVoucher[]>([]);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -41,71 +44,72 @@ export const VoucherDealsStrip: React.FC<VoucherDealsStripProps> = ({
   };
 
   return (
-    <section
-      aria-label="Retail promotions and prescription shortcuts"
-      className="px-4 py-2.5 rounded-2xl bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] flex flex-wrap items-center justify-between gap-3"
+    <SponsoredFeedCard
+      label={isBn ? 'মার্কেটপ্লেস অফার' : 'Marketplace offers'}
+      onDismiss={() => setDismissed(true)}
+      dismissLabel={isBn ? 'অফারটি বন্ধ করুন' : 'Dismiss offers'}
+      className={className}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--pm-text)] whitespace-nowrap shrink-0">
-          <Tag className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
-          <span>{isBn ? 'ভেরিফাইড ভাউচার:' : 'Verified Vouchers:'}</span>
+      <section aria-label="Retail promotions and prescription shortcuts" className="space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-[15px] font-black text-[var(--pm-text)]">
+            {isBn ? 'ভাউচার ও দ্রুত সেবা' : 'Vouchers and quick services'}
+          </h3>
+          <p className="text-sm leading-relaxed text-[var(--pm-muted)]">
+            {isBn ? 'কুপন ব্যবহার করুন অথবা প্রেসক্রিপশন ও বাজারের তালিকা দিন।' : 'Apply a voucher or add a prescription and shopping list.'}
+          </p>
         </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {vouchers.length > 0 ? (
-            vouchers.map((v, idx) => {
-              const isSelected = appliedVoucherCode === v.code || copiedCode === v.code;
-              return (
-                <React.Fragment key={v.code}>
-                  {idx > 0 && <span className="text-[var(--pm-border-strong)] text-xs" aria-hidden="true">·</span>}
-                  <button
-                    type="button"
-                    onClick={() => handleApplyCode(v.code)}
-                    title={isBn ? v.descriptionBn : v.descriptionEn}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold whitespace-nowrap shrink-0 border transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
-                        : 'bg-[var(--pm-surface)] text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
-                    }`}
-                  >
-                    <span>{v.code}</span>
-                    {isSelected ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 text-[var(--pm-muted)]" />}
-                  </button>
-                </React.Fragment>
-              );
-            })
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleApplyCode('SUPER10')}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold whitespace-nowrap shrink-0 bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] cursor-pointer"
-            >
-              <span>SUPER10</span>
-              <Copy className="w-3 h-3 text-[var(--pm-muted)]" />
-            </button>
-          )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 overflow-x-auto no-scrollbar">
+            <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-[var(--pm-text)]">
+              <Tag className="h-3.5 w-3.5 text-[var(--pm-accent)]" />
+              <span>{isBn ? 'ভেরিফাইড ভাউচার:' : 'Verified vouchers:'}</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+              {vouchers.length > 0 ? (
+                vouchers.map((voucher) => {
+                  const isSelected = appliedVoucherCode === voucher.code || copiedCode === voucher.code;
+                  return (
+                    <button
+                      key={voucher.code}
+                      type="button"
+                      onClick={() => handleApplyCode(voucher.code)}
+                      title={isBn ? voucher.descriptionBn : voucher.descriptionEn}
+                      aria-pressed={isSelected}
+                      className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-mono font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
+                          : 'bg-[var(--pm-surface)] text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
+                      }`}
+                    >
+                      <span>{voucher.code}</span>
+                      {isSelected ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 text-[var(--pm-muted)]" />}
+                    </button>
+                  );
+                })
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleApplyCode('SUPER10')}
+                  aria-pressed={appliedVoucherCode === 'SUPER10' || copiedCode === 'SUPER10'}
+                  className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--pm-border)] bg-[var(--pm-surface)] px-3 text-xs font-mono font-bold whitespace-nowrap text-[var(--pm-text)] transition-colors hover:border-[var(--pm-accent)] cursor-pointer"
+                >
+                  <span>SUPER10</span>
+                  <Copy className="h-3.5 w-3.5 text-[var(--pm-muted)]" />
+                </button>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenPrescriptionModal}
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--pm-accent)] px-3.5 text-xs font-semibold text-[var(--pm-accent-fg)] whitespace-nowrap transition-colors hover:bg-[var(--pm-accent-hover)] cursor-pointer"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>{isBn ? 'প্রেসক্রিপশন / বাজার লিস্ট' : 'Upload Rx / Bazar List'}</span>
+          </button>
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          onClick={onOpenPrescriptionModal}
-          className="px-3 py-1.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-semibold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>{isBn ? 'প্রেসক্রিপশন / বাজার লিস্ট' : 'Upload Rx / Bazar List'}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          aria-label={isBn ? 'বন্ধ করুন' : 'Dismiss banner'}
-          className="p-1.5 rounded-lg text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </section>
+      </section>
+    </SponsoredFeedCard>
   );
 };

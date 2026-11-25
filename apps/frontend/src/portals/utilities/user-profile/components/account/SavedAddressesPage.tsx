@@ -4,6 +4,10 @@ import { SavedAddress } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/features/auth';
 import { createSavedAddress, deleteSavedAddress, fetchSavedAddresses, setDefaultSavedAddress } from '@/features/auth';
+import { useLocationSettings } from '@/contexts/LocationContext';
+import { AdministrativeAreaFields } from '@/components/shared/AdministrativeAreaFields';
+import type { AdministrativeArea } from '@/types';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 
 const DEFAULT_ADDRESSES: SavedAddress[] = [
   {
@@ -14,6 +18,8 @@ const DEFAULT_ADDRESSES: SavedAddress[] = [
     streetAddress: 'House 42, Road 11, Block D, Banani',
     apartment: 'Flat 5B',
     city: 'Dhaka',
+    division: 'Dhaka',
+    district: 'Dhaka',
     postalCode: '1213',
     tag: 'home',
     isDefault: true,
@@ -27,6 +33,8 @@ const DEFAULT_ADDRESSES: SavedAddress[] = [
     streetAddress: 'Gulshan Centre Point, Plot 23-26, Road 90',
     apartment: 'Floor 12, Suite 1204',
     city: 'Dhaka',
+    division: 'Dhaka',
+    district: 'Dhaka',
     postalCode: '1212',
     tag: 'office',
     isDefault: false,
@@ -37,6 +45,7 @@ const DEFAULT_ADDRESSES: SavedAddress[] = [
 export const SavedAddressesPage: React.FC = () => {
   const { language } = useLanguage();
   const { firebaseUser } = useAuth();
+  const { setManualLocation } = useLocationSettings();
   const [addresses, setAddresses] = useState<SavedAddress[]>(() => {
     try {
       const stored = localStorage.getItem('paikarmart_user_addresses');
@@ -52,6 +61,7 @@ export const SavedAddressesPage: React.FC = () => {
   const [streetAddress, setStreetAddress] = useState('');
   const [apartment, setApartment] = useState('');
   const [city, setCity] = useState('Dhaka');
+  const [serviceArea, setServiceArea] = useState<AdministrativeArea>({ division: 'Dhaka', district: 'Dhaka' });
   const [tag, setTag] = useState<'home' | 'office' | 'other'>('home');
   const [notes, setNotes] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -95,6 +105,8 @@ export const SavedAddressesPage: React.FC = () => {
       streetAddress: streetAddress.trim(),
       apartment: apartment.trim() || undefined,
       city,
+      ...serviceArea,
+      postalCode: serviceArea.postalCode,
       tag,
       isDefault: addresses.length === 0,
       notes: notes.trim() || undefined
@@ -188,6 +200,15 @@ export const SavedAddressesPage: React.FC = () => {
               />
             </div>
           </div>
+
+          <AdministrativeAreaFields
+            value={serviceArea}
+            onChange={(area) => {
+              setServiceArea(area);
+              if (area.district) setCity(area.district);
+            }}
+            isBn={isBn}
+          />
 
           <div className="space-y-1">
             <label className="text-xs font-bold text-[var(--pm-text)]">
@@ -295,6 +316,11 @@ export const SavedAddressesPage: React.FC = () => {
                   <p className="text-[11px] text-[var(--pm-muted)]">
                     {addr.city}{addr.postalCode ? ` - ${addr.postalCode}` : ''} · {addr.phone}
                   </p>
+                  {formatAdministrativeArea(addr) && (
+                    <p className="text-[11px] text-[var(--pm-muted)]">
+                      {formatAdministrativeArea(addr)}
+                    </p>
+                  )}
                   {addr.notes && (
                     <p className="text-[10px] text-[var(--pm-warning)] italic pt-1">
                       Note: "{addr.notes}"
@@ -304,6 +330,19 @@ export const SavedAddressesPage: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--pm-border)] mt-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualLocation(
+                      [addr.upazila, addr.thana, addr.district, addr.division].filter(Boolean).join(', ') || addr.city,
+                      undefined,
+                      addr,
+                    )
+                  }
+                  className="mr-auto px-2 py-1 text-[10px] font-bold text-[var(--pm-accent)] hover:underline cursor-pointer"
+                >
+                  {isBn ? 'এই এলাকার দোকান দেখুন' : 'Use this area'}
+                </button>
                 {deleteConfirmId === addr.id ? (
                   <>
                     <span className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'মুছে ফেলবেন?' : 'Delete this address?'}</span>

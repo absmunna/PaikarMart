@@ -158,7 +158,8 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
             <button
               type="button"
               onClick={() => setSelectedPillar('all')}
-              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer flex items-center gap-1.5 ${
+              aria-pressed={selectedPillar === 'all'}
+              className={`min-h-11 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer flex items-center gap-1.5 ${
                 selectedPillar === 'all'
                   ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-sm'
                   : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
@@ -175,7 +176,8 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
                   key={hub.id}
                   type="button"
                   onClick={() => setSelectedPillar(hub.id)}
-                  className={`px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer flex items-center gap-1.5 ${
+                  aria-pressed={isSelected}
+                  className={`min-h-11 px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-sm'
                       : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
@@ -231,7 +233,7 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
                       <button
                         type="button"
                         onClick={() => onSelectTab(pillarHubTab)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[var(--pm-accent-soft)] hover:bg-[var(--pm-accent)] text-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] text-[11px] font-bold transition-colors cursor-pointer"
+                        className="min-h-10 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[var(--pm-accent-soft)] hover:bg-[var(--pm-accent)] text-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] text-[11px] font-bold transition-colors cursor-pointer"
                       >
                         <span>{isBn ? 'হাব খুলুন' : 'Open Hub'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />

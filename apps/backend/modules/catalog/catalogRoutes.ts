@@ -109,6 +109,8 @@ const mapListing = (listing: any) => {
     storeId: listing.store_id,
     storeName: store.store_name || 'Verified Store',
     storeHandle: store.handle || undefined,
+    storeAddress: store.store_address || undefined,
+    serviceArea: store.service_area || undefined,
     type: listing.trade_mode === 'wholesale' ? 'wholesale' : 'retail',
     tradeMode: listing.trade_mode === 'wholesale' ? 'wholesale' : 'retail',
     title: product.title_en || product.title_bn || 'Marketplace Product',
@@ -150,6 +152,8 @@ const mapStandaloneProduct = (row: any) => {
     storeId: String(row.store_id || store.id || ''),
     storeName: store.store_name || row.store_name || 'Verified Store',
     storeHandle: store.handle || undefined,
+    storeAddress: store.store_address || undefined,
+    serviceArea: store.service_area || undefined,
     type: type === 'food' || type === 'grocery' || type === 'service' || type === 'rides' || type === 'wholesale' ? type : 'retail',
     tradeMode,
     title: String(row.title || row.name || 'Marketplace Product'),
@@ -230,7 +234,7 @@ catalogRouter.get('/products', async (_req: Request, res: Response) => {
       trade_mode, min_wholesale_qty, wholesale_tiers, seller_real_photos,
       delivery_eta, location, is_active,
       master_product:master_products!inner(*),
-      store:stores!inner(store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes, status)
+      store:stores!inner(store_name, handle, store_address, service_area, category, rating, is_open, opening_hours_label, prep_minutes, status)
     `)
     .eq('is_active', true)
     .eq('master_product.is_verified', true)
@@ -251,7 +255,7 @@ catalogRouter.get('/products', async (_req: Request, res: Response) => {
       id, store_id, type, title, description, price, original_price,
       min_wholesale_qty, wholesale_tiers, rating, reviews_count, delivery_eta,
       image_url, category, in_stock, metadata, created_at,
-      store:stores(id, store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes, status, is_verified)
+      store:stores(id, store_name, handle, store_address, service_area, category, rating, is_open, opening_hours_label, prep_minutes, status, is_verified)
     `)
     .eq('in_stock', true)
     .order('created_at', { ascending: false })
@@ -305,7 +309,7 @@ catalogRouter.get('/products/:id', async (req: Request, res: Response) => {
       trade_mode, min_wholesale_qty, wholesale_tiers, seller_real_photos,
       delivery_eta, location, is_active,
       master_product:master_products!inner(*),
-      store:stores!inner(store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes, status)
+      store:stores!inner(store_name, handle, store_address, service_area, category, rating, is_open, opening_hours_label, prep_minutes, status)
     `)
     .eq('id', id)
     .maybeSingle();
@@ -321,7 +325,7 @@ catalogRouter.get('/products/:id', async (req: Request, res: Response) => {
       id, store_id, type, title, description, price, original_price,
       min_wholesale_qty, wholesale_tiers, rating, reviews_count, delivery_eta,
       image_url, category, in_stock, metadata, created_at,
-      store:stores(id, store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes)
+      store:stores(id, store_name, handle, store_address, service_area, category, rating, is_open, opening_hours_label, prep_minutes)
     `)
     .eq('id', id)
     .maybeSingle();

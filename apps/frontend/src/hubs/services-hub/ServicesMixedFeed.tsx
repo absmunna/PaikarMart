@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Utensils, Hotel, MapPin, ClipboardList, Activity, Cpu, Sparkles } from 'lucide-react';
+import { Wrench, Utensils, Hotel, MapPin, ClipboardList, Activity, Cpu } from 'lucide-react';
 import type { CommerceItem, ServiceBooking, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { HubFeedCard } from '@/hubs/shared/HubFeedCard';
@@ -148,48 +148,24 @@ export const ServicesMixedFeed: React.FC<ServicesMixedFeedProps> = ({
 
   return (
     <div className="space-y-5 pb-20 animate-fadeIn">
-      {/* Hero Banner */}
-      <section className="rounded-2xl sm:rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-700 to-cyan-900 p-5 sm:p-7 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="relative z-10 space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[10px] font-black uppercase tracking-widest text-white">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isBn ? 'সার্ভিসেস হাব · লাইভ ফিড' : 'Services Hub · Live Feed'}</span>
-          </div>
-          <h1 className="text-xl sm:text-3xl font-black tracking-tight">
-            {isBn ? 'লোকাল টেকনিশিয়ান, ফুড ডেলিভারি, হেলথ ও ট্রাভেল স্টে' : 'Local Technicians, Food Delivery, Health & Travel Stays'}
-          </h1>
-          <p className="text-xs sm:text-sm text-white/90 max-w-2xl leading-relaxed">
-            {isBn
-              ? 'এসি রিপেয়ার, ডাক্তার অ্যাপয়েন্টমেন্ট, রেস্টুরেন্ট ফুড, অ্যাপ্লায়েন্স ও হোটেল বুকিং এক জায়গা থেকে করুন। ওয়ালেট পেমেন্টে ৫% ছাড়!'
-              : 'Book trusted electricians, doctor consultations, gourmet food delivery, appliance repair, and travel stays instantly.'}
-          </p>
-
-          <div className="pt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedChildPortal('local-services')}
-              className="px-3.5 py-2 rounded-xl bg-white text-emerald-950 text-xs font-black hover:bg-emerald-50 transition-colors cursor-pointer shadow-sm"
-            >
-              {isBn ? 'লোকাল সার্ভিস ব্রাউজ করুন' : 'Browse Local Services'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedChildPortal('health-clinic')}
-              className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold backdrop-blur-sm transition-colors cursor-pointer border border-white/20"
-            >
-              {isBn ? 'হেলথ ও ডাক্তার কেয়ার' : 'Health & Doctor Care'}
-            </button>
-          </div>
-        </div>
-      </section>
+      <header className="space-y-1 px-1">
+        <h1 className="text-xl font-black tracking-tight text-[var(--pm-text)] sm:text-2xl">
+          {isBn ? 'লোকাল টেকনিশিয়ান, ফুড ডেলিভারি, হেলথ ও ট্রাভেল স্টে' : 'Local Technicians, Food Delivery, Health & Travel Stays'}
+        </h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-[var(--pm-muted)]">
+          {isBn
+            ? 'এসি রিপেয়ার, ডাক্তার অ্যাপয়েন্টমেন্ট, রেস্টুরেন্ট ফুড, অ্যাপ্লায়েন্স ও হোটেল বুকিং এক জায়গা থেকে করুন।'
+            : 'Book trusted electricians, doctor consultations, gourmet food delivery, appliance repair, and travel stays in one place.'}
+        </p>
+      </header>
 
       {/* Child Portal Selector Rail */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         <button
           type="button"
           onClick={() => setSelectedChildPortal('all')}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+          aria-pressed={selectedChildPortal === 'all'}
+          className={`shrink-0 min-h-10 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
             selectedChildPortal === 'all'
               ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
               : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)]'
@@ -205,7 +181,8 @@ export const ServicesMixedFeed: React.FC<ServicesMixedFeedProps> = ({
               key={portal.id}
               type="button"
               onClick={() => handlePortalSelect(portal.id, portal.entryRoute)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              aria-pressed={isActive}
+              className={`shrink-0 min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                 isActive
                   ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
                   : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]/50'
@@ -257,8 +234,8 @@ export const ServicesMixedFeed: React.FC<ServicesMixedFeedProps> = ({
             badgeBn: 'সার্ভিস হাব · লাইভ বুকিং রাডার',
             titleEn: 'Nearby Technicians & Home Repair',
             titleBn: 'কাছাকাছি টেকনিশিয়ান ও হোম রিপেয়ার',
-            subtitleEn: 'Book certified local technicians & save 5% paying in advance via Wallet.',
-            subtitleBn: 'ভেরিফায়েড টেকনিশিয়ান বুক করুন এবং ওয়ালেট পেমেন্টে ৫% সাশ্রয় পান।',
+            subtitleEn: 'Book certified local technicians for repairs and home visits.',
+            subtitleBn: 'মেরামত ও বাড়িতে সেবার জন্য ভেরিফায়েড টেকনিশিয়ান বুক করুন।',
             accentGradient: 'from-emerald-700 to-teal-800',
             searchPlaceholderEn: 'Search nearest electrician, AC repair, plumber, doctor, salon...',
             searchPlaceholderBn: 'ইলেকট্রিশিয়ান, এসি রিপেয়ার, ডাক্তার, প্লাম্বার খুঁজুন...',

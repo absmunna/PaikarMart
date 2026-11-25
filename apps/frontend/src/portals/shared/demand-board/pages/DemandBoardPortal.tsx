@@ -155,7 +155,7 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-5 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale shadow-md shrink-0"
+            className="min-h-11 px-5 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale shadow-md shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>{isBn ? 'নতুন চাহিদা পোস্ট করুন' : 'Post Demand Request'}</span>
@@ -167,7 +167,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'all'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'all'
                 ? 'bg-[var(--pm-text)] text-[var(--pm-bg)] shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -183,7 +184,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('products')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'products'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'products'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -199,7 +201,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('services')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'services'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'services'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -215,7 +218,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('logistics')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'logistics'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'logistics'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -269,7 +273,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => setUrgentOnly(!urgentOnly)}
-            className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
+            aria-pressed={urgentOnly}
+            className={`min-h-11 px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
               urgentOnly
                 ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
                 : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:bg-[var(--pm-surface)]'

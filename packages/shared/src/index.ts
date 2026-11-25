@@ -10,6 +10,14 @@ export type BusinessRole =
   | 'rideshare_driver'
   | 'content_creator';
 
+export interface AdministrativeArea {
+  division?: string;
+  district?: string;
+  upazila?: string;
+  thana?: string;
+  postalCode?: string;
+}
+
 export type VendorMembershipStatus = 'pending' | 'active' | 'suspended' | 'revoked';
 
 export interface VendorMembership {
@@ -210,6 +218,7 @@ export interface PublicProfileProjection {
   displayName: string;
   avatar?: string;
   location: string;
+  serviceArea?: AdministrativeArea;
   verified: boolean;
   trustLevel: TrustLevel;
   sellerTier?: SellerTier;

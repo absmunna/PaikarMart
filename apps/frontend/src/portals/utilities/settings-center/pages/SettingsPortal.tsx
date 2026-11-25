@@ -101,7 +101,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
     {
       id: 'common',
       title: isBn ? 'সাধারণ সেটিংস ও সিস্টেম' : 'General & System Preferences',
-      description: isBn ? 'থিম, ভাষা, লাইভ জিপিএস লোকেশন ও অ্যাপ তথ্য' : 'Theme, language, GPS radar & system configuration',
+      description: isBn ? 'থিম, ভাষা, ঠিকানার এলাকা ও অ্যাপ তথ্য' : 'Theme, language, address area & system configuration',
       items: [
         {
           id: 'appearance',
@@ -119,8 +119,8 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
         },
         {
           id: 'location',
-          label: isBn ? 'লাইভ জিপিএস রাডার' : 'Live GPS Radar & Zones',
-          desc: isBn ? 'রিয়েলটাইম ডিভাইস কোঅর্ডিনেট ও ডেলিভারি হাব' : 'Real-time GPS device coordinates & delivery hubs',
+          label: isBn ? 'ঠিকানার এলাকা ও GPS' : 'Address Area & GPS',
+          desc: isBn ? 'বিভাগ, জেলা, উপজেলা/থানা ও GPS কোঅর্ডিনেট' : 'Division, district, upazila/thana & GPS coordinates',
           icon: MapPin,
           badge: isBn ? 'সক্রিয়' : 'LIVE',
           accentColor: 'text-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
@@ -672,10 +672,10 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                 <div className="space-y-6 animate-fadeIn">
                   <div>
                     <h3 className="text-lg font-black text-[var(--pm-text)]">
-                      {isBn ? 'লাইভ জিপিএস রাডার ও ডেলিভারি হাব' : 'Live GPS Radar & Delivery Region'}
+                      {isBn ? 'ঠিকানার এলাকা ও GPS লোকেশন' : 'Address Area & GPS Location'}
                     </h3>
                     <p className="text-xs text-[var(--pm-muted)]">
-                      {isBn ? 'রিয়েলটাইম ডিভাইস কোঅর্ডিনেট, নিকটস্থ বিক্রেতা ও সার্ভিস এরিয়া' : 'Continuous location radar for distance calculations and instant delivery routing'}
+                      {isBn ? 'বিভাগ, জেলা, উপজেলা/থানা অনুযায়ী দোকান ও সেবা খুঁজুন' : 'Find shops and services by division, district, upazila or thana'}
                     </p>
                   </div>
 
@@ -711,7 +711,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                     <p className="text-xs text-[var(--pm-muted)] leading-relaxed">
                       {isBn
                         ? 'সুপারঅ্যাপ প্ল্যাটফর্মটিতে সোশ্যাল ফিড, ই-কমার্স ট্রেডিং হাব, লোকাল সার্ভিস ও রাইড বুকিং এবং মার্চেন্ট ড্যাশবোর্ড একসাথে একীভূত করা হয়েছে।'
-                        : 'A multi-vertical omnichannel application bridging social commerce, on-demand physical services, live GPS delivery radar, and full-featured merchant enterprise tooling.'}
+                        : 'A multi-vertical omnichannel application bridging social commerce, address-based local discovery, on-demand services, and merchant tooling.'}
                     </p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-[var(--pm-border)] text-xs">

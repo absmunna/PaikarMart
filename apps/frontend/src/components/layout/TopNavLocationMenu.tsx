@@ -79,7 +79,7 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         className="h-9 sm:h-10 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] font-semibold text-xs transition-all shadow-xs border border-[var(--pm-border)] cursor-pointer max-w-[140px] lg:max-w-[180px] xl:max-w-[210px] shrink-0"
-        title="Live Location System & Radar"
+        title="Current address and GPS location"
       >
         {/* Pulsing Beacon Dot */}
         <div className="relative flex items-center justify-center shrink-0">
@@ -122,7 +122,7 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider">
-                  Live GPS Radar
+                  Live GPS Location
                 </h4>
                 <p className="text-[10px] opacity-85">
                   {isLiveTracking ? 'Continuous Tracking Active' : 'Real-time Device Geolocation'}

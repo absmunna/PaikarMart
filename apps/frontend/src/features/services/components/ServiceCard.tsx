@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CommerceItem } from '@/types';
 import type { ComputedHyperlocalMeta } from '@/features/logistics';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 
 interface ServiceCardProps {
   service: CommerceItem;
@@ -49,9 +50,8 @@ export const getServiceIcon = (subCat?: string) => {
 export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hyperlocalMeta }) => {
   const navigate = useNavigate();
   const isOpen = hyperlocalMeta?.isOpen ?? service.isOpen ?? true;
-  const distanceLabel = hyperlocalMeta
-    ? `${hyperlocalMeta.distanceKm.toFixed(1)} km`
-    : service.proximityDistance || 'Nearby';
+  const serviceAreaLabel =
+    formatAdministrativeArea(service.serviceArea) || service.storeAddress || 'Area not specified';
   const etaLabel = hyperlocalMeta
     ? `${hyperlocalMeta.totalEtaMin} min (Prep ${hyperlocalMeta.estimatedPrepMin}m + Transit ${hyperlocalMeta.estimatedTransitMin}m)`
     : service.deliveryEta || 'Same Day';
@@ -78,9 +78,9 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hype
             <span>{service.subCategory || 'Pro Service'}</span>
           </span>
           <span aria-hidden="true" className="text-[var(--pm-muted)]">·</span>
-          <span className="text-[var(--pm-text)] flex items-center gap-1 tabular-nums">
+          <span className="text-[var(--pm-text)] flex items-center gap-1">
             <MapPin className="w-3 h-3 text-[var(--pm-danger)]" />
-            <span>{distanceLabel}</span>
+            <span>{serviceAreaLabel}</span>
           </span>
           <span aria-hidden="true" className="text-[var(--pm-muted)]">·</span>
           <span className={isOpen ? 'text-[var(--pm-success)]' : 'text-[var(--pm-danger)]'}>

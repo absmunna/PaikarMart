@@ -135,7 +135,7 @@ export const INITIAL_STORIES: Story[] = [
   }
 ];
 
-export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
+const initialCommerceItems: CommerceItem[] = [
   // --- REAL RETAIL PRODUCTS ---
   {
     id: 'prod_retail_iphone_15',
@@ -550,6 +550,11 @@ export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
     badge: 'Commercial'
   }
 ];
+
+export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = initialCommerceItems.map((item) => ({
+  ...item,
+  serviceArea: item.serviceArea ?? { division: 'Dhaka', district: 'Dhaka' },
+}));
 
 export const INITIAL_POSTS: SocialPost[] = [
   {

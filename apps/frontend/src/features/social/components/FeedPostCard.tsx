@@ -15,6 +15,7 @@ import {
 import { formatDisplayHandle, normalizeHandle } from '@paikarmart/shared';
 import { SocialPost, ReactionType, User, CommerceItem } from '@/types';
 import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FeedPostCardProps {
   post: SocialPost;
@@ -35,6 +36,8 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
   commerceItems,
 }) => {
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState('');
@@ -111,7 +114,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
               </span>
               {post.isSponsored && (
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] uppercase tracking-tighter">
-                  {post.adNetwork || 'Promoted'}
+                  {post.adNetwork || (isBn ? 'প্রচারিত' : 'Promoted')}
                 </span>
               )}
             </div>
@@ -277,14 +280,16 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
                   : 'bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)]'
               }`}
             >
-              {post.postType === 'demand' ? 'I Have This / Send Proposal' : 'Contact Seller'}
+              {post.postType === 'demand'
+                ? isBn ? 'প্রস্তাব পাঠান' : 'I Have This / Send Proposal'
+                : isBn ? 'বিক্রেতাকে বার্তা দিন' : 'Contact Seller'}
             </button>
             <button 
               type="button"
               onClick={handleShare}
               className="px-6 py-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[11px] font-black uppercase tracking-widest text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors active-scale cursor-pointer"
             >
-              {copiedShare ? 'Copied' : 'Share'}
+              {copiedShare ? (isBn ? 'কপি হয়েছে' : 'Copied') : isBn ? 'শেয়ার' : 'Share'}
             </button>
           </div>
         </div>
@@ -310,9 +315,11 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             onClick={() => setShowComments(!showComments)}
             className="hover:text-[var(--pm-accent)] transition-colors cursor-pointer"
           >
-            {post.comments.length} comments
+            {isBn
+              ? `${post.comments.length}টি মন্তব্য`
+              : `${post.comments.length} ${post.comments.length === 1 ? 'comment' : 'comments'}`}
           </button>
-          <span>{post.sharesCount} shares</span>
+          <span>{isBn ? `${post.sharesCount}টি শেয়ার` : `${post.sharesCount} shares`}</span>
         </div>
       </div>
 
@@ -357,7 +364,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             ) : (
               <ThumbsUp className={`w-4 h-4 ${post.userReaction ? 'fill-[var(--pm-accent)] text-[var(--pm-accent)]' : ''}`} />
             )}
-            <span>{post.userReaction || 'Like'}</span>
+            <span>{post.userReaction || (isBn ? 'পছন্দ' : 'Like')}</span>
           </button>
 
           <button
@@ -366,7 +373,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] transition-all active-scale cursor-pointer"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>Comment</span>
+            <span>{isBn ? 'মন্তব্য' : 'Comment'}</span>
           </button>
         </div>
 
@@ -376,7 +383,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] transition-all active-scale cursor-pointer"
         >
           <Share2 className="w-4 h-4" />
-          <span>{copiedShare ? 'Copied' : 'Share'}</span>
+          <span>{copiedShare ? (isBn ? 'কপি হয়েছে' : 'Copied') : isBn ? 'শেয়ার' : 'Share'}</span>
         </button>
 
       </div>
@@ -427,12 +434,13 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
                 type="text"
                 value={commentInput}
                 onChange={(e) => setCommentInput(e.target.value)}
-                placeholder="Share your thoughts..."
+                placeholder={isBn ? 'আপনার মতামত লিখুন...' : 'Share your thoughts...'}
                 className="w-full bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-full pl-4 pr-10 py-2.5 text-[13px] font-medium text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/20 outline-none"
               />
               <button
                 type="submit"
                 disabled={!commentInput.trim()}
+                aria-label={isBn ? 'মন্তব্য পাঠান' : 'Send comment'}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center disabled:opacity-20 transition-all active-scale shadow-sm cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />

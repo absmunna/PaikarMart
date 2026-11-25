@@ -461,13 +461,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                 onAddComment={onAddComment}
                 onAddToCart={onAddToCart}
                 commerceItems={commerceItems}
-                onOpenVendorModal={onOpenVendorModal}
-                onOpenWallet={onOpenWallet}
-                onUpdateOrder={onUpdateOrder}
-                onSelectTab={setCurrentTab}
-                onOpenSettingsPortal={onOpenSettingsPortal}
-                onOpenSuperAdminModal={onOpenSuperAdminModal}
-                onOpenAuthModal={onOpenAuthModal}
               />
             </AuthGuard>
           }

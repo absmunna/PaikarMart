@@ -50,6 +50,8 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
     setVisibleCount(5);
   }, [posts.length]);
 
+  const visiblePosts = posts.slice(0, visibleCount);
+
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     if (isLoading || !sentinel || visibleCount >= posts.length) return;
@@ -76,25 +78,26 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
         onOpenVerificationModal={() => setIsVerificationModalOpen(true)}
       />
 
-      {/* Google AdMob Sponsored Card in Feed */}
-      <AdMobBanner />
-
       {/* Feed Posts List */}
       {isLoading ? (
         <SocialFeedListSkeleton count={3} />
       ) : (
         <div className="space-y-4 sm:space-y-6">
-          {posts.slice(0, visibleCount).map((post) => (
-            <FeedPostCard
-              key={post.id}
-              post={post}
-              currentUser={currentUser}
-              onReact={onReactToPost}
-              onAddComment={onAddComment}
-              onAddToCart={onAddToCart}
-              commerceItems={commerceItems}
-            />
+          {visiblePosts.map((post, index) => (
+            <React.Fragment key={post.id}>
+              <FeedPostCard
+                post={post}
+                currentUser={currentUser}
+                onReact={onReactToPost}
+                onAddComment={onAddComment}
+                onAddToCart={onAddToCart}
+                commerceItems={commerceItems}
+              />
+              {index === 2 && <AdMobBanner />}
+            </React.Fragment>
           ))}
+
+          {visiblePosts.length > 0 && visiblePosts.length < 3 && <AdMobBanner />}
 
           {visibleCount < posts.length && (
             <div ref={loadMoreRef} aria-label="Loading older posts" aria-live="polite">

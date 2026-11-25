@@ -142,7 +142,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
               <button
                 type="button"
                 onClick={handleMoveAllToBag}
-                className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                className="min-h-11 px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
               >
                 <ShoppingCart className="w-3.5 h-3.5" />
                 <span>{isBn ? 'সবগুলো ব্যাগে নিন' : 'Add All to Bag'}</span>
@@ -152,7 +152,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                 <button
                   type="button"
                   onClick={() => setConfirmClear(true)}
-                  className="px-3.5 py-2 rounded-xl bg-[var(--pm-surface)] hover:bg-rose-500/10 border border-[var(--pm-border)] hover:border-rose-500/40 text-xs font-bold text-[var(--pm-muted)] hover:text-rose-500 flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="min-h-11 px-3.5 py-2 rounded-xl bg-[var(--pm-surface)] hover:bg-rose-500/10 border border-[var(--pm-border)] hover:border-rose-500/40 text-xs font-bold text-[var(--pm-muted)] hover:text-rose-500 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>{isBn ? 'সব মুছুন' : 'Clear All'}</span>
@@ -168,14 +168,14 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                       clearWishlist();
                       setConfirmClear(false);
                     }}
-                    className="px-2 py-1 rounded-lg bg-rose-500 text-white text-[11px] font-bold cursor-pointer"
+                    className="min-h-10 px-3 py-1 rounded-lg bg-rose-500 text-white text-[11px] font-bold cursor-pointer"
                   >
                     {isBn ? 'হ্যাঁ' : 'Yes'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmClear(false)}
-                    className="px-2 py-1 rounded-lg bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] text-[11px] font-bold cursor-pointer"
+                    className="min-h-10 px-3 py-1 rounded-lg bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] text-[11px] font-bold cursor-pointer"
                   >
                     {isBn ? 'না' : 'Cancel'}
                   </button>
@@ -209,7 +209,8 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilterMode(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                aria-pressed={filterMode === tab.id}
+                className={`min-h-10 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                   filterMode === tab.id
                     ? 'bg-[var(--pm-card)] text-[var(--pm-text)] shadow-xs border border-[var(--pm-border)]'
                     : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
@@ -257,7 +258,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
             <button
               type="button"
               onClick={() => onSelectTab('commerce')}
-              className="px-4 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="min-h-11 px-4 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>{isBn ? 'মার্কেটপ্লেস দেখুন' : 'Browse Marketplace'}</span>
@@ -265,7 +266,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
             <button
               type="button"
               onClick={() => onSelectTab('wholesale')}
-              className="px-4 py-2.5 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="min-h-11 px-4 py-2.5 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
               <Package className="w-4 h-4 text-[var(--pm-accent)]" />
               <span>{isBn ? 'পাইকারি বাজার দেখুন' : 'Explore Wholesale'}</span>
@@ -280,7 +281,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
           <button
             type="button"
             onClick={() => setFilterMode('all')}
-            className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer"
+            className="min-h-11 px-4 py-2 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer"
           >
             {isBn ? 'সব সংরক্ষিত পণ্য দেখুন' : 'Show All Saved Items'}
           </button>
@@ -326,7 +327,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                       aria-pressed={true}
                       aria-label={isBn ? 'উইশলিস্ট থেকে সরান' : 'Remove from wishlist'}
                       title={isBn ? 'উইশলিস্ট থেকে সরান' : 'Remove from wishlist'}
-                      className="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/95 dark:bg-zinc-900/90 border border-rose-500/30 text-rose-500 flex items-center justify-center shadow-sm hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+                      className="absolute top-2.5 right-2.5 min-h-10 min-w-10 rounded-full bg-white/95 dark:bg-zinc-900/90 border border-rose-500/30 text-rose-500 flex items-center justify-center shadow-sm hover:scale-105 active:scale-95 transition-transform cursor-pointer"
                     >
                       <Heart className="w-4 h-4 fill-rose-500" />
                     </button>
@@ -339,7 +340,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                         toggleCompare(product);
                       }}
                       aria-pressed={compared}
-                      className={`absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                      className={`absolute bottom-2.5 left-2.5 min-h-10 px-3 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
                         compared
                           ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
                           : 'pm-glass border-[var(--pm-border)] text-[var(--pm-text)] hover:border-[var(--pm-accent)]'
@@ -418,7 +419,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                       handleAddSingleToCart(product);
                     }}
                     disabled={product.inStock === false}
-                    className="py-2 px-3 rounded-xl border border-[var(--pm-border-strong)] bg-[var(--pm-surface)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] hover:text-[var(--pm-accent)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-45 cursor-pointer"
+                    className="min-h-11 py-2 px-3 rounded-xl border border-[var(--pm-border-strong)] bg-[var(--pm-surface)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] hover:text-[var(--pm-accent)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-45 cursor-pointer"
                   >
                     {isAdded ? (
                       <>
@@ -441,7 +442,7 @@ export const WishlistPortal: React.FC<WishlistPortalProps> = ({
                       onBuyNow(product, qty, isWholesale);
                     }}
                     disabled={product.inStock === false}
-                    className="py-2 px-3 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors disabled:opacity-45 cursor-pointer"
+                    className="min-h-11 py-2 px-3 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors disabled:opacity-45 cursor-pointer"
                   >
                     <ShoppingCart className="w-3.5 h-3.5" />
                     <span>{isBn ? 'এখনই কিনুন' : 'Buy Now'}</span>

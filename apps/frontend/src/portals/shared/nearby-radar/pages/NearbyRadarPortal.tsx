@@ -16,7 +16,6 @@ import {
   ExternalLink,
   Navigation,
   CheckCircle2,
-  Sliders,
   Sparkles
 } from 'lucide-react';
 import { CommerceItem, User, ServiceBooking, PortalTab } from '@/types';
@@ -25,6 +24,7 @@ import { useLocationSettings } from '@/contexts/LocationContext';
 import { computeLocalGeofenceMeta } from '@/features/logistics';
 import { ServiceBookingModal } from '@/features/services';
 import { ROUTE_PATHS } from '@/app/router/routeIds';
+import { formatAdministrativeArea, getListingAdministrativeArea, matchesAdministrativeArea } from '@/utils/administrativeArea';
 
 interface NearbyRadarPortalProps {
   currentUser: User;
@@ -50,9 +50,8 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
 
   const {
     activeLocation,
+    activeArea,
     coordinates,
-    radarRadiusKm,
-    setRadarRadiusKm,
     detectLiveLocation,
     isLocating
   } = useLocationSettings();
@@ -80,25 +79,27 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
     else if (hubParam === 'marketplace') setActiveCategory('shops');
   }, [hubParam]);
 
-  // Compute live geofence distances deterministically for items
+  // Keep distance data for logistics; shops and services are matched by address.
   const itemsWithDistance = useMemo(() => {
     return commerceItems.map((item, idx) => {
-      const meta = computeLocalGeofenceMeta(item, coordinates, radarRadiusKm, idx);
+      const meta = computeLocalGeofenceMeta(item, coordinates, 20, idx);
       const isService = item.type === 'service';
       const isLogistics = item.type === 'rides' || Boolean(item.badge?.toLowerCase().includes('logistics'));
+      const area = getListingAdministrativeArea(item);
 
       return {
         ...item,
+        serviceArea: area,
         distanceKm: meta.distanceKm,
-        isWithinRadius: meta.withinRadius,
         isOpenNow: meta.isOpen,
         prepMinutes: meta.estimatedPrepMin,
+        isInSelectedArea: isLogistics || matchesAdministrativeArea(activeArea, area),
         inferredCategory: isLogistics ? 'logistics' : isService ? 'services' : 'shops'
       };
     });
-  }, [commerceItems, coordinates, radarRadiusKm]);
+  }, [commerceItems, coordinates, activeArea]);
 
-  // Filter based on active category, radius, openOnly, and searchQuery
+  // Filter physical shops and services by the selected administrative area.
   const filteredPlaces = useMemo(() => {
     return itemsWithDistance
       .filter((place) => {
@@ -107,8 +108,7 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
         if (activeCategory === 'services' && place.inferredCategory !== 'services') return false;
         if (activeCategory === 'logistics' && place.inferredCategory !== 'logistics') return false;
 
-        // Radius filter
-        if (!place.isWithinRadius && radarRadiusKm <= 5) return false;
+        if (!place.isInSelectedArea) return false;
 
         // Open only
         if (openOnly && !place.isOpenNow) return false;
@@ -124,8 +124,12 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
 
         return true;
       })
-      .sort((a, b) => a.distanceKm - b.distanceKm);
-  }, [itemsWithDistance, activeCategory, radarRadiusKm, openOnly, searchQuery]);
+      .sort((a, b) =>
+        a.inferredCategory === 'logistics' && b.inferredCategory === 'logistics'
+          ? a.distanceKm - b.distanceKm
+          : b.rating - a.rating,
+      );
+  }, [itemsWithDistance, activeCategory, openOnly, searchQuery]);
 
   const handleCategorySwitch = (cat: NearbyFilterCategory) => {
     setActiveCategory(cat);
@@ -145,15 +149,15 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
           <div className="space-y-1.5 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
               <MapPin className="w-3.5 h-3.5" />
-              <span>{isBn ? 'হাইপারলোকাল জিপিএস রাডার' : 'Hyperlocal Radar (GPS)'}</span>
+              <span>{isBn ? 'ঠিকানা-ভিত্তিক লোকাল আবিষ্কার' : 'Local discovery by address'}</span>
             </div>
             <h1 className="text-xl sm:text-3xl font-black tracking-tight">
               {isBn ? 'আপনার আশেপাশের দোকান ও সেবা' : 'Explore Nearby Outlets & Services'}
             </h1>
             <p className="text-xs sm:text-sm text-[var(--pm-muted)] leading-relaxed">
               {isBn
-                ? `বর্তমান অবস্থান: ${activeLocation || 'Dhaka, Bangladesh'} (${radarRadiusKm} কিমি রাডার পরিসীমা)`
-                : `Current location: ${activeLocation || 'Dhaka, Bangladesh'} (within ${radarRadiusKm}km radar)`}
+                ? `নির্বাচিত এলাকা: ${formatAdministrativeArea(activeArea, isBn) || activeLocation || 'Dhaka, Bangladesh'}`
+                : `Selected area: ${formatAdministrativeArea(activeArea) || activeLocation || 'Dhaka, Bangladesh'}`}
             </p>
           </div>
 
@@ -161,35 +165,14 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
             type="button"
             onClick={detectLiveLocation}
             disabled={isLocating}
-            className="px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale text-[var(--pm-text)] shrink-0 transition-colors"
+            className="min-h-11 px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale text-[var(--pm-text)] shrink-0 transition-colors"
           >
             <Crosshair className={`w-4 h-4 text-[var(--pm-accent)] ${isLocating ? 'animate-spin' : ''}`} />
             <span>{isLocating ? (isBn ? 'চিহ্নিত করা হচ্ছে...' : 'Locating...') : (isBn ? 'বর্তমান GPS সন্ধান' : 'Detect Live GPS')}</span>
           </button>
         </div>
 
-        {/* 2. Radar Radius Control Chips */}
         <div className="mt-5 pt-4 border-t border-[var(--pm-border)] flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[10px] font-black uppercase text-[var(--pm-muted)] tracking-wider">
-              {isBn ? 'রাডার পরিসীমা:' : 'Radar Radius:'}
-            </span>
-            {[0.5, 1, 2, 5, 10, 20].map((km) => (
-              <button
-                key={km}
-                type="button"
-                onClick={() => setRadarRadiusKm(km)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  radarRadiusKm === km
-                    ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
-                    : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
-                }`}
-              >
-                {km} {isBn ? 'কিমি' : 'km'}
-              </button>
-            ))}
-          </div>
-
           <label className="flex items-center gap-2 text-xs font-bold text-[var(--pm-text)] cursor-pointer">
             <input
               type="checkbox"
@@ -206,7 +189,8 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
           <button
             type="button"
             onClick={() => handleCategorySwitch('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeCategory === 'all'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeCategory === 'all'
                 ? 'bg-[var(--pm-text)] text-[var(--pm-bg)] shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -215,14 +199,15 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
             <Layers className="w-3.5 h-3.5" />
             <span>{isBn ? 'সব নিকটস্থ' : 'All Nearby'}</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-              {itemsWithDistance.length}
+              {itemsWithDistance.filter((item) => item.isInSelectedArea).length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => handleCategorySwitch('shops')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeCategory === 'shops'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeCategory === 'shops'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -231,14 +216,15 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
             <Store className="w-3.5 h-3.5" />
             <span>{isBn ? '🏪 দোকান ও শপ (মার্কেটপ্লেস)' : '🏪 Local Stores & Shops'}</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-              {itemsWithDistance.filter((i) => i.inferredCategory === 'shops').length}
+              {itemsWithDistance.filter((i) => i.inferredCategory === 'shops' && i.isInSelectedArea).length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => handleCategorySwitch('services')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeCategory === 'services'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeCategory === 'services'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -247,14 +233,15 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
             <Wrench className="w-3.5 h-3.5" />
             <span>{isBn ? '🔧 টেকনিশিয়ান ও সার্ভিস' : '🔧 Technicians & Services'}</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-              {itemsWithDistance.filter((i) => i.inferredCategory === 'services').length}
+              {itemsWithDistance.filter((i) => i.inferredCategory === 'services' && i.isInSelectedArea).length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => handleCategorySwitch('logistics')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeCategory === 'logistics'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeCategory === 'logistics'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -263,7 +250,7 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
             <Truck className="w-3.5 h-3.5" />
             <span>{isBn ? '🚚 রাইডার ও ট্রান্সপোর্ট' : '🚚 Live Riders & Fleet'}</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
-              {itemsWithDistance.filter((i) => i.inferredCategory === 'logistics').length}
+              {itemsWithDistance.filter((i) => i.inferredCategory === 'logistics' && i.isInSelectedArea).length}
             </span>
           </button>
         </div>
@@ -299,20 +286,13 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
               <MapPin className="w-6 h-6" />
             </div>
             <h4 className="text-sm font-bold text-[var(--pm-text)]">
-              {isBn ? 'এই রেঞ্জে কোনো আউটলেট পাওয়া যায়নি' : 'No outlets found in this radius'}
+              {isBn ? 'এই ঠিকানার এলাকায় কোনো আউটলেট পাওয়া যায়নি' : 'No outlets found in this area'}
             </h4>
             <p className="text-xs text-[var(--pm-muted)] max-w-sm mx-auto">
               {isBn
-                ? 'রাডার পরিধি বাড়িয়ে ১০ বা ২০ কিমি সিলেক্ট করুন অথবা জিপিএস লোকেশন রিফ্রেশ করুন।'
-                : 'Try increasing your radar radius to 10km or 20km to discover more nearby shops.'}
+                ? 'অন্য উপজেলা বা জেলা বেছে নিন, অথবা লোকেশন নির্বাচন করে ঠিকানাটি আপডেট করুন।'
+                : 'Choose another upazila or district, or update your address from the location picker.'}
             </p>
-            <button
-              type="button"
-              onClick={() => setRadarRadiusKm(20)}
-              className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer"
-            >
-              {isBn ? '২০ কিমি রাডার সেট করুন' : 'Expand to 20km'}
-            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -340,9 +320,11 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
                     <div className="flex flex-col items-end shrink-0">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                         <Navigation className="w-2.5 h-2.5" />
-                        {place.distanceKm < 1
-                          ? `${Math.round(place.distanceKm * 1000)}m away`
-                          : `${place.distanceKm.toFixed(1)} km`}
+                        {place.inferredCategory === 'logistics'
+                          ? (place.distanceKm < 1
+                            ? `${Math.round(place.distanceKm * 1000)}m away`
+                            : `${place.distanceKm.toFixed(1)} km`)
+                          : formatAdministrativeArea(place.serviceArea, isBn) || (isBn ? 'এলাকা নির্ধারিত' : 'Area not set')}
                       </span>
                       {place.isOpenNow ? (
                         <span className="text-[9px] font-bold text-emerald-500 mt-1">● Open Now</span>

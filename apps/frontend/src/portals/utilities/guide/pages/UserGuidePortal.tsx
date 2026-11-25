@@ -271,7 +271,7 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
           <button
             type="button"
             onClick={toggleLanguage}
-            className="self-start px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
+            className="self-start min-h-11 px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
           >
             {isBn ? 'Switch to English' : 'বাংলায় পড়ুন'}
           </button>
@@ -300,7 +300,8 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setAudienceFilter(tab.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                aria-pressed={audienceFilter === tab.id}
+                className={`min-h-10 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   audienceFilter === tab.id
                     ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-sm'
                     : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
@@ -331,7 +332,7 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                 key={shortcut.tab}
                 type="button"
                 onClick={() => onSelectTab(shortcut.tab)}
-                className="flex items-center gap-2.5 p-3 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent-soft)] border border-[var(--pm-border)] hover:border-[var(--pm-accent-border)] text-left transition-all active:scale-[0.98] cursor-pointer"
+                className="min-h-11 flex items-center gap-2.5 p-3 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent-soft)] border border-[var(--pm-border)] hover:border-[var(--pm-accent-border)] text-left transition-all active:scale-[0.98] cursor-pointer"
               >
                 <Icon className="w-4 h-4 text-[var(--pm-accent)] shrink-0" />
                 <span className="text-xs font-bold text-[var(--pm-text)] truncate">

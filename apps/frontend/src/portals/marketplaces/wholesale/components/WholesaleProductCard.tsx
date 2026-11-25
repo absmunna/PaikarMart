@@ -105,13 +105,13 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
               aria-pressed={wishlisted}
               aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
               title={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
-              className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+              className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
                 wishlisted
                   ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
                   : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-rose-500 hover:text-rose-500'
               }`}
             >
-              <Heart className={`w-3.5 h-3.5 ${wishlisted ? 'fill-white' : ''}`} />
+              <Heart className={`w-4 h-4 ${wishlisted ? 'fill-white' : ''}`} />
             </button>
           </div>
         </div>
@@ -121,13 +121,13 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
           type="button"
           onClick={() => toggleCompare(product)}
           aria-pressed={compared}
-          className={`absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-lg border shadow-xs text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+          className={`absolute bottom-2.5 left-2.5 min-h-10 px-3 py-2 rounded-lg border shadow-xs text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
             compared
               ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
               : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
           }`}
         >
-          {compared ? <Check className="w-3 h-3" /> : <Scale className="w-3 h-3 text-[var(--pm-accent)]" />}
+          {compared ? <Check className="w-3.5 h-3.5" /> : <Scale className="w-3.5 h-3.5 text-[var(--pm-accent)]" />}
           {compared ? 'Compared' : 'Compare'}
         </button>
 
