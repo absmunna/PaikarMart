@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { CommerceItem } from '@/types';
-import { 
-  ShoppingBag, 
-  Plus, 
-  Package, 
-  Layers, 
-  
+import {
+  ShoppingBag,
+  Plus,
+  Package,
+  Layers,
+  Flame,
+  Star,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InventoryProductCard, InventoryToolbar, ProductEditorModal, useSellerInventory } from '@/features/inventory';
+import { SellerDealManager } from './SellerDealManager';
+import { SellerReviewManager } from './SellerReviewManager';
 
 export interface CommerceSubDashboardProps {
   products: CommerceItem[];
@@ -32,6 +35,7 @@ export const CommerceSubDashboard: React.FC<CommerceSubDashboardProps> = ({
   const { language } = useLanguage();
   const isBn = language === 'bn';
 
+  const [activeView, setActiveView] = useState<'catalog' | 'deals' | 'reviews'>('catalog');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const {
     commerceProducts,
@@ -64,7 +68,7 @@ export const CommerceSubDashboard: React.FC<CommerceSubDashboardProps> = ({
               {isBn ? 'রিটেইল ও হোলসেল ক্যাটালগ ম্যানেজমেন্ট' : 'Commerce Product Catalog'}
             </h3>
             <p className="text-xs text-[var(--pm-muted)]">
-              {isBn ? 'খুচরা এবং পাইকারি পণ্যের ইনভেন্টরি, দাম ও প্রমোশন পোস্ট তৈরি করুন' : 'Manage retail stock, wholesale discount tiers & publish promo feed posts'}
+              {isBn ? 'খুচরা এবং পাইকারি পণ্যের ইনভেন্টরি, ফ্ল্যাশ ডিল ও রিভিউ পরিচালনা করুন' : 'Manage retail stock, wholesale tiers, flash deals & customer reviews'}
             </p>
           </div>
         </div>
@@ -92,37 +96,93 @@ export const CommerceSubDashboard: React.FC<CommerceSubDashboardProps> = ({
         </div>
       </div>
 
-      <InventoryToolbar
-        isBn={isBn}
-        searchQuery={searchQuery}
-        filter={inventoryFilter}
-        visibleCount={filteredProducts.length}
-        totalCount={commerceProducts.length}
-        onSearchChange={setSearchQuery}
-        onFilterChange={setInventoryFilter}
-      />
+      {/* Sub-View Switcher */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <button
+          type="button"
+          onClick={() => setActiveView('catalog')}
+          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+            activeView === 'catalog'
+              ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-xs'
+              : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
+          }`}
+        >
+          <Package className="w-3.5 h-3.5" />
+          <span>{isBn ? `ক্যাটালগ SKU (${commerceProducts.length})` : `Catalog SKUs (${commerceProducts.length})`}</span>
+        </button>
 
-      {/* Catalog Grid */}
-      {filteredProducts.length > 0 ? (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {filteredProducts.map((item) => (
-          <div key={item.id} ref={item.id === editProductId ? editRef : null}>
-            <InventoryProductCard
-              item={item}
-              isBn={isBn}
-              isHighlighted={item.id === editProductId}
-              onCreatePromoPost={onCreatePromoPost}
-            />
-          </div>
-        ))}
+        <button
+          type="button"
+          onClick={() => setActiveView('deals')}
+          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+            activeView === 'deals'
+              ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-xs'
+              : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5" />
+          <span>{isBn ? 'ফ্ল্যাশ ডিল ম্যানেজার' : 'Flash Deals'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('reviews')}
+          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+            activeView === 'reviews'
+              ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-xs'
+              : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
+          }`}
+        >
+          <Star className="w-3.5 h-3.5" />
+          <span>{isBn ? 'ক্রেতা রিভিউ' : 'Customer Reviews'}</span>
+        </button>
       </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-[var(--pm-border)] bg-[var(--pm-card)] p-10 text-center">
-          <Package className="w-8 h-8 mx-auto text-[var(--pm-muted)] mb-2" />
-          <p className="text-sm font-bold text-[var(--pm-text)]">{isBn ? 'কোনো প্রোডাক্ট পাওয়া যায়নি' : 'No inventory items found'}</p>
-          <p className="text-xs text-[var(--pm-muted)] mt-1">{isBn ? 'সার্চ বা স্টক ফিল্টার পরিবর্তন করুন।' : 'Adjust your search or stock filter.'}</p>
-        </div>
+
+      {activeView === 'catalog' && (
+        <>
+          <InventoryToolbar
+            isBn={isBn}
+            searchQuery={searchQuery}
+            filter={inventoryFilter}
+            visibleCount={filteredProducts.length}
+            totalCount={commerceProducts.length}
+            onSearchChange={setSearchQuery}
+            onFilterChange={setInventoryFilter}
+          />
+
+          {/* Catalog Grid */}
+          {filteredProducts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {filteredProducts.map((item) => (
+                <div key={item.id} ref={item.id === editProductId ? editRef : null}>
+                  <InventoryProductCard
+                    item={item}
+                    isBn={isBn}
+                    isHighlighted={item.id === editProductId}
+                    onCreatePromoPost={onCreatePromoPost}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[var(--pm-border)] bg-[var(--pm-card)] p-10 text-center">
+              <Package className="w-8 h-8 mx-auto text-[var(--pm-muted)] mb-2" />
+              <p className="text-sm font-bold text-[var(--pm-text)]">{isBn ? 'কোনো প্রোডাক্ট পাওয়া যায়নি' : 'No inventory items found'}</p>
+              <p className="text-xs text-[var(--pm-muted)] mt-1">{isBn ? 'সার্চ বা স্টক ফিল্টার পরিবর্তন করুন।' : 'Adjust your search or stock filter.'}</p>
+            </div>
+          )}
+        </>
       )}
+
+      {activeView === 'deals' && (
+        <SellerDealManager
+          products={commerceProducts}
+          storeId={storeId}
+          storeName={storeName}
+        />
+      )}
+
+      {activeView === 'reviews' && <SellerReviewManager />}
 
       <ProductEditorModal
         isOpen={isAddModalOpen}

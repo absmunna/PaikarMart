@@ -21,11 +21,18 @@ import { logisticsRouter } from './modules/logistics/logisticsRoutes.js';
 import { vendorRouter } from './modules/vendors/vendorRoutes.js';
 import { retailRouter } from './modules/retail/retailRoutes.js';
 import { authRouter } from './modules/auth/authRoutes.js';
-
 import { catalogRouter } from './modules/catalog/catalogRoutes.js';
 import { analyticsRouter } from './modules/analytics/analyticsRoutes.js';
+import { notificationRouter } from './modules/notifications/notificationRoutes.js';
+import { paymentRouter } from './modules/payment/paymentRoutes.js';
+import rfqRouter from './modules/rfq/rfqRoutes.js';
 import identityRouter from './modules/identity/identityRoutes.js';
-import { requireFirebaseAuth } from './middleware/requireFirebaseAuth.js';
+import storageRouter from './modules/storage/storageRoutes.js';
+import { requireFirebaseAuth, resolveFirebaseProjectId } from './middleware/requireFirebaseAuth.js';
+import { aiRateLimiter, authRateLimiter, generalRateLimiter } from './middleware/rateLimit.js';
+import { sanitizeApiInputs } from './middleware/sanitize.js';
+import { securityHeadersMiddleware } from './middleware/securityHeaders.js';
+import { auditMiddleware } from './middleware/audit.js';
 import { checkDatabaseConnection, getStoredFeedPosts, insertStoredPost, supabaseAdmin } from './services/dbService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +40,12 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = backendEnv.port;
+
+// Trust first proxy hop (Render / Cloud Run / AI Studio reverse proxy) for accurate rate-limiting IP resolution
+app.set('trust proxy', 1);
+
+// Iframe-safe hardened security headers (intentionally omits X-Frame-Options to preserve AI Studio preview iframe)
+app.use(securityHeadersMiddleware);
 
 // Restrict browser API access to configured app origins, same-host requests, and local development.
 const configuredOrigins = getConfiguredCorsOrigins();
@@ -89,7 +102,12 @@ if (assetPath) {
   app.use('/src/assets', express.static(assetPath));
 }
 
-app.use('/api/ai', aiRouter);
+// Sanitize JSON/query inputs, audit security/mutation routes, and apply tiered rate limits across API routes
+app.use('/api', sanitizeApiInputs);
+app.use('/api', auditMiddleware);
+app.use('/api', generalRateLimiter);
+
+app.use('/api/ai', aiRateLimiter, aiRouter);
 app.use('/api/messages', messagingRouter);
 app.use('/api/wholesale', wholesaleRouter);
 app.use('/api/wallet', walletRouter);
@@ -98,16 +116,38 @@ app.use('/api/orders', orderRouter);
 app.use('/api/logistics', logisticsRouter);
 app.use('/api/vendors', vendorRouter);
 app.use('/api/retail', retailRouter);
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authRateLimiter, authRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/notifications', notificationRouter);
+app.use('/api/payment', paymentRouter);
+app.use('/api/rfq', rfqRouter);
+app.use('/api/forecasting', rfqRouter);
+app.use('/api/identity', identityRouter);
+app.use('/api/storage', storageRouter);
+
+// Versioned /api/v1/* aliases for seamless compatibility with PaikarMart-web production clients
+app.use('/api/v1/ai', aiRateLimiter, aiRouter);
+app.use('/api/v1/messages', messagingRouter);
+app.use('/api/v1/wholesale', wholesaleRouter);
+app.use('/api/v1/wallet', walletRouter);
+app.use('/api/v1/escrow', escrowRouter);
+app.use('/api/v1/orders', orderRouter);
+app.use('/api/v1/logistics', logisticsRouter);
+app.use('/api/v1/vendors', vendorRouter);
+app.use('/api/v1/retail', retailRouter);
+app.use('/api/v1/auth', authRateLimiter, authRouter);
+app.use('/api/v1/catalog', catalogRouter);
+app.use('/api/v1/analytics', analyticsRouter);
+app.use('/api/v1/notifications', notificationRouter);
+app.use('/api/v1/payment', paymentRouter);
+app.use('/api/v1/rfq', rfqRouter);
+app.use('/api/v1/forecasting', rfqRouter);
+app.use('/api/v1/identity', identityRouter);
+app.use('/api/v1/verifications', identityRouter);
+app.use('/api/v1/storage', storageRouter);
 
 // In-memory fallback data store for offline or pre-configured dev environments
-
-// ----- Identity Module -----
-
-app.use('/api/identity', identityRouter);
-
 let serverPosts = [
   {
     id: 'post_srv_1',
@@ -122,12 +162,12 @@ let serverPosts = [
 ];
 
 // REST API Endpoints
-app.get('/api/health', async (_req: Request, res: Response) => {
+const handleHealthCheck = async (_req: Request, res: Response) => {
   const dbStatus = await checkDatabaseConnection();
 
   res.json({
     status: 'ok',
-    version: '1.6.0',
+    version: '1.7.0',
     environment: process.env.NODE_ENV || 'development',
     architecture: {
       backend: 'Render / Cloud Run Web Service (Node.js/Express)',
@@ -136,19 +176,22 @@ app.get('/api/health', async (_req: Request, res: Response) => {
       supabaseAdminConfigured: Boolean(supabaseAdmin) && isLiveDatabaseConfigured(),
       persistentFinanceReady: isPersistentFinanceEnabled(),
       courierWebhooksReady: isCourierWebhookConfigured(),
-      firebaseProject: process.env.FIREBASE_PROJECT_ID || 'project-233907df-3a7c-4179-9a0',
+      firebaseProject: resolveFirebaseProjectId() || backendEnv.firebaseProjectId,
+      storageBackend: supabaseAdmin ? 'Supabase Storage (Signed Assets)' : 'Filename Fallback (No Cloud Bucket)',
       auth: 'Firebase Authentication (Spark Free Tier)',
       frontend: 'Vercel (Vite React SPA)'
     }
   });
-});
+};
 
-app.get('/api/feed', async (_req: Request, res: Response) => {
+app.get(['/api/health', '/api/v1/health'], handleHealthCheck);
+
+app.get(['/api/feed', '/api/v1/feed'], async (_req: Request, res: Response) => {
   const posts = await getStoredFeedPosts(serverPosts);
   res.json({ posts });
 });
 
-app.post('/api/feed/post', requireFirebaseAuth, async (req: Request, res: Response) => {
+app.post(['/api/feed/post', '/api/v1/feed/post'], requireFirebaseAuth, async (req: Request, res: Response) => {
   const content = String(req.body?.content || '').trim().slice(0, 2000);
   if (!content && !req.body?.mediaUrl && !req.body?.taggedProduct) {
     res.status(400).json({ error: 'Post content or media is required.' });
@@ -174,7 +217,7 @@ app.post('/api/feed/post', requireFirebaseAuth, async (req: Request, res: Respon
 });
 
 // Gemini AI Master Catalog Verification Endpoint
-app.post('/api/catalog/verify-product', requireFirebaseAuth, async (req: Request, res: Response) => {
+app.post(['/api/catalog/verify-product', '/api/v1/catalog/verify-product'], requireFirebaseAuth, async (req: Request, res: Response) => {
   const { title, brand, category, description, price } = req.body || {};
 
   try {
@@ -261,7 +304,11 @@ async function startServer() {
     ];
     const distPath = distCandidates.find((candidate) => fs.existsSync(candidate)) || distCandidates[0];
     app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('*', (req: Request, res: Response) => {
+      if (req.path.startsWith('/api/')) {
+        res.status(404).json({ error: 'API route not found.' });
+        return;
+      }
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   } else {

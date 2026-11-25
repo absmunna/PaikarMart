@@ -11,6 +11,7 @@ import {
 import { Order, CommerceItem, SocialPost } from '@/types';
 import { AdMobBanner } from '@/components/shared/AdMobBanner';
 import { TrendingTopicsWidget } from '@/components/shared/TrendingTopicsWidget';
+import { DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 interface DesktopRightSidebarProps {
   activeOrders: Order[];
@@ -114,7 +115,7 @@ export const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
           {featuredProducts.slice(0, 2).map((item) => (
             <div key={item.id} className="flex items-center gap-3">
               <img
-                src={item.imageUrl}
+                src={safeMediaSrc(item.imageUrl, DEFAULT_PRODUCT_IMAGE_URL)}
                 alt={item.title}
                 referrerPolicy="no-referrer"
                 className="w-12 h-12 rounded-xl object-cover shrink-0 bg-[var(--pm-surface)] border border-[var(--pm-border)]"

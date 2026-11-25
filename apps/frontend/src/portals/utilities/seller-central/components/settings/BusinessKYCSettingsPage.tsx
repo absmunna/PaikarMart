@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldCheck, FileText, CheckCircle2, AlertCircle, Building2, UploadCloud, Check } from 'lucide-react';
+import { ShieldCheck, FileText, CheckCircle2, Building2, Check } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { SmartKycChecklist } from '../SmartKycChecklist';
 
 export const BusinessKYCSettingsPage: React.FC = () => {
   const { language } = useLanguage();
@@ -62,6 +63,8 @@ export const BusinessKYCSettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <SmartKycChecklist />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   auth, 
   signInWithGoogle as firebaseGoogleSignIn, 
@@ -8,15 +8,23 @@ import {
   sendPasswordReset,
   updateProfile,
   sendEmailVerification,
+  requestPhoneOtpConfirmation,
+  requestLinkPhoneOtpConfirmation,
+  linkGoogleToCurrentUser,
+  unlinkAuthProvider,
+  changePasswordWithReauth,
+  clearPhoneRecaptcha,
   syncUserProfileToFirestore,
   validateFirestoreConnection,
   isFirebaseConfigured,
+  type ConfirmationResult,
   type FirebaseUser 
 } from '@/lib/firebase';
 import { User, UserRole } from '@/types';
 import { CURRENT_USER } from '@/data/mockData';
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
-import { syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
+import { safeMediaSrc } from '@/shared/utils';
+import { revokeAllAuthSessions, syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
 import {
   useFirebaseSupabaseSync,
   type SupabaseUserProfile
@@ -32,32 +40,65 @@ interface AuthContextType {
   lastSyncedAt: Date | null;
   loading: boolean;
   isFirebaseReady: boolean;
+  pendingPhoneNumber: string | null;
   refetchProfile: () => Promise<SupabaseUserProfile | null>;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, selectedRole?: UserRole) => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
+  sendPhoneOtp: (phone: string, containerId?: string) => Promise<string>;
+  verifyPhoneOtp: (otpCode: string) => Promise<void>;
+  clearPhoneOtpSession: () => void;
   sendPasswordReset: (email: string) => Promise<void>;
   sendEmailVerificationSignal: () => Promise<void>;
   reloadUser: () => Promise<void>;
+  sendLinkPhoneOtp: (phone: string, containerId?: string) => Promise<string>;
+  verifyLinkPhoneOtp: (otpCode: string) => Promise<void>;
+  linkGoogleProvider: () => Promise<void>;
+  unlinkProvider: (providerId: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  revokeAllSessions: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const EXPECTED_AUTH_ERROR_CODES = new Set([
+  'auth/invalid-credential',
+  'auth/wrong-password',
+  'auth/user-not-found',
+  'auth/invalid-email',
+  'auth/email-already-in-use',
+  'auth/weak-password',
+  'auth/too-many-requests',
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+  'auth/popup-blocked',
+  'auth/user-disabled',
+  'auth/operation-not-allowed',
+  'auth/invalid-verification-code',
+  'auth/code-expired',
+]);
+
+const logAuthFailure = (scope: string, err: unknown) => {
+  const code = (err as { code?: string } | null)?.code;
+  if (code && EXPECTED_AUTH_ERROR_CODES.has(code)) {
+    console.warn(`${scope} (${code}):`, (err as Error)?.message || err);
+  } else {
+    console.error(`${scope}:`, err);
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const storedUser = loadStoredData<User>('USER', CURRENT_USER);
-    console.log('[AuthContext:Init] Hydrating stored user from localStorage:', {
-      id: storedUser?.id,
-      name: storedUser?.name,
-      email: storedUser?.email,
-      role: storedUser?.role,
-      isVendor: storedUser?.isVendor,
-      balance: storedUser?.balance,
-    });
-    return storedUser;
+    return {
+      ...storedUser,
+      avatar: safeMediaSrc(storedUser?.avatar, CURRENT_USER.avatar),
+    };
   });
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [pendingPhoneNumber, setPendingPhoneNumber] = useState<string | null>(null);
+  const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
   const isFirebaseReady = isFirebaseConfigured();
 
   const handleSyncSuccess = useCallback((profile: SupabaseUserProfile, user: FirebaseUser) => {
@@ -75,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: user.displayName || profile.name || stored.name || 'PaikarMart User',
       email: user.email || profile.email || stored.email || '',
       handle: profile.handle || (user.email ? `@${user.email.split('@')[0]}` : stored.handle || `@user_${user.uid.slice(0, 6)}`),
-      avatar: user.photoURL || profile.avatar_url || stored.avatar,
+      avatar: safeMediaSrc(user.photoURL || profile.avatar_url || stored.avatar, CURRENT_USER.avatar),
       role: resolvedRole,
       isVendor: isVendorUser,
       kycStatus: profile.kyc_status || stored.kycStatus || 'none',
@@ -84,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       balance: typeof profile.wallet_balance === 'number' ? profile.wallet_balance : (stored.balance ?? 0),
       rewardPoints: typeof profile.reward_points === 'number' ? profile.reward_points : (stored.rewardPoints ?? 0),
       location: profile.location || stored.location || 'Dhaka, Bangladesh',
-      phone: profile.phone || stored.phone,
+      phone: profile.phone || user.phoneNumber || stored.phone,
     };
 
     console.log('[AuthContext:FirebaseSupabaseSync] Cross-platform identity synced:', {
@@ -115,7 +156,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: activeFirebaseUser.displayName || stored.name || 'PaikarMart User',
       email: activeFirebaseUser.email || stored.email || '',
       handle: fallbackHandle,
-      avatar: activeFirebaseUser.photoURL || stored.avatar,
+      avatar: safeMediaSrc(activeFirebaseUser.photoURL || stored.avatar, CURRENT_USER.avatar),
+      phone: activeFirebaseUser.phoneNumber || stored.phone,
     };
 
     setCurrentUser(fallbackUser);
@@ -154,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await refetchProfile();
       }
     } catch (err) {
-      console.error('[AuthContext:GoogleSignIn] Google Sign-in error:', err);
+      logAuthFailure('[AuthContext:GoogleSignIn] Google Sign-in rejected', err);
       throw err;
     } finally {
       setActionLoading(false);
@@ -208,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await refetchProfile();
       }
     } catch (err) {
-      console.error('[AuthContext:Register] Email Registration Failed:', err);
+      logAuthFailure('[AuthContext:Register] Email Registration Rejected', err);
       throw err;
     } finally {
       setActionLoading(false);
@@ -226,12 +268,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await refetchProfile();
       }
     } catch (err) {
-      console.error('[AuthContext:Login] Email Login Failed:', err);
+      logAuthFailure('[AuthContext:Login] Email Login Rejected', err);
       throw err;
     } finally {
       setActionLoading(false);
     }
   };
+
+  const sendPhoneOtp = async (phone: string, containerId = 'pm-recaptcha-container'): Promise<string> => {
+    try {
+      setActionLoading(true);
+      const { confirmation, normalizedPhone } = await requestPhoneOtpConfirmation(phone, containerId);
+      phoneConfirmationRef.current = confirmation;
+      setPendingPhoneNumber(normalizedPhone);
+      return normalizedPhone;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const verifyPhoneOtp = async (otpCode: string): Promise<void> => {
+    const confirmation = phoneConfirmationRef.current;
+    if (!confirmation) {
+      const err = new Error('OTP session expired. Please request a new code.') as Error & { code?: string };
+      err.code = 'auth/code-expired';
+      throw err;
+    }
+    try {
+      setActionLoading(true);
+      const result = await confirmation.confirm(otpCode.trim());
+      phoneConfirmationRef.current = null;
+      setPendingPhoneNumber(null);
+      clearPhoneRecaptcha();
+      if (result.user) {
+        await refetchProfile();
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const clearPhoneOtpSession = useCallback(() => {
+    phoneConfirmationRef.current = null;
+    setPendingPhoneNumber(null);
+    clearPhoneRecaptcha();
+  }, []);
 
   const sendEmailVerificationSignal = async () => {
     if (auth.currentUser) {
@@ -249,10 +330,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendLinkPhoneOtp = async (phone: string, containerId = 'pm-link-recaptcha-container'): Promise<string> => {
+    try {
+      setActionLoading(true);
+      const { confirmation, normalizedPhone } = await requestLinkPhoneOtpConfirmation(phone, containerId);
+      phoneConfirmationRef.current = confirmation;
+      setPendingPhoneNumber(normalizedPhone);
+      return normalizedPhone;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const verifyLinkPhoneOtp = async (otpCode: string): Promise<void> => {
+    const confirmation = phoneConfirmationRef.current;
+    if (!confirmation) {
+      const err = new Error('OTP session expired. Please request a new code.') as Error & { code?: string };
+      err.code = 'auth/code-expired';
+      throw err;
+    }
+    try {
+      setActionLoading(true);
+      const result = await confirmation.confirm(otpCode.trim());
+      phoneConfirmationRef.current = null;
+      setPendingPhoneNumber(null);
+      clearPhoneRecaptcha();
+      if (result.user) {
+        await result.user.reload();
+        if (result.user.phoneNumber) {
+          await syncAuthenticatedProfile({
+            name: currentUser.name || result.user.displayName || 'PaikarMart User',
+            phone: result.user.phoneNumber,
+          }).catch(() => undefined);
+        }
+        await refetchProfile();
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const linkGoogleProvider = async (): Promise<void> => {
+    try {
+      setActionLoading(true);
+      const updatedUser = await linkGoogleToCurrentUser();
+      await updatedUser.reload();
+      await refetchProfile();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const unlinkProvider = async (providerId: string): Promise<void> => {
+    try {
+      setActionLoading(true);
+      const updatedUser = await unlinkAuthProvider(providerId);
+      await updatedUser.reload();
+      await refetchProfile();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    try {
+      setActionLoading(true);
+      await changePasswordWithReauth(currentPassword, newPassword);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const revokeAllSessions = async (): Promise<void> => {
+    try {
+      setActionLoading(true);
+      await revokeAllAuthSessions().catch(() => undefined);
+      await signOut();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const signOut = async () => {
     try {
       console.log('[AuthContext:SignOut] Signing out of Firebase...');
       setActionLoading(true);
+      clearPhoneOtpSession();
       await signOutFirebase();
       const guestUser: User = {
         ...CURRENT_USER,
@@ -285,13 +448,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastSyncedAt,
         loading: actionLoading || syncLoading,
         isFirebaseReady,
+        pendingPhoneNumber,
         refetchProfile,
         signInWithGoogle,
         signUpWithEmail,
         signInWithEmail,
+        sendPhoneOtp,
+        verifyPhoneOtp,
+        clearPhoneOtpSession,
         sendPasswordReset,
         sendEmailVerificationSignal,
         reloadUser,
+        sendLinkPhoneOtp,
+        verifyLinkPhoneOtp,
+        linkGoogleProvider,
+        unlinkProvider,
+        changePassword,
+        revokeAllSessions,
         signOut,
       }}
     >

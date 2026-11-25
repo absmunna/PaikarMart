@@ -18,6 +18,9 @@ import { AccountConversionPopup } from '@/features/marketplace/components/Accoun
 import { verifyUniqueUser } from '@/features/auth';
 import { getEffectiveUnitPrice } from '@/features/marketplace/utils/commerceUtils';
 import { retailApiClient } from '@/features/marketplace/services/retailApiClient';
+import { SandboxPaymentModal } from '@/features/wallet/components/SandboxPaymentModal';
+import type { PaymentGatewayProviderId } from '@/features/wallet/services/paymentGatewayClient';
+import { auth } from '@/lib/firebase';
 
 const handleVerifyUser = async (data: any) => {
   return await verifyUniqueUser(data.email, data.phone);
@@ -60,6 +63,9 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [showConversion, setShowConversion] = useState(false);
   const [guestData, setGuestData] = useState<any>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGatewayProviderId>('bkash');
+  const [isGatewayCheckoutOpen, setIsGatewayCheckoutOpen] = useState(false);
+  const [pendingCheckoutData, setPendingCheckoutData] = useState<any>(null);
 
   // States for registered user quick checkout
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -155,7 +161,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
   };
 
-  const handlePlaceOrder = async (data?: any) => {
+  const submitOrderAfterPayment = async (data?: any, paymentTrxId?: string) => {
     if (items.length === 0) return;
     setCheckoutError(null);
     setIsProcessing(true);
@@ -175,7 +181,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
         tax,
         promoCode: appliedCode || undefined,
         deliveryAddress: resolvedAddress,
-        paymentMethod: resolvedPayment,
+        paymentMethod: paymentTrxId ? `${resolvedPayment} (${paymentTrxId})` : resolvedPayment,
         estimatedArrival: '30 - 45 Minutes',
         buyerName: resolvedBuyerName,
         buyerPhone: resolvedBuyerPhone,
@@ -222,6 +228,20 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePlaceOrder = async (data?: any) => {
+    const chosenMethod = (data?.paymentMethod || paymentMethod) as string;
+    const isOnlineGateway = chosenMethod !== 'Cash on Delivery';
+
+    if (isOnlineGateway && auth.currentUser) {
+      setSelectedGateway(chosenMethod === 'Credit / Debit Card' ? 'sslcommerz' : selectedGateway);
+      setPendingCheckoutData(data || null);
+      setIsGatewayCheckoutOpen(true);
+      return;
+    }
+
+    await submitOrderAfterPayment(data);
   };
 
   return (
@@ -495,7 +515,13 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         <button
                           key={method}
                           type="button"
-                          onClick={() => setPaymentMethod(method)}
+                          onClick={() => {
+                            setPaymentMethod(method);
+                            if (method === 'Credit / Debit Card') setSelectedGateway('sslcommerz');
+                            if (method === 'Mobile Wallet (bKash/Nagad/Rocket)' && selectedGateway === 'sslcommerz') {
+                              setSelectedGateway('bkash');
+                            }
+                          }}
                           className={`p-2.5 rounded-xl border text-xs font-medium text-left flex items-center justify-between transition-colors cursor-pointer ${
                             paymentMethod === method
                               ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] font-bold'
@@ -507,6 +533,28 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                         </button>
                       ))}
                     </div>
+                    {paymentMethod === 'Mobile Wallet (bKash/Nagad/Rocket)' && auth.currentUser && (
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        {([
+                          { id: 'bkash', label: 'bKash' },
+                          { id: 'nagad', label: 'Nagad' },
+                          { id: 'sslcommerz', label: 'Rocket / SSL' },
+                        ] as const).map((gw) => (
+                          <button
+                            key={gw.id}
+                            type="button"
+                            onClick={() => setSelectedGateway(gw.id)}
+                            className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                              selectedGateway === gw.id
+                                ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]'
+                                : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)]'
+                            }`}
+                          >
+                            {gw.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Server-Validated Promo Code */}
@@ -598,6 +646,20 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
           }}
           guestEmail={guestData?.email}
           guestPhone={guestData?.phone}
+        />
+
+        <SandboxPaymentModal
+          isOpen={isGatewayCheckoutOpen}
+          onClose={() => setIsGatewayCheckoutOpen(false)}
+          provider={selectedGateway}
+          amount={Math.max(10, total)}
+          purpose="order_checkout"
+          customerName={pendingCheckoutData?.name || tempUserDetails.name || currentUser?.name}
+          customerPhone={pendingCheckoutData?.phone || tempUserDetails.phone || currentUser?.phone}
+          onVerified={(verified) => {
+            setIsGatewayCheckoutOpen(false);
+            void submitOrderAfterPayment(pendingCheckoutData, verified.trxId);
+          }}
         />
       </div>
     </div>

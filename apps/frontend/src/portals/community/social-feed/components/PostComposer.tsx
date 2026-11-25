@@ -1,15 +1,30 @@
 import React, { useState, useMemo } from 'react';
-import { Image, Tag, Smile, Send, X, ShoppingBag, ShieldCheck, Sparkles, AlertTriangle, CheckCircle2, Gavel, Home, Package, Utensils } from 'lucide-react';
+import {
+  Image,
+  Tag,
+  Smile,
+  Send,
+  X,
+  ShoppingBag,
+  ShieldCheck,
+  Sparkles,
+  AlertTriangle,
+  Gavel,
+  Home,
+  Package,
+  Utensils
+} from 'lucide-react';
 import { User, CommerceItem, TaggedProduct, PostType, CitizenPostCategory } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 interface PostComposerProps {
   currentUser: User;
   commerceItems: CommerceItem[];
   onCreatePost: (
-    content: string, 
-    taggedProduct?: TaggedProduct, 
-    mediaUrl?: string, 
+    content: string,
+    taggedProduct?: TaggedProduct,
+    mediaUrl?: string,
     postType?: PostType,
     citizenCategory?: CitizenPostCategory,
     aiSafetyVerified?: boolean,
@@ -26,7 +41,6 @@ export const PostComposer: React.FC<PostComposerProps> = ({
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
-
   const [content, setContent] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<CommerceItem | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
@@ -34,14 +48,18 @@ export const PostComposer: React.FC<PostComposerProps> = ({
   const [postType, setPostType] = useState<PostType>('regular');
   const [citizenCategory, setCitizenCategory] = useState<CitizenPostCategory>('general');
 
-  // AI Safety & Moderation Analysis
+  // Real-time AI Safety & Moderation Analysis
   const aiRiskAssessment = useMemo<'safe' | 'low_risk' | 'high_risk_flagged'>(() => {
     if (!content.trim()) return 'safe';
     const lower = content.toLowerCase();
-    const highRiskKeywords = ['অস্ত্র', 'গান', 'weapon', 'gun', 'মাদক', 'ড্রাগ', 'drug', 'সুদ', 'বেটিং', 'gambling', 'crypto scam', 'mlm', 'জাল টাকা', 'হুমকি'];
-    const hasHighRisk = highRiskKeywords.some(keyword => lower.includes(keyword));
-    if (hasHighRisk) return 'high_risk_flagged';
-    return 'safe';
+    const highRiskKeywords = [
+      'অস্ত্র', 'পিস্তল', 'বন্দুক', 'weapon', 'gun', 'explosive',
+      'মাদক', 'হেরোইন', 'ড্রাগ', 'drug', 'ইয়াবা', 'গাঁজা',
+      'সুদ', 'বেটিং', 'gambling', 'ক্যাসিনো', 'casino', 'পনজি স্ক্যাম', 'pyramid scheme',
+      'জাল টাকা', 'হুমকি', 'fake passport', 'জাল এনআইডি'
+    ];
+    const hasHighRisk = highRiskKeywords.some((keyword) => lower.includes(keyword));
+    return hasHighRisk ? 'high_risk_flagged' : 'safe';
   }, [content]);
 
   const isCitizenVerified = currentUser.personalVerification?.status === 'verified';
@@ -50,6 +68,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() && !selectedProduct && !mediaPreview) return;
+
     if (requiresCitizenVerification && !isCitizenVerified && onOpenVerificationModal) {
       onOpenVerificationModal();
       return;
@@ -69,9 +88,9 @@ export const PostComposer: React.FC<PostComposerProps> = ({
     }
 
     onCreatePost(
-      content, 
-      tagged, 
-      mediaPreview || (selectedProduct ? selectedProduct.imageUrl : undefined), 
+      content,
+      tagged,
+      mediaPreview || (selectedProduct ? selectedProduct.imageUrl : undefined),
       postType,
       citizenCategory,
       aiRiskAssessment === 'safe',
@@ -96,7 +115,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
       <div className="flex items-start gap-3 sm:gap-4">
         <div className="relative shrink-0">
           <img
-            src={currentUser.avatar}
+            src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
             alt={currentUser.name}
             referrerPolicy="no-referrer"
             className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover ring-2 ring-[var(--pm-border)] shadow-sm"
@@ -108,12 +127,12 @@ export const PostComposer: React.FC<PostComposerProps> = ({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={
-              citizenCategory === 'homemade' ? (isBn ? "হোমমেড খাবার বা হস্তশিল্পের বিবরণ, উপাদান ও দাম লিখুন..." : "Describe your homemade food or craft...") :
-              citizenCategory === 'bid' ? (isBn ? "নিলামে তুলতে চান? শুরুর বিড মূল্য, বিবরণ ও সময়সীমা লিখুন..." : "Describe item for auction and starting bid...") :
-              citizenCategory === 'property_rent' ? (isBn ? "ফ্ল্যাট ভাড়া বা প্রোপার্টি বিবরণ, ভাড়া ও অবস্থান লিখুন..." : "Rental flat details, rent and location...") :
-              citizenCategory === 'used_goods' ? (isBn ? "ব্যবহৃত পণ্যের অবস্থা, কতদিন ব্যবহার করেছেন এবং কাঙ্ক্ষিত মূল্য..." : "Used item condition, usage period and price...") :
-              postType === 'demand' ? "What are you looking for? (Quantity, Budget, Location...)" :
-              postType === 'sale' ? "What are you selling? (Price, Condition, Specs...)" :
+              citizenCategory === 'homemade' ? (isBn ? 'হোমমেড খাবার বা হস্তশিল্পের বিবরণ, উপাদান ও দাম লিখুন...' : 'Describe your homemade food or craft...') :
+              citizenCategory === 'bid' ? (isBn ? 'নিলামে তুলতে চান? শুরুর বিড মূল্য, বিবরণ ও সময়সীমা লিখুন...' : 'Describe item for auction and starting bid...') :
+              citizenCategory === 'property_rent' ? (isBn ? 'ফ্ল্যাট ভাড়া বা প্রোপার্টি বিবরণ, ভাড়া ও অবস্থান লিখুন...' : 'Rental flat details, rent and location...') :
+              citizenCategory === 'used_goods' ? (isBn ? 'ব্যবহৃত পণ্যের অবস্থা, কতদিন ব্যবহার করেছেন এবং কাঙ্ক্ষিত মূল্য...' : 'Used item condition, usage period and price...') :
+              postType === 'demand' ? 'What are you looking for? (Quantity, Budget, Location...)' :
+              postType === 'sale' ? 'What are you selling? (Price, Condition, Specs...)' :
               `What's on your mind, ${currentUser.name.split(' ')[0]}?`
             }
             rows={2}
@@ -141,7 +160,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
                   onClick={() => setCitizenCategory(cat.id as CitizenPostCategory)}
                   className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs scale-102'
+                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
                       : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] border border-[var(--pm-border)]'
                   }`}
                 >
@@ -152,38 +171,35 @@ export const PostComposer: React.FC<PostComposerProps> = ({
             })}
           </div>
 
+          {requiresCitizenVerification && !isCitizenVerified && (
+            <div className="mt-2 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-[11px] font-semibold flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                {isBn
+                  ? 'নাগরিক ক্লাসিফায়েড পোস্ট করতে অনুগ্রহ করে প্রোফাইল ভেরিফিকেশন সম্পন্ন করুন।'
+                  : 'Complete Personal Citizen Verification to publish classified listings.'}
+              </span>
+              {onOpenVerificationModal && (
+                <button
+                  type="button"
+                  onClick={onOpenVerificationModal}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold shrink-0 cursor-pointer"
+                >
+                  {isBn ? 'ভেরিফাই' : 'Verify'}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Real-time AI Safety Check Alert */}
           {aiRiskAssessment === 'high_risk_flagged' && (
             <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-center gap-2 animate-fadeIn">
               <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
               <span>
-                {isBn 
-                  ? '⚠️ AI নিরাপত্তা সতর্কতা: এই পোস্টে সংবেদনশীল বা উচ্চ ঝুঁকির বিষয় শনাক্ত হয়েছে। লাইভ হওয়ার আগে অতিরিক্ত নিরাপত্তা যাচাই লাগবে।' 
-                  : '⚠️ AI Safety Alert: Sensitive terms detected. Extra manual safety review required before going live.'}
+                {isBn
+                  ? 'AI সেফটি সতর্কতা: পোস্টটি নীতিমালা রিভিউয়ের জন্য (Pending Human Review) চিহ্নিত হতে পারে।'
+                  : 'AI Safety Alert: Post contains restricted keywords and may be held for human review.'}
               </span>
-            </div>
-          )}
-
-          {/* Verification requirement warning for citizen categories */}
-          {requiresCitizenVerification && !isCitizenVerified && (
-            <div className="mt-2.5 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-semibold flex items-center justify-between gap-2 animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 shrink-0 text-blue-500" />
-                <span>
-                  {isBn 
-                    ? 'হোমমেড, নিলাম, ফ্ল্যাট ভাড়া বা ব্যবহৃত পণ্য বিক্রির জন্য নাগরিক ভেরিফিকেশন প্রয়োজন।' 
-                    : 'Citizen verification required to post homemade items, auctions, or flat rent.'}
-                </span>
-              </div>
-              {onOpenVerificationModal && (
-                <button
-                  type="button"
-                  onClick={onOpenVerificationModal}
-                  className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold shrink-0 hover:bg-blue-700 cursor-pointer"
-                >
-                  {isBn ? 'ভেরিফাই করুন' : 'Verify'}
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -195,7 +211,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
           {selectedProduct && (
             <div className="relative shrink-0 w-48 p-2.5 rounded-[1.25rem] bg-[var(--pm-accent-soft)] border border-[var(--pm-accent-border)] flex items-center gap-3 group">
               <img
-                src={selectedProduct.imageUrl}
+                src={safeMediaSrc(selectedProduct.imageUrl, DEFAULT_PRODUCT_IMAGE_URL)}
                 alt={selectedProduct.title}
                 referrerPolicy="no-referrer"
                 className="w-12 h-12 rounded-xl object-cover shrink-0 bg-[var(--pm-card)]"
@@ -214,9 +230,9 @@ export const PostComposer: React.FC<PostComposerProps> = ({
             </div>
           )}
 
-          {mediaPreview && (
+          {mediaPreview?.trim() && (
             <div className="relative shrink-0 w-32 aspect-square rounded-[1.25rem] overflow-hidden group">
-              <img src={mediaPreview} alt="Preview" className="w-full h-full object-cover" />
+              <img src={mediaPreview.trim()} alt="Preview" className="w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => setMediaPreview(null)}
@@ -256,7 +272,7 @@ export const PostComposer: React.FC<PostComposerProps> = ({
                 className="flex items-center gap-3 p-2 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] hover:shadow-sm transition-all text-left cursor-pointer"
               >
                 <img
-                  src={item.imageUrl}
+                  src={safeMediaSrc(item.imageUrl, DEFAULT_PRODUCT_IMAGE_URL)}
                   alt={item.title}
                   referrerPolicy="no-referrer"
                   className="w-10 h-10 rounded-lg object-cover shrink-0"

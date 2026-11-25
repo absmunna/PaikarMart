@@ -8,6 +8,7 @@ export * from './components/CheckoutSuccessSummary';
 export * from './components/MarketplaceFilters';
 export * from './components/CategoryBar';
 export * from './components/VoucherDealsStrip';
+export * from './components/FlashDealsSection';
 export * from './components/PrescriptionUploadModal';
 export * from './components/ProductEngagementSection';
 export * from './components/ProductComparisonModal';

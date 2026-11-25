@@ -11,11 +11,14 @@ import {
   type UserRole
 } from '../../../../packages/shared/src/index.js';
 import { getEscrowSummaryForUser } from '../wallet/walletService.js';
+import { invalidateAuthProfileCache } from '../../middleware/requireFirebaseAuth.js';
+import { resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
 
 export interface ServerVendorDocument {
   id: string;
   type: 'Trade License' | 'NID / Passport' | 'TIN Certificate' | 'Vehicle Registration';
   fileName: string;
+  fileUrl?: string;
   status: 'pending' | 'verified' | 'rejected';
   uploadedAt: string;
 }
@@ -281,6 +284,9 @@ export function submitVendorKycApplication(payload: VendorSubmissionPayload): {
           id: d.id || `doc_${Date.now()}_${i}`,
           type: d.type,
           fileName: d.fileName,
+          ...(typeof d.fileUrl === 'string' && d.fileUrl.startsWith('https://')
+            ? { fileUrl: d.fileUrl.slice(0, 512) }
+            : {}),
           status: 'pending' as const,
           uploadedAt: new Date().toISOString().split('T')[0]
         }))
@@ -376,6 +382,144 @@ export function submitVendorKycApplication(payload: VendorSubmissionPayload): {
   };
 }
 
+export async function syncKycSubmissionToDatabase(
+  applicantAuthUid: string,
+  vendorProfile: ServerVendorProfile
+): Promise<void> {
+  if (!supabaseAdmin || !applicantAuthUid) return;
+  try {
+    const profileUuid = await resolveProfileUuidByAuthUid(applicantAuthUid);
+    if (!profileUuid) return;
+
+    const mappedCategory = ['wholesale', 'retail', 'restaurant', 'services', 'rideshare', 'grocery'].includes(
+      vendorProfile.category
+    )
+      ? vendorProfile.category
+      : 'retail';
+
+    await supabaseAdmin
+      .from('private_user_details')
+      .upsert(
+        {
+          profile_id: profileUuid,
+          nid_passport_number: vendorProfile.nidNumber,
+          tax_identification_no: vendorProfile.taxIdentificationNumber,
+          payout_bank_name: vendorProfile.payoutAccount.type,
+          payout_account_no: vendorProfile.payoutAccount.accountNumber,
+          payout_routing_no: vendorProfile.payoutAccount.routingNumber || null,
+        },
+        { onConflict: 'profile_id' }
+      );
+
+    const storeHandle = `${normalizeHandle(vendorProfile.handle || vendorProfile.storeName).slice(0, 48)}_${profileUuid.slice(0, 6)}`;
+    const { data: existingStore } = await supabaseAdmin
+      .from('stores')
+      .select('id')
+      .eq('owner_id', profileUuid)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let storeId = existingStore?.id ? String(existingStore.id) : null;
+    if (storeId) {
+      await supabaseAdmin
+        .from('stores')
+        .update({
+          store_name: vendorProfile.storeName,
+          legal_entity_name: vendorProfile.legalEntityName,
+          business_reg_no: vendorProfile.businessRegNumber,
+          tax_id: vendorProfile.taxIdentificationNumber,
+          seller_tier: vendorProfile.sellerTier,
+          kyc_status: vendorProfile.kycStatus,
+          category: mappedCategory,
+          commission_tier: vendorProfile.commissionTier,
+          status: 'pending',
+          is_verified: false,
+        })
+        .eq('id', storeId);
+    } else {
+      const inserted = await supabaseAdmin
+        .from('stores')
+        .insert({
+          owner_id: profileUuid,
+          handle: storeHandle,
+          store_name: vendorProfile.storeName,
+          legal_entity_name: vendorProfile.legalEntityName,
+          business_reg_no: vendorProfile.businessRegNumber,
+          tax_id: vendorProfile.taxIdentificationNumber,
+          seller_tier: vendorProfile.sellerTier,
+          kyc_status: vendorProfile.kycStatus,
+          category: mappedCategory,
+          commission_tier: vendorProfile.commissionTier,
+          status: 'pending',
+          is_verified: false,
+        })
+        .select('id')
+        .maybeSingle();
+      storeId = inserted.data?.id ? String(inserted.data.id) : null;
+    }
+
+    if (storeId) {
+      await supabaseAdmin
+        .from('vendor_memberships')
+        .upsert(
+          {
+            store_id: storeId,
+            profile_id: profileUuid,
+            active_roles: vendorProfile.activeRoles,
+            status: 'pending',
+            is_primary: true,
+          },
+          { onConflict: 'store_id,profile_id' }
+        );
+    }
+
+    invalidateAuthProfileCache(applicantAuthUid);
+  } catch (err) {
+    console.warn('[vendorService] Non-fatal Supabase KYC submission sync warning:', err);
+  }
+}
+
+export async function getKycApplicationsForUser(applicantAuthUid: string): Promise<{
+  applications: KycApplicationRecord[];
+  latestStatus: KycStatus;
+  verifiedStore?: Record<string, unknown> | null;
+}> {
+  const memApps = kycApplicationQueue.filter((app) => app.applicantId === applicantAuthUid);
+  let dbStore: Record<string, unknown> | null = null;
+
+  if (supabaseAdmin && applicantAuthUid) {
+    try {
+      const profileUuid = await resolveProfileUuidByAuthUid(applicantAuthUid);
+      if (profileUuid) {
+        const { data } = await supabaseAdmin
+          .from('stores')
+          .select('id, store_name, kyc_status, seller_tier, is_verified, status, commission_tier, created_at')
+          .eq('owner_id', profileUuid)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          dbStore = data;
+        }
+      }
+    } catch {
+      // Non-fatal fallback to in-memory status
+    }
+  }
+
+  const latestStatus =
+    (dbStore?.kyc_status as KycStatus | undefined) ||
+    memApps[0]?.status ||
+    'none';
+
+  return {
+    applications: memApps,
+    latestStatus,
+    verifiedStore: dbStore,
+  };
+}
+
 export function listKycQueue(requesterRole?: UserRole): {
   authorized: boolean;
   applications: KycApplicationRecord[];
@@ -464,6 +608,123 @@ export function decideKycApplication(params: {
   }
 
   return { ok: true, statusCode: 200, application: app };
+}
+
+export async function syncKycDecisionToDatabase(application: KycApplicationRecord): Promise<void> {
+  if (!supabaseAdmin || !application.applicantId) return;
+  try {
+    const profileUuid = await resolveProfileUuidByAuthUid(application.applicantId);
+    if (!profileUuid) return;
+
+    const isApproved = application.status === 'approved';
+    const membershipStatus = isApproved
+      ? 'active'
+      : application.status === 'suspended'
+      ? 'suspended'
+      : 'revoked';
+
+    await supabaseAdmin
+      .from('stores')
+      .update({
+        kyc_status: application.status,
+        is_verified: isApproved,
+        status: isApproved ? 'active' : application.status === 'suspended' ? 'suspended' : 'pending',
+      })
+      .eq('owner_id', profileUuid);
+
+    await supabaseAdmin
+      .from('vendor_memberships')
+      .update({
+        status: membershipStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('profile_id', profileUuid);
+
+    if (isApproved) {
+      const { data: profileRow } = await supabaseAdmin
+        .from('profiles')
+        .select('role, active_roles, trust_level')
+        .eq('id', profileUuid)
+        .maybeSingle();
+
+      const existingRoles = Array.isArray(profileRow?.active_roles) ? profileRow.active_roles : ['consumer'];
+      const nextActiveRoles = Array.from(new Set([...existingRoles, 'vendor']));
+      const nextRole =
+        profileRow?.role && ['moderator', 'admin', 'super_admin'].includes(profileRow.role)
+          ? profileRow.role
+          : 'vendor';
+      const nextTrust = Math.max(Number(profileRow?.trust_level || 1), 5);
+
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          role: nextRole,
+          active_roles: nextActiveRoles,
+          trust_level: nextTrust,
+          is_verified: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profileUuid);
+    }
+
+    invalidateAuthProfileCache(application.applicantId);
+  } catch (err) {
+    console.warn('[vendorService] Non-fatal Supabase KYC decision sync warning:', err);
+  }
+}
+
+export async function updateGovernanceRoleInDb(params: {
+  targetEmail?: string;
+  targetAuthUid?: string;
+  newRole: UserRole;
+}): Promise<{ ok: boolean; statusCode: number; error?: string; profile?: Record<string, unknown> }> {
+  if (!supabaseAdmin) {
+    return { ok: true, statusCode: 200 };
+  }
+
+  let query = supabaseAdmin.from('profiles').select('id, auth_uid, email, name, role, active_roles');
+  if (params.targetAuthUid) {
+    query = query.eq('auth_uid', params.targetAuthUid);
+  } else if (params.targetEmail) {
+    query = query.ilike('email', params.targetEmail.trim());
+  } else {
+    return { ok: false, statusCode: 400, error: 'Target email or user ID is required.' };
+  }
+
+  const { data: target, error } = await query.maybeSingle();
+  if (error || !target) {
+    return {
+      ok: false,
+      statusCode: 404,
+      error: 'No registered user profile matched that email in Supabase yet.',
+    };
+  }
+
+  const nextActiveRoles =
+    params.newRole === 'consumer'
+      ? ['consumer']
+      : Array.from(new Set([...(Array.isArray(target.active_roles) ? target.active_roles : ['consumer']), params.newRole]));
+
+  const updated = await supabaseAdmin
+    .from('profiles')
+    .update({
+      role: params.newRole,
+      active_roles: nextActiveRoles,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', target.id)
+    .select('id, auth_uid, email, name, role, active_roles')
+    .single();
+
+  if (updated.error) {
+    return { ok: false, statusCode: 500, error: 'Unable to update governance role in Supabase.' };
+  }
+
+  if (target.auth_uid) {
+    invalidateAuthProfileCache(String(target.auth_uid));
+  }
+
+  return { ok: true, statusCode: 200, profile: updated.data };
 }
 
 export type PublicStoreSummary = Omit<

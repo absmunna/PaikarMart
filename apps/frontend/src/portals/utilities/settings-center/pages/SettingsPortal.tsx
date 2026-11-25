@@ -32,6 +32,7 @@ import { PortalTab, SettingsSectionId, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { LocationPreferences } from '@/portals/utilities/settings-center/components/LocationPreferences';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 // User Account Pages
 import {
@@ -40,7 +41,7 @@ import {
   SavedAddressesPage,
   PaymentMethodsPage,
   NotificationPreferencesPage
-} from '@/portals/utilities/user-profile';
+} from '@/portals/utilities/user-profile/components/account';
 
 // Vendor Merchant Pages
 import {
@@ -49,7 +50,7 @@ import {
   PayoutSettingsPage,
   FulfillmentSettingsPage,
   StoreHoursSettingsPage
-} from '@/portals/utilities/seller-central';
+} from '@/portals/utilities/seller-central/components/settings';
 
 export type { SettingsSectionId };
 
@@ -318,7 +319,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
             {currentUser && (
               <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs flex items-center gap-3.5">
                 <img
-                  src={currentUser.avatar}
+                  src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
                   alt={currentUser.name}
                   className="w-12 h-12 rounded-2xl object-cover ring-2 ring-[var(--pm-accent-border)]"
                 />

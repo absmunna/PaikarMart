@@ -1,6 +1,8 @@
 import { EscrowRecord, EscrowSummary, WalletServerPayload } from '@/features/wallet/types/walletTypes';
 import { auth } from '@/lib/firebase';
 
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 async function authenticatedHeaders(json = false): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) throw new Error('Please sign in to use wallet services.');
@@ -17,7 +19,7 @@ export async function fetchWalletStateApi(userId = 'user_me'): Promise<{
   escrows: EscrowRecord[];
 }> {
   void userId;
-  const res = await fetch('/api/wallet', { headers: await authenticatedHeaders() });
+  const res = await fetch(`${API_BASE}/api/wallet`, { headers: await authenticatedHeaders() });
   if (!res.ok) throw new Error('Failed to fetch wallet state');
   return await res.json();
 }
@@ -28,7 +30,7 @@ export async function depositWalletApi(payload: {
   method: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload; earnedCoins?: number }> {
-  const res = await fetch('/api/wallet/deposit', {
+  const res = await fetch(`${API_BASE}/api/wallet/deposit`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify(payload)
@@ -45,7 +47,7 @@ export async function withdrawWalletApi(payload: {
   accountDetails?: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload }> {
-  const res = await fetch('/api/wallet/withdraw', {
+  const res = await fetch(`${API_BASE}/api/wallet/withdraw`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify(payload)
@@ -62,7 +64,7 @@ export async function transferWalletApi(payload: {
   note?: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload }> {
-  const res = await fetch('/api/wallet/transfer', {
+  const res = await fetch(`${API_BASE}/api/wallet/transfer`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify(payload)
@@ -76,7 +78,7 @@ export async function redeemCoinsApi(payload: {
   userId?: string;
   coinsToRedeem: number;
 }): Promise<{ wallet: WalletServerPayload; bdtValue: number }> {
-  const res = await fetch('/api/wallet/redeem-coins', {
+  const res = await fetch(`${API_BASE}/api/wallet/redeem-coins`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify(payload)
@@ -91,7 +93,7 @@ export async function fetchEscrowSummaryApi(userId = 'user_me'): Promise<{
   escrows: EscrowRecord[];
 }> {
   void userId;
-  const res = await fetch('/api/escrow/summary', { headers: await authenticatedHeaders() });
+  const res = await fetch(`${API_BASE}/api/escrow/summary`, { headers: await authenticatedHeaders() });
   if (!res.ok) throw new Error('Failed to fetch escrow summary');
   return await res.json();
 }
@@ -107,7 +109,7 @@ export async function createEscrowHoldApi(payload: {
   sellerName?: string;
   holdDays?: number;
 }): Promise<{ escrow: EscrowRecord; wallet: WalletServerPayload }> {
-  const res = await fetch('/api/escrow/hold', {
+  const res = await fetch(`${API_BASE}/api/escrow/hold`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify(payload)
@@ -121,7 +123,7 @@ export async function releaseEscrowApi(escrowId: string): Promise<{
   escrow: EscrowRecord;
   wallet: WalletServerPayload;
 }> {
-  const res = await fetch(`/api/escrow/release/${encodeURIComponent(escrowId)}`, {
+  const res = await fetch(`${API_BASE}/api/escrow/release/${encodeURIComponent(escrowId)}`, {
     method: 'POST',
     headers: await authenticatedHeaders(true)
   });
@@ -134,7 +136,7 @@ export async function disputeEscrowApi(
   escrowId: string,
   reason: string
 ): Promise<{ escrow: EscrowRecord; wallet: WalletServerPayload }> {
-  const res = await fetch(`/api/escrow/dispute/${encodeURIComponent(escrowId)}`, {
+  const res = await fetch(`${API_BASE}/api/escrow/dispute/${encodeURIComponent(escrowId)}`, {
     method: 'POST',
     headers: await authenticatedHeaders(true),
     body: JSON.stringify({ reason })

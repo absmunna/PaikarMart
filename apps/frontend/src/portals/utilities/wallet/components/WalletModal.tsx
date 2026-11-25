@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useWalletStore } from '@/features/wallet';
+import { SandboxPaymentModal } from '@/features/wallet/components/SandboxPaymentModal';
+import type { PaymentGatewayProviderId } from '@/features/wallet/services/paymentGatewayClient';
 
 interface WalletModalProps {
   isOpen: boolean;
@@ -44,6 +46,9 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   const [activeTab, setActiveTab] = useState<'balance' | 'deposit' | 'withdraw' | 'transfer'>('balance');
   const [amount, setAmount] = useState<string>('1000');
   const [paymentMethod, setPaymentMethod] = useState<string>('bKash Mobile Banking');
+  const [gatewayProvider, setGatewayProvider] = useState<PaymentGatewayProviderId>('bkash');
+  const [isGatewayModalOpen, setIsGatewayModalOpen] = useState<boolean>(false);
+  const [gatewayAmount, setGatewayAmount] = useState<number>(1000);
   const [recipientHandle, setRecipientHandle] = useState<string>('');
   const [transferNote, setTransferNote] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -80,30 +85,17 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     });
   };
 
-  const handleDeposit = async (e: React.FormEvent) => {
+  const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(amount);
-    if (Number.isNaN(val) || val <= 0) {
-      setErrorMsg(isBn ? 'দয়া করে সঠিক পরিমাণ লিখুন।' : 'Please enter a valid amount.');
+    if (Number.isNaN(val) || val < 10) {
+      setErrorMsg(isBn ? 'ন্যূনতম ১০ টাকা ডিপোজিট করুন।' : 'Minimum deposit amount is ৳10.');
       return;
     }
 
-    try {
-      await depositFunds({ userId: currentUser.id || 'user_me', amount: val, method: paymentMethod });
-      syncUser();
-      setErrorMsg(null);
-      setSuccessMsg(
-        isBn
-          ? `সফলভাবে ৳${val.toLocaleString()} ওয়ালেটে জমা হয়েছে!`
-          : `Successfully added ৳${val.toLocaleString()} to wallet!`
-      );
-      setTimeout(() => {
-        setSuccessMsg(null);
-        setActiveTab('balance');
-      }, 1800);
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Deposit failed');
-    }
+    setErrorMsg(null);
+    setGatewayAmount(val);
+    setIsGatewayModalOpen(true);
   };
 
   const handleWithdraw = async (e: React.FormEvent) => {
@@ -321,7 +313,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
           {/* Deposit Tab */}
           {activeTab === 'deposit' && (
-            <form onSubmit={(e) => void handleDeposit(e)} className="space-y-4 animate-fade-in">
+            <form onSubmit={handleDeposit} className="space-y-4 animate-fade-in">
               <div>
                 <label className="text-xs font-bold text-[var(--pm-text)] block mb-1.5">
                   {isBn ? 'পরিমাণ (৳)' : 'Deposit Amount (৳)'}
@@ -338,25 +330,35 @@ export const WalletModal: React.FC<WalletModalProps> = ({
               </div>
               <div>
                 <label className="text-xs font-bold text-[var(--pm-text)] block mb-1.5">
-                  {isBn ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                  {isBn ? 'বাংলাদেশ পেমেন্ট গেটওয়ে বেছে নিন' : 'Bangladesh Payment Gateway'}
                 </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-4 py-3 rounded-[1.5rem] bg-[var(--pm-input)] text-xs font-bold text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                >
-                  <option>bKash Mobile Banking</option>
-                  <option>Nagad Mobile Wallet</option>
-                  <option>Rocket DBBL Mobile</option>
-                  <option>Direct Bank Wire</option>
-                </select>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'bkash' as const, label: 'bKash', activeCls: 'border-[#e2136e] bg-[#e2136e]/10 text-[#e2136e]' },
+                    { id: 'nagad' as const, label: 'Nagad', activeCls: 'border-[#f37021] bg-[#f37021]/10 text-[#f37021]' },
+                    { id: 'sslcommerz' as const, label: 'Card / Rocket', activeCls: 'border-[#1d4ed8] bg-[#1d4ed8]/10 text-[#1d4ed8]' },
+                  ].map((gw) => (
+                    <button
+                      key={gw.id}
+                      type="button"
+                      onClick={() => setGatewayProvider(gw.id)}
+                      className={`py-2.5 px-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                        gatewayProvider === gw.id
+                          ? gw.activeCls
+                          : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)]'
+                      }`}
+                    >
+                      {gw.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 type="submit"
                 disabled={isLoading}
                 className="w-full py-3 rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-50 text-[var(--pm-accent-fg)] font-bold text-xs shadow-lg active-scale cursor-pointer"
               >
-                {isBn ? 'ডিপোজিট নিশ্চিত করুন' : 'Confirm Deposit'}
+                {isBn ? 'গেটওয়েতে পেমেন্ট শুরু করুন' : 'Proceed to Gateway Verification'}
               </button>
             </form>
           )}
@@ -451,6 +453,30 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           )}
         </div>
       </div>
+
+      <SandboxPaymentModal
+        isOpen={isGatewayModalOpen}
+        onClose={() => setIsGatewayModalOpen(false)}
+        provider={gatewayProvider}
+        amount={gatewayAmount}
+        purpose="wallet_deposit"
+        customerName={currentUser.name}
+        customerPhone={currentUser.phone}
+        onVerified={(verified) => {
+          void fetchWalletData(currentUser.id || 'user_me').then(() => {
+            syncUser();
+          });
+          setSuccessMsg(
+            isBn
+              ? `পেমেন্ট যাচাই সফল (TrxID: ${verified.trxId})`
+              : `Payment verified (${verified.trxId})`
+          );
+          setTimeout(() => {
+            setSuccessMsg(null);
+            setActiveTab('balance');
+          }, 2200);
+        }}
+      />
     </div>
   );
 };

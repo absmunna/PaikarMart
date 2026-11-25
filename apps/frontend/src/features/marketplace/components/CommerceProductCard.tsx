@@ -185,8 +185,11 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
           </p>
 
           <div className="flex items-center justify-between gap-2 text-[9px] font-semibold text-[var(--pm-muted)]">
-            <span className="truncate">{item.brand || item.category}</span>
-            <span className={item.inStock ? 'text-[var(--pm-success)]' : 'text-rose-500'}>
+            <span className="truncate">
+              {item.brand || item.category}
+              {item.pmin ? <span className="font-mono"> · {item.pmin}</span> : null}
+            </span>
+            <span className={item.inStock ? 'text-[var(--pm-success)] shrink-0' : 'text-rose-500 shrink-0'}>
               {item.inStock ? (isBn ? 'স্টকে আছে' : 'In stock') : (isBn ? 'স্টক শেষ' : 'Out of stock')}
             </span>
           </div>
@@ -205,7 +208,7 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
       </div>
 
       <div className="space-y-2.5 pt-2.5 border-t border-[var(--pm-border)] px-0.5">
-        <div className="flex items-end justify-between">
+        <div className="flex items-end justify-between gap-2">
           <div className="min-w-0">
             <span className="text-[8px] text-[var(--pm-muted)] font-bold uppercase block leading-none mb-1">
               {isDemand ? (isBn ? 'বাজেট' : 'Budget') : (isBn ? 'মূল্য' : 'Price')}
@@ -213,6 +216,11 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
             <p className="text-base font-mono font-black text-[var(--pm-text)] leading-none">
               ৳{unitPrice.toLocaleString()}
             </p>
+            {typeof item.masterOfferCount === 'number' && item.masterOfferCount > 1 && (
+              <span className="text-[9px] font-semibold text-[var(--pm-accent)] block mt-1">
+                {isBn ? `${item.masterOfferCount} জন সেলার` : `${item.masterOfferCount} sellers available`}
+              </span>
+            )}
           </div>
 
           {isWholesale && (

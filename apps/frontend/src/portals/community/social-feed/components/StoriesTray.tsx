@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
 import { Story, User } from '@/types';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 interface StoriesTrayProps {
   stories: Story[];
@@ -21,7 +22,7 @@ export const StoriesTray: React.FC<StoriesTrayProps> = ({
         <div className="relative w-24 sm:w-32 h-36 sm:h-48 rounded-2xl overflow-hidden bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs flex flex-col justify-between shrink-0 group cursor-pointer">
           <div className="h-24 sm:h-32 w-full overflow-hidden">
             <img
-              src={currentUser.avatar}
+              src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
               alt="Create Story"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -45,9 +46,9 @@ export const StoriesTray: React.FC<StoriesTrayProps> = ({
             className="relative w-24 sm:w-32 h-36 sm:h-48 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs shrink-0 group cursor-pointer border border-[var(--pm-border)] transition-all active:scale-[0.98]"
           >
             {/* Story Backdrop Image */}
-            {story.mediaUrl ? (
+            {story.mediaUrl?.trim() ? (
               <img
-                src={story.mediaUrl}
+                src={story.mediaUrl.trim()}
                 alt={story.authorName}
                 referrerPolicy="no-referrer"
                 loading="lazy"
@@ -64,7 +65,7 @@ export const StoriesTray: React.FC<StoriesTrayProps> = ({
             {/* Author Avatar */}
             <div className="absolute top-2.5 left-2.5">
               <img
-                src={story.authorAvatar}
+                src={safeMediaSrc(story.authorAvatar, DEFAULT_AVATAR_URL)}
                 alt={story.authorName}
                 referrerPolicy="no-referrer"
                 className={`w-9 h-9 rounded-full object-cover ring-2 ${

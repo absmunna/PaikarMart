@@ -97,7 +97,7 @@ export function canAccessSellerCentral(user?: {
 
 export type PersonalDocumentType = 'NID' | 'Passport' | 'Birth Certificate' | 'Student ID';
 
-export type PersonalVerificationStatus = 'unverified' | 'pending' | 'verified';
+export type PersonalVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
 export interface PersonalVerificationInfo {
   status: PersonalVerificationStatus;
@@ -137,6 +137,7 @@ export interface User {
 export interface CommerceItem {
   id: string;
   masterProductId?: string;
+  pmin?: string;
   storeId: string;
   storeName: string;
   type: 'retail' | 'wholesale' | 'food' | 'service' | 'rides' | 'grocery';
@@ -144,6 +145,9 @@ export interface CommerceItem {
   title: string;
   description: string;
   price: number;
+  shippingFee?: number;
+  isBuyBoxWinner?: boolean;
+  masterOfferCount?: number;
   inStock: boolean;
   category: string;
   imageUrl: string;
@@ -165,8 +169,6 @@ export interface SocialPost {
   authorId?: string;
   authorName: string;
   authorHandle?: string;
-  authorAvatar?: string;
-  authorVerified?: boolean;
   content: string;
   timestamp: string;
   citizenCategory?: CitizenPostCategory;

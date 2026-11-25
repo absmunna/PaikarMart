@@ -18,6 +18,7 @@ import {
   isFirebaseConfigured,
   OperationType,
 } from '@/lib/firebase';
+import { DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 const WISHLIST_STORAGE_KEY = 'paikarmart_wishlist_v1';
 const MAX_WISHLIST_ITEMS = 100;
@@ -207,7 +208,7 @@ export const WishlistProvider: React.FC<WishlistProviderProps> = ({
             rating: 4.8,
             reviewsCount: 1,
             deliveryEta: 'Same Day',
-            imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
+            imageUrl: safeMediaSrc(typeof data.imageUrl === 'string' ? data.imageUrl : '', DEFAULT_PRODUCT_IMAGE_URL),
             category: typeof data.category === 'string' ? data.category : 'Marketplace',
             inStock: true,
           };

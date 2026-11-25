@@ -3,15 +3,20 @@ import type { Request, Response } from 'express';
 import { type UserRole } from '../../../../packages/shared/src/index.js';
 import {
   decideKycApplication,
+  getKycApplicationsForUser,
   getPublicProfileByHandle,
   getPublicStoreById,
   getStoreOwnerId,
   getVendorAnalytics,
   listKycQueue,
   listPublicStores,
-  submitVendorKycApplication
+  submitVendorKycApplication,
+  syncKycDecisionToDatabase,
+  syncKycSubmissionToDatabase,
+  updateGovernanceRoleInDb
 } from './vendorService.js';
-import { isPrivilegedRole, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
+import { createUserNotification } from '../notifications/notificationService.js';
 
 export const vendorRouter = Router();
 
@@ -24,10 +29,12 @@ function extractRequesterRole(res: Response): UserRole | undefined {
   return undefined;
 }
 
-vendorRouter.post('/register', requireFirebaseAuth, (req: Request, res: Response) => {
+vendorRouter.post('/register', requireFirebaseAuth, async (req: Request, res: Response) => {
   try {
     const { autoApproveDemo: _ignored, ...safeBody } = req.body || {};
-    const result = submitVendorKycApplication({ ...safeBody, applicantId: res.locals.auth.uid });
+    const applicantUid = res.locals.auth.uid;
+    const result = submitVendorKycApplication({ ...safeBody, applicantId: applicantUid });
+    await syncKycSubmissionToDatabase(applicantUid, result.vendorProfile);
     res.status(201).json({
       success: true,
       message: 'KYC documents submitted to Governance Queue for verification.',
@@ -38,6 +45,17 @@ vendorRouter.post('/register', requireFirebaseAuth, (req: Request, res: Response
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'Failed to register vendor KYC application.' });
   }
+});
+
+vendorRouter.get('/kyc/my-status', requireFirebaseAuth, async (_req: Request, res: Response) => {
+  const uid = res.locals.auth.uid;
+  const statusData = await getKycApplicationsForUser(uid);
+  res.json({
+    success: true,
+    ...statusData,
+    authRole: res.locals.auth.role,
+    isVendor: Boolean(res.locals.auth.isVendor),
+  });
 });
 
 vendorRouter.get('/stores', (_req: Request, res: Response) => {
@@ -63,7 +81,7 @@ vendorRouter.get('/profile/:handle', (req: Request, res: Response) => {
   res.json({ success: true, profile });
 });
 
-vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, (req: Request, res: Response) => {
+vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
   const userId = res.locals.auth.uid;
   const ownerId = getStoreOwnerId(req.params.vendorId);
   if (ownerId && ownerId !== userId && !isPrivilegedRole(res.locals.auth)) {
@@ -74,7 +92,7 @@ vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, (req: Request, res
   res.json({ success: true, analytics });
 });
 
-vendorRouter.get('/kyc/queue', requireFirebaseAuth, (req: Request, res: Response) => {
+vendorRouter.get('/kyc/queue', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), (_req: Request, res: Response) => {
   const requesterRole = extractRequesterRole(res);
   const queueResult = listKycQueue(requesterRole);
   if (!queueResult.authorized) {
@@ -86,7 +104,7 @@ vendorRouter.get('/kyc/queue', requireFirebaseAuth, (req: Request, res: Response
   res.json({ success: true, applications: queueResult.applications });
 });
 
-vendorRouter.post('/kyc/:applicationId/decision', requireFirebaseAuth, (req: Request, res: Response) => {
+vendorRouter.post('/kyc/:applicationId/decision', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   const requesterRole = extractRequesterRole(res);
   const decision = req.body?.decision;
   if (!['approved', 'rejected', 'suspended'].includes(decision)) {
@@ -102,10 +120,54 @@ vendorRouter.post('/kyc/:applicationId/decision', requireFirebaseAuth, (req: Req
     note: req.body?.note
   });
 
-  if (!outcome.ok) {
+  if (!outcome.ok || !outcome.application) {
     res.status(outcome.statusCode).json({ error: outcome.error });
     return;
   }
 
+  await syncKycDecisionToDatabase(outcome.application);
+
+  if (outcome.application.applicantId) {
+    const statusLabel =
+      decision === 'approved'
+        ? 'Merchant KYC Approved'
+        : decision === 'rejected'
+        ? 'Merchant KYC Needs Attention'
+        : 'Merchant Account Suspended';
+    void createUserNotification({
+      authUid: outcome.application.applicantId,
+      type: 'system',
+      title: statusLabel,
+      message: `Governance decision for ${outcome.application.storeName}: ${decision.toUpperCase()}.`,
+      actionTab: 'vendor-dash',
+      linkId: outcome.application.id,
+    });
+  }
+
   res.json({ success: true, application: outcome.application });
 });
+
+vendorRouter.post('/governance/roles', requireFirebaseAuth, requireRole('super_admin'), async (req: Request, res: Response) => {
+  const { email, authUid, role } = req.body || {};
+  if (!['consumer', 'vendor', 'moderator', 'admin', 'super_admin'].includes(role)) {
+    res.status(400).json({ error: 'Invalid governance role specified.' });
+    return;
+  }
+
+  const result = await updateGovernanceRoleInDb({
+    targetEmail: typeof email === 'string' ? email : undefined,
+    targetAuthUid: typeof authUid === 'string' ? authUid : undefined,
+    newRole: role as UserRole,
+  });
+
+  if (!result.ok) {
+    res.status(result.statusCode).json({ error: result.error });
+    return;
+  }
+
+  res.json({
+    success: true,
+    profile: result.profile || null,
+  });
+});
+

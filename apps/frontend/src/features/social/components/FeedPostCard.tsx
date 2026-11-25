@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatDisplayHandle, normalizeHandle } from '@paikarmart/shared';
 import { SocialPost, ReactionType, User, CommerceItem } from '@/types';
+import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 interface FeedPostCardProps {
   post: SocialPost;
@@ -83,7 +84,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             aria-label={`View ${post.authorName} profile`}
           >
             <img
-              src={post.authorAvatar}
+              src={safeMediaSrc(post.authorAvatar, DEFAULT_AVATAR_URL)}
               alt={post.authorName}
               referrerPolicy="no-referrer"
               loading="lazy"
@@ -148,6 +149,11 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
               ✨ AI Verified
             </span>
           )}
+          {post.aiRiskAssessment === 'high_risk_flagged' && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-tighter border border-amber-500/30">
+              ⚠ Pending Review
+            </span>
+          )}
           {post.postType === 'demand' && (
             <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-500 text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
               Demand
@@ -176,10 +182,10 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
       </p>
 
       {/* Attached Media Photo / Banner */}
-      {post.mediaUrl && (
+      {post.mediaUrl?.trim() && (
         <div className="rounded-2xl sm:rounded-[1.5rem] overflow-hidden border border-[var(--pm-border)] bg-[var(--pm-surface)] shadow-inner group">
           <img
-            src={post.mediaUrl}
+            src={post.mediaUrl.trim()}
             alt="Post media"
             referrerPolicy="no-referrer"
             loading="lazy"
@@ -198,7 +204,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
           <div className="flex items-center gap-4 min-w-0">
             <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl overflow-hidden shrink-0 shadow-sm ring-1 ring-[var(--pm-border)]">
               <img
-                src={post.taggedProduct.image}
+                src={safeMediaSrc(post.taggedProduct.image, DEFAULT_PRODUCT_IMAGE_URL)}
                 alt={post.taggedProduct.title}
                 referrerPolicy="no-referrer"
                 loading="lazy"
@@ -384,7 +390,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             {post.comments.map((comment) => (
               <div key={comment.id} className="flex items-start gap-3 px-1">
                 <img
-                  src={comment.authorAvatar}
+                  src={safeMediaSrc(comment.authorAvatar, DEFAULT_AVATAR_URL)}
                   alt={comment.authorName}
                   referrerPolicy="no-referrer"
                   className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[var(--pm-border)]"
@@ -411,7 +417,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
           {/* New Comment Input - Unified Look */}
           <form onSubmit={handleCommentSubmit} className="flex items-center gap-3 pt-2">
             <img
-              src={currentUser.avatar}
+              src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
               alt={currentUser.name}
               referrerPolicy="no-referrer"
               className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[var(--pm-border)]"

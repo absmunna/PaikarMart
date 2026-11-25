@@ -8,10 +8,15 @@ import {
   Camera,
   ChevronRight,
   CheckCircle2,
-  Award
+  Award,
+  Loader2
 } from 'lucide-react';
 import { SellerListing } from '@/types';
 import { retailApiClient } from '@/features/marketplace/services/retailApiClient';
+import {
+  fetchSellerListingsByPmin,
+  fetchSellerListingsForMaster,
+} from '@/features/marketplace/services/catalogApiClient';
 
 type RankedSellerListing = SellerListing & {
   landedPrice?: number;
@@ -21,6 +26,8 @@ type RankedSellerListing = SellerListing & {
 
 interface OtherSellersModalProps {
   productTitle: string;
+  pmin?: string;
+  masterProductId?: string;
   sellerListings: SellerListing[];
   currentSellerId?: string;
   isOpen: boolean;
@@ -30,6 +37,8 @@ interface OtherSellersModalProps {
 
 export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
   productTitle,
+  pmin,
+  masterProductId,
   sellerListings,
   currentSellerId,
   isOpen,
@@ -38,24 +47,68 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
 }) => {
   const [activePhotoGallery, setActivePhotoGallery] = useState<{ sellerName: string; photos: string[] } | null>(null);
   const [rankedListings, setRankedListings] = useState<RankedSellerListing[]>(sellerListings);
+  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || sellerListings.length === 0) {
+    if (!isOpen) {
       setRankedListings(sellerListings);
       return;
     }
 
     let active = true;
-    retailApiClient.rankBuyBoxOffers(sellerListings).then((res) => {
-      if (active && Array.isArray(res.rankedOffers) && res.rankedOffers.length > 0) {
-        setRankedListings(res.rankedOffers);
+    const controller = new AbortController();
+
+    const loadAndRankOffers = async () => {
+      setIsLoadingOffers(true);
+      let candidateOffers: SellerListing[] = sellerListings;
+
+      if (pmin) {
+        const res = await fetchSellerListingsByPmin(pmin, controller.signal);
+        if (active && res.listings.length > 0) {
+          candidateOffers = res.listings;
+        }
+      } else if (masterProductId) {
+        const res = await fetchSellerListingsForMaster(masterProductId, controller.signal);
+        if (active && res.listings.length > 0) {
+          candidateOffers = res.listings;
+        }
       }
-    });
+
+      if (!active) return;
+
+      if (candidateOffers.length === 0) {
+        setRankedListings([]);
+        setIsLoadingOffers(false);
+        return;
+      }
+
+      const normalized = candidateOffers.map((offer) => ({
+        ...offer,
+        shippingFee: Number(offer.shippingFee ?? 0),
+        landedPrice: Number(offer.price || 0) + Number(offer.shippingFee ?? 0),
+      }));
+
+      const rankedRes = await retailApiClient.rankBuyBoxOffers(normalized);
+      if (!active) return;
+
+      const finalOffers = Array.isArray(rankedRes.rankedOffers) && rankedRes.rankedOffers.length > 0
+        ? rankedRes.rankedOffers.map((offer) => ({
+            ...offer,
+            landedPrice: Number(offer.price || 0) + Number(offer.shippingFee ?? 0),
+          }))
+        : normalized.sort((a, b) => (a.landedPrice ?? a.price) - (b.landedPrice ?? b.price));
+
+      setRankedListings(finalOffers);
+      setIsLoadingOffers(false);
+    };
+
+    void loadAndRankOffers();
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [isOpen, sellerListings]);
+  }, [isOpen, pmin, masterProductId, sellerListings]);
 
   if (!isOpen) return null;
 
@@ -80,12 +133,14 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
               </h3>
               <p className="text-xs text-[var(--pm-muted)] truncate max-w-sm font-medium">
                 {productTitle}
+                {pmin ? <span className="font-mono"> · {pmin}</span> : null}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close seller comparison"
             className="p-2 rounded-xl text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -124,15 +179,19 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
         ) : (
           /* Sellers List */
           <div className="p-5 space-y-3 flex-1 overflow-y-auto">
-            <p className="text-xs font-medium text-[var(--pm-muted)] px-1">
-              Offers ranked by landed price (item + delivery), seller rating, and express dispatch availability.
-            </p>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <p className="text-xs font-medium text-[var(--pm-muted)]">
+                Offers ranked by landed price (item + shipping), stock readiness, and verified seller rating.
+              </p>
+              {isLoadingOffers && <Loader2 className="w-4 h-4 animate-spin text-[var(--pm-accent)] shrink-0" />}
+            </div>
 
             <div className="space-y-3">
               {rankedListings.map((listing) => {
                 const isCurrent = listing.id === currentSellerId || listing.sellerId === currentSellerId;
                 const hasRealPhotos = listing.sellerRealPhotos && listing.sellerRealPhotos.length > 0;
-                const landed = listing.landedPrice ?? listing.price;
+                const shippingFee = Number(listing.shippingFee ?? 0);
+                const landed = listing.landedPrice ?? (listing.price + shippingFee);
 
                 return (
                   <div
@@ -155,12 +214,12 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
                           {listing.isBuyBoxWinner && (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--pm-success)]">
                               <Award className="w-3.5 h-3.5" />
-                              Best Landed Value
+                              Buy Box Winner
                             </span>
                           )}
                           {isCurrent && (
                             <span className="text-[11px] font-bold text-[var(--pm-accent)]">
-                              · Current Offer
+                              · Selected Offer
                             </span>
                           )}
                         </div>
@@ -168,13 +227,19 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
                         <div className="flex items-center flex-wrap gap-2 text-[11px] text-[var(--pm-muted)]">
                           <span className="flex items-center gap-1 font-bold text-amber-500 tabular-nums">
                             <Star className="w-3 h-3 fill-amber-500" />
-                            {listing.sellerRating} ({listing.sellerReviewsCount})
+                            {listing.sellerRating} ({listing.sellerReviewsCount || 0})
                           </span>
                           <span aria-hidden="true">·</span>
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-[var(--pm-muted)]" />
                             {listing.location} ({listing.proximityDistance || 'Near you'})
                           </span>
+                          {listing.condition && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-semibold text-[var(--pm-text)]">{listing.condition}</span>
+                            </>
+                          )}
                         </div>
 
                         <div className="flex items-center flex-wrap gap-2 pt-1 text-[11px] text-[var(--pm-muted)]">
@@ -184,16 +249,12 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
                           </span>
                           <span aria-hidden="true">·</span>
                           <span className="font-mono tabular-nums">
-                            Stock: {listing.stockQuantity} units
+                            {shippingFee === 0 ? 'Free Shipping' : `Shipping: ৳${shippingFee.toLocaleString()}`}
                           </span>
-                          {landed !== listing.price && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="font-mono tabular-nums text-[var(--pm-text)]">
-                                Landed: ৳{landed.toLocaleString()}
-                              </span>
-                            </>
-                          )}
+                          <span aria-hidden="true">·</span>
+                          <span className="font-mono tabular-nums">
+                            Stock: {listing.stockQuantity}
+                          </span>
                         </div>
 
                         {hasRealPhotos && (
@@ -211,7 +272,9 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
                       {/* Pricing & Selection Action */}
                       <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-[var(--pm-border)] shrink-0">
                         <div className="text-left sm:text-right">
-                          <span className="text-[10px] text-[var(--pm-muted)] block font-medium">Seller Price</span>
+                          <span className="text-[10px] text-[var(--pm-muted)] block font-medium">
+                            {shippingFee > 0 ? `Landed: ৳${landed.toLocaleString()}` : 'Seller Price'}
+                          </span>
                           <div className="font-mono tabular-nums text-base sm:text-lg font-black text-[var(--pm-text)]">
                             ৳{listing.price.toLocaleString()}
                           </div>
@@ -253,3 +316,4 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
     </div>
   );
 };
+

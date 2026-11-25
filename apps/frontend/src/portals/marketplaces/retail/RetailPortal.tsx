@@ -16,6 +16,7 @@ export const RetailPortal: React.FC<MarketplacePortalBaseProps> = (props) => (
       subtitleEn: 'Retail products, verified sellers, flash deals, and everyday shopping in one feed.',
       subtitleBn: 'সব খুচরা পণ্য, verified seller এবং প্রতিদিনের শপিং এক ফিডে।',
       accentGradient: 'from-sky-600 to-indigo-700',
+      showFlashDeals: true,
       itemMatcher: (item) => item.tradeMode === 'retail' && item.type !== 'service',
     }}
   />

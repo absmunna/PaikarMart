@@ -9,6 +9,7 @@ import {
 import { evaluateVoucher } from '../retail/retailRoutes.js';
 import { isPrivilegedRole, optionalFirebaseAuth, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
 import { isStoreOwnedByUser } from '../vendors/vendorService.js';
+import { createUserNotification } from '../notifications/notificationService.js';
 
 export const orderRouter = Router();
 
@@ -264,6 +265,17 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     shippingFee: newOrder.deliveryFee
   });
 
+  if (newOrder.customerId) {
+    void createUserNotification({
+      authUid: newOrder.customerId,
+      type: 'order',
+      title: `Order Confirmed · ${newOrder.id}`,
+      message: `Your order totaling ৳${newOrder.total.toLocaleString()} is confirmed (${newOrder.paymentMethod}).`,
+      actionTab: 'orders',
+      linkId: newOrder.id,
+    });
+  }
+
   res.status(201).json({ success: true, order: newOrder, shipment });
 });
 
@@ -403,6 +415,23 @@ const handleUpdateStatus = (req: Request, res: Response) => {
     req.body?.checkpointMessage,
     req.body?.checkpointLocation
   );
+
+  if (order.customerId) {
+    const labelMap: Record<OrderLifecycleStatus, string> = {
+      confirmed: 'Confirmed',
+      preparing: 'Preparing',
+      in_transit: 'Out for Delivery',
+      delivered: 'Delivered',
+    };
+    void createUserNotification({
+      authUid: order.customerId,
+      type: 'order',
+      title: `Order ${labelMap[targetStatus]} · ${order.id}`,
+      message: `Order status updated to ${labelMap[targetStatus]} via ${shipment.courierPartner}.`,
+      actionTab: 'orders',
+      linkId: order.id,
+    });
+  }
 
   res.json({
     success: true,

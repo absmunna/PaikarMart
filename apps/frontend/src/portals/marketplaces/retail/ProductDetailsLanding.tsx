@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ShieldCheck, ArrowLeft, Heart, Share2, AlertCircle, Scale, Check } from 'lucide-react';
-import { CommerceItem, User, Order } from '@/types';
+import { ArrowLeft, Heart, AlertCircle, Scale, Check, Store } from 'lucide-react';
+import { CommerceItem, User, Order, SellerListing } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { ProductDetailsSkeleton } from '@/design-system/components';
 import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
-import { useProductComparison, useWishlist } from '@/features/marketplace';
+import {
+  OtherSellersModal,
+  fetchSellerListingsByPmin,
+  fetchSellerListingsForMaster,
+  getSellerListingsForMasterProduct,
+  useProductComparison,
+  useWishlist,
+} from '@/features/marketplace';
 
 interface ProductDetailsLandingProps {
   currentUser: User;
@@ -36,6 +43,48 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
     ? commerceItems.find((item) => item.id === id)
     : commerceItems[0];
   const product = matchedProduct || (!isLoading ? commerceItems[0] : undefined);
+  const [sellerOffers, setSellerOffers] = useState<SellerListing[]>([]);
+  const [selectedOffer, setSelectedOffer] = useState<SellerListing | null>(null);
+  const [isCompareSellersOpen, setIsCompareSellersOpen] = useState(false);
+
+  useEffect(() => {
+    setSelectedOffer(null);
+    if (!product) {
+      setSellerOffers([]);
+      return;
+    }
+
+    const fallbackOffers = product.masterProductId
+      ? getSellerListingsForMasterProduct(product.masterProductId)
+      : [];
+    setSellerOffers(fallbackOffers);
+
+    if (!product.pmin && !product.masterProductId) return;
+    let active = true;
+    const controller = new AbortController();
+
+    const loadOffers = async () => {
+      if (product.pmin) {
+        const res = await fetchSellerListingsByPmin(product.pmin, controller.signal);
+        if (active && res.listings.length > 0) {
+          setSellerOffers(res.listings);
+          return;
+        }
+      }
+      if (product.masterProductId) {
+        const res = await fetchSellerListingsForMaster(product.masterProductId, controller.signal);
+        if (active && res.listings.length > 0) {
+          setSellerOffers(res.listings);
+        }
+      }
+    };
+
+    void loadOffers();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [product]);
 
   React.useEffect(() => {
     if (product?.id) {
@@ -123,6 +172,14 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
     );
   }
 
+  const activePrice = selectedOffer ? selectedOffer.price : product.price;
+  const activeShippingFee = selectedOffer
+    ? Number(selectedOffer.shippingFee ?? 0)
+    : Number(product.shippingFee ?? 60);
+  const activeStoreId = selectedOffer ? selectedOffer.sellerId : product.storeId;
+  const activeStoreName = selectedOffer ? selectedOffer.sellerName : product.storeName;
+  const activeEta = selectedOffer ? selectedOffer.deliveryEta : product.deliveryEta;
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-28 px-4 pt-6 animate-fadeIn">
       <div className="flex items-center justify-between gap-2">
@@ -166,32 +223,75 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
           <img src={product.imageUrl} alt={product.title} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
         </div>
         <div className="space-y-4 flex flex-col justify-between">
-          <div className="space-y-2">
+          <div className="space-y-2.5">
+            <div className="flex items-center flex-wrap gap-2 text-[11px] font-semibold text-[var(--pm-muted)]">
+              <span>{activeStoreName}</span>
+              {product.pmin && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono text-[var(--pm-text)]">{product.pmin}</span>
+                </>
+              )}
+            </div>
             <h1 className="text-xl font-black text-[var(--pm-text)]">{product.title}</h1>
-            <p className="text-2xl font-mono font-black text-[var(--pm-accent)]">৳{product.price.toLocaleString()}</p>
+            <div className="flex items-baseline flex-wrap gap-2.5">
+              <p className="text-2xl font-mono font-black text-[var(--pm-accent)]">৳{activePrice.toLocaleString()}</p>
+              <span className="text-xs text-[var(--pm-muted)] font-mono">
+                {activeShippingFee === 0
+                  ? (isBn ? 'ফ্রি ডেলিভারি' : 'Free Shipping')
+                  : (isBn ? `+ ৳${activeShippingFee.toLocaleString()} ডেলিভারি` : `+ ৳${activeShippingFee.toLocaleString()} shipping`)}
+              </span>
+            </div>
             <p className="text-xs text-[var(--pm-muted)] leading-relaxed">{product.description}</p>
+
+            {(sellerOffers.length > 0 || product.pmin || product.masterProductId) && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsCompareSellersOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--pm-border-strong)] bg-[var(--pm-surface)] hover:border-[var(--pm-accent)] text-xs font-bold text-[var(--pm-text)] transition-colors cursor-pointer"
+                >
+                  <Store className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
+                  <span>
+                    {sellerOffers.length > 1
+                      ? (isBn ? `অন্যান্য সেলার দেখুন (${sellerOffers.length} অফার)` : `Compare Sellers (${sellerOffers.length} Buy-Box offers)`)
+                      : (isBn ? 'বাই-বক্স ও সেলার অফার দেখুন' : 'View Buy-Box & Seller Offers')}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
           <div className="pt-4 border-t border-[var(--pm-border)] flex items-center gap-3">
             <button
               type="button"
               onClick={() => {
+                const effectiveProduct: CommerceItem = selectedOffer
+                  ? {
+                      ...product,
+                      price: activePrice,
+                      shippingFee: activeShippingFee,
+                      storeId: activeStoreId,
+                      storeName: activeStoreName,
+                      deliveryEta: activeEta,
+                    }
+                  : product;
                 onOrderPlaced({
                   id: `ORD-${Date.now()}`,
                   createdAt: new Date().toISOString(),
-                  items: [{ product, quantity: 1, isWholesale: false }],
-                  subtotal: product.price,
-                  deliveryFee: 60,
-                  tax: Math.round(product.price * 0.05),
-                  total: product.price + 60 + Math.round(product.price * 0.05),
+                  items: [{ product: effectiveProduct, quantity: 1, isWholesale: false }],
+                  subtotal: activePrice,
+                  deliveryFee: activeShippingFee,
+                  tax: Math.round(activePrice * 0.05),
+                  total: activePrice + activeShippingFee + Math.round(activePrice * 0.05),
                   status: 'confirmed',
                   deliveryAddress: currentUser.location || 'Dhaka',
                   paymentMethod: 'Cash on Delivery',
-                  estimatedArrival: 'Same Day',
+                  estimatedArrival: activeEta || 'Same Day',
                   trackingStep: 1,
                   buyerName: currentUser.name,
                   buyerPhone: currentUser.phone || '',
-                  storeId: product.storeId,
-                  storeName: product.storeName,
+                  storeId: activeStoreId,
+                  storeName: activeStoreName,
                 });
                 navigate('/portal/orders');
               }}
@@ -202,6 +302,17 @@ export const ProductDetailsLanding: React.FC<ProductDetailsLandingProps> = ({
           </div>
         </div>
       </div>
+
+      <OtherSellersModal
+        isOpen={isCompareSellersOpen}
+        onClose={() => setIsCompareSellersOpen(false)}
+        productTitle={product.title}
+        pmin={product.pmin}
+        masterProductId={product.masterProductId}
+        sellerListings={sellerOffers}
+        currentSellerId={selectedOffer?.id || activeStoreId}
+        onSelectSellerListing={(listing) => setSelectedOffer(listing)}
+      />
     </div>
   );
 };

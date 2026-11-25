@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { CommerceItem, PortalTab, SocialPost } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SUPER_PORTALS } from '@/data/portalsData';
+import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 export type SearchScope = 'all' | 'b2c' | 'b2b' | 'posts';
 
@@ -278,7 +279,7 @@ export const MegaSearch: React.FC<MegaSearchProps> = ({
                     className="w-full px-3.5 py-2.5 flex items-center gap-3 hover:bg-[var(--pm-card-hover)] text-left transition-colors cursor-pointer"
                   >
                     <img
-                      src={item.imageUrl}
+                      src={safeMediaSrc(item.imageUrl, DEFAULT_PRODUCT_IMAGE_URL)}
                       alt={item.title}
                       className="w-11 h-11 rounded-xl object-cover shrink-0 border border-[var(--pm-border)]"
                     />
@@ -326,7 +327,7 @@ export const MegaSearch: React.FC<MegaSearchProps> = ({
                     className="w-full p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-left flex items-start gap-3 cursor-pointer"
                   >
                     <img
-                      src={post.authorAvatar}
+                      src={safeMediaSrc(post.authorAvatar, DEFAULT_AVATAR_URL)}
                       alt={post.authorName}
                       className="w-8 h-8 rounded-full object-cover shrink-0"
                     />

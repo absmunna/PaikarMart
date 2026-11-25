@@ -164,5 +164,40 @@ export const vendorApiClient = {
       throw new Error(data?.error || 'Failed to record KYC decision.');
     }
     return data.application;
+  },
+
+  async fetchMyKycStatus(): Promise<{
+    applications: KycApplicationItem[];
+    latestStatus: KycStatus;
+    verifiedStore?: Record<string, unknown> | null;
+    isVendor: boolean;
+  } | null> {
+    try {
+      const res = await fetch(`${API_BASE}/api/vendors/kyc/my-status`, {
+        headers: await authenticatedHeaders(),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async updateGovernanceRole(params: {
+    email?: string;
+    authUid?: string;
+    role: UserRole;
+  }): Promise<{ success: boolean; profile?: Record<string, unknown> | null }> {
+    const res = await fetch(`${API_BASE}/api/vendors/governance/roles`, {
+      method: 'POST',
+      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Unable to update governance role.');
+    }
+    return data;
   }
 };
+

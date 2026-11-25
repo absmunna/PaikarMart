@@ -26,7 +26,7 @@ import {
 } from './courierAdapters.js';
 import { evaluateStoreGeofence, rankHyperlocalProviders } from './distanceEngine.js';
 import { LogisticsVehicleClass, VEHICLE_TARIFF_TABLE } from './tariffConfig.js';
-import { requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import { requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 import { backendEnv, isCourierWebhookConfigured } from '../../config/env.js';
 import { upsertStoredShipmentWaybill } from '../../services/dbService.js';
 
@@ -231,7 +231,7 @@ logisticsRouter.post('/webhooks/:partner', async (req: Request, res: Response) =
 });
 
 // POST /api/logistics/shipments/:orderId/checkpoint
-logisticsRouter.post('/shipments/:orderId/checkpoint', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.post('/shipments/:orderId/checkpoint', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { status, message, location } = req.body as {
     status?: ShipmentStatus;
@@ -290,7 +290,7 @@ logisticsRouter.post('/shipments/:orderId/verify-pod', requireFirebaseAuth, (req
 });
 
 // POST /api/logistics/shipments/:orderId/assign-courier
-logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { courierPartner } = req.body as { courierPartner?: CourierPartner };
   const validPartners: CourierPartner[] = ['PaikarForce', 'Steadfast', 'Pathao', 'RedX'];
@@ -357,7 +357,7 @@ logisticsRouter.get('/fleet', (_req: Request, res: Response) => {
   });
 });
 
-logisticsRouter.post('/fleet', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.post('/fleet', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
   const { type, model, licensePlate, capacity, driverName, driverPhone, currentArea } = req.body;
   if (!model || !licensePlate || !driverName || !driverPhone) {
     res.status(400).json({ error: 'Model, license plate, driver name, and phone are required.' });
@@ -380,7 +380,7 @@ logisticsRouter.post('/fleet', requireFirebaseAuth, (req: Request, res: Response
   });
 });
 
-logisticsRouter.patch('/fleet/:vehicleId/availability', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.patch('/fleet/:vehicleId/availability', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
   const { vehicleId } = req.params;
   const { isOnline, currentArea } = req.body;
   const updated = toggleFleetVehicleAvailability(vehicleId, isOnline, currentArea);

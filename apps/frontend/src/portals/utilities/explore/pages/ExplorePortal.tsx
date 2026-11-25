@@ -4,7 +4,6 @@ import {
   Cloud,
   ArrowRight,
   Compass,
-  Search,
   Layers,
   ArrowUpRight,
   Sparkles,
@@ -13,6 +12,7 @@ import {
 import { PortalTab, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { HUB_PILLARS, SUPER_PORTALS, HubPillarId, SuperPortalEntry } from '@/data/portalsData';
+import { MegaSearchPanel } from '../components/MegaSearchPanel';
 
 interface ExplorePortalProps {
   onSelectTab: (tab: PortalTab) => void;
@@ -142,21 +142,17 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
         )}
 
         {/* Toolbar: Portal Search & 4-Pillar Tabs */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--pm-muted)]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={
-                isBn
-                  ? `${SUPER_PORTALS.length}+ পোর্টাল খুঁজুন (যেমন: ফার্মেসি, হোলসেল, ট্রানজিট, ফুড)...`
-                  : `Search ${SUPER_PORTALS.length}+ portals (e.g. Pharmacy, Wholesale, Transit, Food)...`
-              }
-                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-xl text-sm text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--pm-accent)]/50 shadow-xs"
-            />
-          </div>
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-start gap-3">
+          <MegaSearchPanel
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onQuickSearch={onQuickSearch}
+            placeholder={
+              isBn
+                ? `${SUPER_PORTALS.length}+ পোর্টাল খুঁজুন (যেমন: ফার্মেসি, হোলসেল, ট্রানজিট, ফুড)...`
+                : `Search ${SUPER_PORTALS.length}+ portals (e.g. Pharmacy, Wholesale, Transit, Food)...`
+            }
+          />
 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 lg:pb-0">
             <button

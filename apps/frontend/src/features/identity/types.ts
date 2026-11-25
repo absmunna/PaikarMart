@@ -1,4 +1,4 @@
-import { PersonalDocumentType, PersonalVerificationStatus, PersonalVerificationInfo } from '@/types';
+import { PersonalDocumentType, PersonalVerificationStatus } from '@/types';
 
 export interface IdentityVerificationPayload {
   documentType: PersonalDocumentType;

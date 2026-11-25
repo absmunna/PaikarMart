@@ -213,7 +213,9 @@ export const DocumentsVault: React.FC<DocumentsVaultProps> = ({
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--pm-accent-soft)] file:px-2 file:py-1 file:text-xs file:font-bold"
                 />
-                <p className="mt-1.5 text-[10px] text-[var(--pm-muted)]">PDF, JPG, PNG অথবা WebP</p>
+                <p className="mt-1.5 text-[10px] text-[var(--pm-muted)]">
+                  {isBn ? 'PDF, JPG, PNG অথবা WebP (সর্বোচ্চ ৬ এমবি)' : 'PDF, JPG, PNG or WebP (Max 6 MB)'}
+                </p>
               </div>
 
               <div>

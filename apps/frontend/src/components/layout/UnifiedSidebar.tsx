@@ -47,6 +47,7 @@ import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { useLocationSettings } from '@/contexts/LocationContext';
 import { useAuth } from '@/features/auth';
 import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 export interface UnifiedSidebarProps {
   mode: 'desktop' | 'drawer';
@@ -320,7 +321,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative shrink-0">
                     <img
-                      src={currentUser.avatar}
+                      src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
                       alt={currentUser.name}
                       referrerPolicy="no-referrer"
                       className="w-11 h-11 rounded-full object-cover ring-2 ring-[var(--pm-accent)]/30"

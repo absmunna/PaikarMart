@@ -1,23 +1,26 @@
 import React, { useState } from 'react';
 import { 
-  Sparkles, 
   Video,
-  Newspaper,
   Play
 } from 'lucide-react';
-import { CreatorContent, User } from '@/types';
+import { CommerceItem, CreatorContent, User } from '@/types';
 import { INITIAL_CREATOR_POSTS } from '@/data/mockData';
 import { AdMobBanner } from '@/design-system/components';
 import { CreatorContentCard } from '@/portals/community/creator-studio/components/CreatorContentCard';
+import { IndustryNewsPanel } from '@/portals/community/creator-studio/components/IndustryNewsPanel';
 
 interface CreatorPortalProps {
   currentUser: User;
   onDeductBalance: (amount: number) => boolean;
+  commerceItems?: CommerceItem[];
+  onAddToCart?: (item: CommerceItem) => void;
 }
 
 export const CreatorPortal: React.FC<CreatorPortalProps> = ({
   currentUser,
   onDeductBalance,
+  commerceItems = [],
+  onAddToCart,
 }) => {
   const [posts, setPosts] = useState<CreatorContent[]>(INITIAL_CREATOR_POSTS);
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'news'>('all');
@@ -78,42 +81,30 @@ export const CreatorPortal: React.FC<CreatorPortalProps> = ({
         ))}
       </div>
 
-      {/* Creator Feed Cards with OTT focus */}
-      <div className="grid grid-cols-1 gap-4 sm:gap-8">
-        {visiblePosts.map((post) => (
-          <CreatorContentCard
-            key={post.id}
-            post={post}
-            onUnlock={handleUnlock}
-          />
-        ))}
-      </div>
+      {/* Creator Feed Cards with OTT & Shoppable Video focus */}
+      {activeTab !== 'news' && (
+        <div className="grid grid-cols-1 gap-4 sm:gap-8">
+          {visiblePosts.map((post, idx) => {
+            const linkedProduct = commerceItems.length > 0
+              ? commerceItems[idx % commerceItems.length]
+              : undefined;
+            return (
+              <CreatorContentCard
+                key={post.id}
+                post={post}
+                linkedProduct={linkedProduct}
+                onUnlock={handleUnlock}
+                onAddToCart={onAddToCart}
+              />
+            );
+          })}
+        </div>
+      )}
 
       <AdMobBanner />
-      
+
       {/* Industry News Section */}
-      <div className="bg-[var(--pm-surface)] border border-[var(--pm-border)] rounded-3xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black uppercase tracking-widest text-[var(--pm-text)] flex items-center gap-2">
-            <Newspaper className="w-4 h-4 text-[var(--pm-accent)]" />
-            PaikarMart Trade News
-          </h3>
-          <button className="text-[10px] font-bold text-[var(--pm-accent)] underline cursor-pointer">View Archive</button>
-        </div>
-        <div className="space-y-3">
-           {[1, 2].map(i => (
-             <div key={i} className="bg-[var(--pm-card)] p-4 rounded-2xl flex gap-3 shadow-sm border border-[var(--pm-border)]">
-               <div className="w-16 h-16 rounded-xl bg-[var(--pm-surface)] shrink-0 overflow-hidden">
-                  <img src={`https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=200&h=200&q=80`} alt="News" className="w-full h-full object-cover" />
-               </div>
-               <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-[var(--pm-text)] line-clamp-2">New Import Regulations for Consumer Electronics in Q4 2026</h4>
-                  <p className="text-[10px] text-[var(--pm-muted)]">2 hours ago · 4 min read</p>
-               </div>
-             </div>
-           ))}
-        </div>
-      </div>
+      <IndustryNewsPanel />
     </div>
   );
 };

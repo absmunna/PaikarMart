@@ -1,19 +1,28 @@
 import React from 'react';
 import { Lock, Play, CheckCircle2, Heart, Coins, BookOpen } from 'lucide-react';
-import { CreatorContent } from '@/types';
+import { CommerceItem, CreatorContent } from '@/types';
+import { ShoppableProductOverlay } from '@/portals/community/creator-studio/components/ShoppableProductOverlay';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 interface CreatorContentCardProps {
   post: CreatorContent;
+  linkedProduct?: CommerceItem;
   onUnlock: (postId: string, price: number) => void;
+  onAddToCart?: (item: CommerceItem) => void;
 }
 
-export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({ post, onUnlock }) => {
+export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({
+  post,
+  linkedProduct,
+  onUnlock,
+  onAddToCart,
+}) => {
   return (
     <article className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl overflow-hidden shadow-xs group transition-all duration-300 hover:shadow-xl">
       
       <div className="relative aspect-video overflow-hidden bg-[var(--pm-surface)] cursor-pointer">
         <img 
-          src={post.mediaUrl || "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&h=450&q=80"} 
+          src={safeMediaSrc(post.mediaUrl, "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&h=450&q=80")} 
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
           alt={post.title} 
           loading="lazy"
@@ -50,7 +59,7 @@ export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({ post, on
 
       <div className="p-6 space-y-4">
         <div className="flex items-center gap-4">
-          <img src={post.creatorAvatar} className="w-10 h-10 rounded-full object-cover ring-2 ring-[var(--pm-border)] shadow-sm" alt={post.creatorName} />
+          <img src={safeMediaSrc(post.creatorAvatar, DEFAULT_AVATAR_URL)} className="w-10 h-10 rounded-full object-cover ring-2 ring-[var(--pm-border)] shadow-sm" alt={post.creatorName} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h4 className="text-sm font-bold text-[var(--pm-text)] truncate">{post.creatorName}</h4>
@@ -62,13 +71,20 @@ export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({ post, on
 
         <h2 className="text-lg sm:text-xl font-bold text-[var(--pm-text)] leading-tight group-hover:text-[var(--pm-accent)] transition-colors">{post.title}</h2>
         <p className="text-sm text-[var(--pm-muted)] line-clamp-2 leading-relaxed">{post.previewText}</p>
+
+        {linkedProduct && (
+          <ShoppableProductOverlay
+            product={linkedProduct}
+            onAddToCart={onAddToCart}
+          />
+        )}
         
         <div className="pt-4 border-t border-[var(--pm-border)] flex items-center justify-between text-[11px] font-bold text-[var(--pm-muted)] uppercase tracking-wider">
           <div className="flex items-center gap-6">
-             <button className="flex items-center gap-1.5 hover:text-[var(--pm-danger)] transition-colors cursor-pointer"><Heart className="w-4 h-4"/> {post.likes}</button>
-             <button className="flex items-center gap-1.5 hover:text-[var(--pm-warning)] transition-colors cursor-pointer"><Coins className="w-4 h-4"/> Tip Creator</button>
+             <button type="button" className="flex items-center gap-1.5 hover:text-[var(--pm-danger)] transition-colors cursor-pointer"><Heart className="w-4 h-4"/> {post.likes}</button>
+             <button type="button" className="flex items-center gap-1.5 hover:text-[var(--pm-warning)] transition-colors cursor-pointer"><Coins className="w-4 h-4"/> Tip Creator</button>
           </div>
-          <button className="flex items-center gap-1.5 hover:text-[var(--pm-accent)] transition-colors cursor-pointer"><BookOpen className="w-4 h-4"/> Read Details</button>
+          <button type="button" className="flex items-center gap-1.5 hover:text-[var(--pm-accent)] transition-colors cursor-pointer"><BookOpen className="w-4 h-4"/> Read Details</button>
         </div>
       </div>
     </article>

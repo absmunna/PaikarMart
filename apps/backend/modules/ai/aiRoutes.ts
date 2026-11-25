@@ -1,12 +1,26 @@
 import { Router, Request, Response } from 'express';
-import { 
-  generateChatbotResponse, 
-  runSearchGrounding, 
-  runMapsGrounding, 
-  transcribeAudio 
+import {
+  generateChatbotResponse,
+  runSearchGrounding,
+  runMapsGrounding,
+  transcribeAudio
 } from './aiServices.js';
+import { requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 
 export const aiRouter = Router();
+
+interface FlaggedPostQueueItem {
+  id: string;
+  authorUid: string;
+  contentExcerpt: string;
+  flaggedKeywords: string[];
+  status: 'pending_human_review' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+const flaggedPostsQueue: FlaggedPostQueueItem[] = [];
 
 // 1. Multi-turn AI Chatbot Route
 aiRouter.post('/chat', async (req: Request, res: Response) => {
@@ -85,13 +99,14 @@ aiRouter.post('/transcribe', async (req: Request, res: Response) => {
 });
 
 // 5. Citizen Classified Post Safety & AI Moderation (Fail-Safe)
-aiRouter.post('/moderate-post', async (req: Request, res: Response) => {
+aiRouter.post('/moderate-post', requireFirebaseAuth, async (req: Request, res: Response) => {
   try {
-    const { content = '', category = 'general' } = req.body;
-    if (!content || typeof content !== 'string') {
+    const rawContent = req.body?.content;
+    if (!rawContent || typeof rawContent !== 'string') {
       return res.status(400).json({ error: 'Post content string is required.' });
     }
 
+    const content = rawContent.slice(0, 5000);
     const lower = content.toLowerCase();
     const prohibitedKeywords = [
       'অস্ত্র', 'পিস্তল', 'বন্দুক', 'weapon', 'gun', 'explosive',
@@ -100,15 +115,27 @@ aiRouter.post('/moderate-post', async (req: Request, res: Response) => {
       'জাল টাকা', 'হুমকি', 'fake passport', 'জাল এনআইডি'
     ];
 
-    const flaggedKeywords = prohibitedKeywords.filter(k => lower.includes(k));
+    const flaggedKeywords = prohibitedKeywords.filter((k) => lower.includes(k));
 
     if (flaggedKeywords.length > 0) {
+      const queueItem: FlaggedPostQueueItem = {
+        id: `mod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        authorUid: String(res.locals.auth?.uid || 'unknown'),
+        contentExcerpt: content.slice(0, 240),
+        flaggedKeywords,
+        status: 'pending_human_review',
+        createdAt: new Date().toISOString(),
+      };
+      flaggedPostsQueue.unshift(queueItem);
+      if (flaggedPostsQueue.length > 100) flaggedPostsQueue.length = 100;
+
       return res.json({
         isSafe: false,
         riskLevel: 'high_risk_flagged',
         reason: 'Sensitive or high-risk content detected. Held for human review.',
         flaggedKeywords,
-        status: 'pending_human_review'
+        status: 'pending_human_review',
+        moderationId: queueItem.id,
       });
     }
 
@@ -116,16 +143,40 @@ aiRouter.post('/moderate-post', async (req: Request, res: Response) => {
       isSafe: true,
       riskLevel: 'safe',
       reason: 'Automated AI safety screening passed.',
-      status: 'approved'
+      status: 'approved',
     });
   } catch (error: any) {
     console.error('Error in /api/ai/moderate-post:', error);
-    // Fail-safe: if server-side analysis throws, hold for human review
     return res.json({
       isSafe: false,
       riskLevel: 'high_risk_flagged',
       reason: 'Moderation service error; listing held for reviewer.',
-      status: 'pending_human_review'
+      status: 'pending_human_review',
     });
   }
+});
+
+// 6. Moderator/Admin Queue for Flagged Citizen Posts
+aiRouter.get('/moderation/posts', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    posts: flaggedPostsQueue,
+  });
+});
+
+aiRouter.patch('/moderation/posts/:id/review', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
+  const target = flaggedPostsQueue.find((item) => item.id === req.params.id);
+  if (!target) {
+    res.status(404).json({ error: 'Flagged post record not found.' });
+    return;
+  }
+  const decision = req.body?.decision === 'approved' ? 'approved' : req.body?.decision === 'rejected' ? 'rejected' : null;
+  if (!decision) {
+    res.status(400).json({ error: 'Decision must be approved or rejected.' });
+    return;
+  }
+  target.status = decision;
+  target.reviewedBy = String(res.locals.auth?.email || res.locals.auth?.uid);
+  target.reviewedAt = new Date().toISOString();
+  res.json({ success: true, post: target });
 });

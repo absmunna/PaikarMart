@@ -72,6 +72,14 @@ create table if not exists public.identity_verifications (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+create table if not exists public.identity_documents (
+  id uuid primary key default uuid_generate_v4(),
+  verification_id uuid references public.identity_verifications(id) on delete cascade not null,
+  doc_type text not null,
+  storage_path text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 create table if not exists public.saved_addresses (
   id uuid primary key default uuid_generate_v4(),
   profile_id uuid references public.profiles(id) on delete cascade not null,
@@ -139,6 +147,7 @@ create unique index if not exists idx_vendor_memberships_one_primary
 -- ==============================================================================
 create table if not exists public.master_products (
   id uuid primary key default uuid_generate_v4(),
+  pmin text unique,
   barcode text unique,
   title_en text not null,
   title_bn text not null,
@@ -154,16 +163,21 @@ create table if not exists public.master_products (
 );
 
 -- ==============================================================================
--- 6. Seller Listings Table (1:N Multi-Vendor Offers)
+-- 6. Seller Listings Table (1:N Multi-Vendor Offers + Buy-Box)
 -- Sellers attach offers & in-store shelf photos without polluting master catalog
 -- ==============================================================================
 create table if not exists public.seller_listings (
   id uuid primary key default uuid_generate_v4(),
   master_product_id uuid references public.master_products(id) on delete restrict not null,
+  pmin text,
   store_id uuid references public.stores(id) on delete cascade not null,
   seller_id uuid references public.profiles(id) on delete cascade not null,
   price numeric(10,2) not null check (price >= 0.00),
   original_price numeric(10,2),
+  shipping_fee numeric(10,2) not null default 0.00 check (shipping_fee >= 0.00),
+  condition text not null default 'New',
+  fulfillment_type text not null default 'seller_fulfilled',
+  is_buy_box_winner boolean not null default false,
   stock_quantity int not null default 0 check (stock_quantity >= 0),
   trade_mode text not null default 'retail' check (trade_mode in ('retail', 'wholesale')),
   min_wholesale_qty int default 1 check (min_wholesale_qty >= 1),
@@ -196,11 +210,13 @@ create table if not exists public.catalog_submissions (
 );
 
 -- ==============================================================================
--- 8. Standalone Custom Products (Legacy / Direct Products)
+-- 8. Standalone Custom Products (Legacy / Direct Products + Additive PMIN Link)
 -- ==============================================================================
 create table if not exists public.products (
   id uuid primary key default uuid_generate_v4(),
   store_id uuid references public.stores(id) on delete cascade not null,
+  master_product_id uuid references public.master_products(id) on delete set null,
+  pmin text,
   type text not null check (type in ('wholesale', 'retail', 'food', 'service', 'rides', 'grocery')),
   title text not null,
   description text,
@@ -481,6 +497,8 @@ grant select on public.public_handle_profiles to anon, authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.private_user_details enable row level security;
+alter table public.identity_verifications enable row level security;
+alter table public.identity_documents enable row level security;
 alter table public.saved_addresses enable row level security;
 alter table public.stores enable row level security;
 alter table public.vendor_memberships enable row level security;
@@ -1136,4 +1154,205 @@ create index if not exists idx_prescription_uploads_customer on public.prescript
 create index if not exists idx_analytics_event_created on public.analytics(event_type, created_at desc);
 create index if not exists idx_analytics_store_created on public.analytics(store_id, created_at desc);
 create index if not exists idx_analytics_product_id on public.analytics(product_id);
+
+-- ==============================================================================
+-- 17. PERSISTENT USER NOTIFICATIONS TABLE & RLS (Spark-Free PostgreSQL Engine)
+-- ==============================================================================
+create table if not exists public.notifications (
+  id uuid primary key default uuid_generate_v4(),
+  auth_uid text not null,
+  type text not null default 'system' check (type in ('order', 'booking', 'social', 'system', 'wallet')),
+  title text not null,
+  message text not null,
+  read boolean not null default false,
+  action_tab text,
+  link_id text,
+  avatar text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.notifications enable row level security;
+
+create policy "Users can view their own notifications"
+  on public.notifications for select
+  using (auth.uid()::text = auth_uid or public.has_role('admin') or public.has_role('super_admin'));
+
+create policy "Users can create their own notifications"
+  on public.notifications for insert
+  with check (auth.uid()::text = auth_uid or public.has_role('admin') or public.has_role('super_admin'));
+
+create policy "Users can update their own notifications"
+  on public.notifications for update
+  using (auth.uid()::text = auth_uid or public.has_role('admin') or public.has_role('super_admin'))
+  with check (auth.uid()::text = auth_uid or public.has_role('admin') or public.has_role('super_admin'));
+
+create policy "Users can delete their own notifications"
+  on public.notifications for delete
+  using (auth.uid()::text = auth_uid or public.has_role('admin') or public.has_role('super_admin'));
+
+create index if not exists idx_notifications_auth_uid_created
+  on public.notifications(auth_uid, created_at desc);
+
+-- ==============================================================================
+-- 18. SUPABASE STORAGE BUCKETS (Spark-Free Alternative to Firebase Storage)
+-- Public avatar bucket + private KYC documents bucket (signed URL access only)
+-- ==============================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values
+  (
+    'paikarmart-avatars',
+    'paikarmart-avatars',
+    true,
+    2097152,
+    array['image/jpeg', 'image/png', 'image/webp']
+  ),
+  (
+    'paikarmart-kyc-docs',
+    'paikarmart-kyc-docs',
+    false,
+    6291456,
+    array['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+  )
+on conflict (id) do nothing;
+
+-- ==============================================================================
+-- 19. ADDITIVE LIVE-MIGRATION SAFETY + FILE ASSETS & CITIZEN KYC / RFQ RLS LOCK
+-- Safe to re-run against existing production Supabase databases
+-- ==============================================================================
+alter table if exists public.master_products add column if not exists pmin text unique;
+alter table if exists public.seller_listings add column if not exists pmin text;
+alter table if exists public.seller_listings add column if not exists shipping_fee numeric(10,2) not null default 0.00;
+alter table if exists public.seller_listings add column if not exists condition text not null default 'New';
+alter table if exists public.seller_listings add column if not exists fulfillment_type text not null default 'seller_fulfilled';
+alter table if exists public.seller_listings add column if not exists is_buy_box_winner boolean not null default false;
+alter table if exists public.products add column if not exists master_product_id uuid references public.master_products(id) on delete set null;
+alter table if exists public.products add column if not exists pmin text;
+
+create index if not exists idx_master_products_pmin on public.master_products(pmin);
+create index if not exists idx_seller_listings_pmin on public.seller_listings(pmin);
+create index if not exists idx_seller_listings_buybox on public.seller_listings(master_product_id, is_active, is_buy_box_winner);
+
+-- 19A. Citizen KYC Strict RLS Policies
+create policy "Citizens and governance reviewers can view identity verifications"
+  on public.identity_verifications for select
+  using (
+    user_id = public.current_profile_id()
+    or public.has_role('moderator')
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create policy "Citizens can submit their own identity verification"
+  on public.identity_verifications for insert
+  with check (user_id = public.current_profile_id());
+
+create policy "Governance admins manage identity verification reviews"
+  on public.identity_verifications for update
+  using (
+    public.has_role('moderator')
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create policy "Citizens and governance reviewers can view identity documents"
+  on public.identity_documents for select
+  using (
+    exists (
+      select 1 from public.identity_verifications iv
+      where iv.id = verification_id and iv.user_id = public.current_profile_id()
+    )
+    or public.has_role('moderator')
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create policy "Citizens can attach documents to their own verification"
+  on public.identity_documents for insert
+  with check (
+    exists (
+      select 1 from public.identity_verifications iv
+      where iv.id = verification_id and iv.user_id = public.current_profile_id()
+    )
+  );
+
+-- 19B. Storage File Assets Registry (Signed URL & Ownership Control)
+create table if not exists public.file_assets (
+  id uuid primary key default uuid_generate_v4(),
+  owner_uid text not null,
+  profile_id uuid references public.profiles(id) on delete set null,
+  purpose text not null default 'images',
+  bucket text not null,
+  storage_path text not null,
+  public_url text,
+  mime_type text not null,
+  size_bytes bigint not null check (size_bytes > 0),
+  original_name text,
+  is_private boolean not null default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.file_assets enable row level security;
+
+create policy "Public or owner-scoped file asset metadata readable"
+  on public.file_assets for select
+  using (
+    is_private = false
+    or auth.uid()::text = owner_uid
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create policy "Authenticated users record only their own file assets"
+  on public.file_assets for insert
+  with check (auth.uid()::text = owner_uid);
+
+create policy "Owners and admins can delete file assets"
+  on public.file_assets for delete
+  using (
+    auth.uid()::text = owner_uid
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create index if not exists idx_file_assets_owner on public.file_assets(owner_uid, created_at desc);
+
+-- 19C. B2B RFQ Requests Table & RLS
+create table if not exists public.paikarmart_rfqs (
+  id text primary key,
+  "buyerId" text not null,
+  "buyerName" text not null,
+  "itemTitle" text not null,
+  quantity int not null check (quantity > 0),
+  "targetPricePerUnit" numeric(12,2) default 0.00,
+  specifications text,
+  "deliveryDeadline" text,
+  status text not null default 'pending' check (status in ('pending', 'negotiating', 'quoted', 'accepted', 'rejected')),
+  quotes jsonb not null default '[]'::jsonb,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.paikarmart_rfqs enable row level security;
+
+create policy "Buyers, verified vendors, and admins can view RFQs"
+  on public.paikarmart_rfqs for select
+  using (
+    auth.uid()::text = "buyerId"
+    or public.has_role('vendor')
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+create policy "Authenticated buyers can create their own RFQs"
+  on public.paikarmart_rfqs for insert
+  with check (auth.uid()::text = "buyerId");
+
+create policy "Buyers and admins can update RFQ status"
+  on public.paikarmart_rfqs for update
+  using (
+    auth.uid()::text = "buyerId"
+    or public.has_role('admin')
+    or public.has_role('super_admin')
+  );
+
+
 

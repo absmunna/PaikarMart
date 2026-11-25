@@ -20,9 +20,13 @@ import {
   ShieldCheck,
   ChevronRight,
   ChevronLeft,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/features/auth';
+import { uploadUserAsset } from '@/lib/firebase';
 
 interface MultiRoleOnboardingModalProps {
   isOpen: boolean;
@@ -38,6 +42,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
   onCompleteOnboarding
 }) => {
   const { language } = useLanguage();
+  const { firebaseUser, refetchProfile } = useAuth();
   const isBn = language === 'bn';
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -56,12 +61,15 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
     'wholesale_supplier'
   ]);
 
-  // Step 3: Legal Verification (NID, Trade License, e-TIN)
+  // Step 3: Legal Verification (NID, Trade License, e-TIN + Optional Document Upload)
   const [nidNumber, setNidNumber] = useState('');
   const [businessRegNumber, setBusinessRegNumber] = useState('');
   const [tinNumber, setTinNumber] = useState('');
   const [tradeLicenseFileName, setTradeLicenseFileName] = useState('Trade_License_2026.pdf');
+  const [tradeLicenseUrl, setTradeLicenseUrl] = useState<string | undefined>(undefined);
   const [nidFileName, setNidFileName] = useState('NID_Verification_Scan.jpg');
+  const [nidFileUrl, setNidFileUrl] = useState<string | undefined>(undefined);
+  const [uploadingDocType, setUploadingDocType] = useState<'nid' | 'trade' | null>(null);
 
   // Step 4: Payout Settlement Method
   const [payoutType, setPayoutType] = useState<PayoutAccount['type']>('bKash Merchant');
@@ -99,6 +107,40 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
     setStep((prev) => Math.min(5, prev + 1) as 1 | 2 | 3 | 4 | 5);
   };
 
+  const handleDocumentUpload = async (docKind: 'nid' | 'trade', file?: File | null) => {
+    if (!file) return;
+    setErrorMsg(null);
+    if (file.size > 6 * 1024 * 1024) {
+      setErrorMsg(isBn ? 'ফাইলের আকার ৬ এমবি-র কম হতে হবে।' : 'Document size must be under 6 MB.');
+      return;
+    }
+
+    if (docKind === 'nid') {
+      setNidFileName(file.name);
+    } else {
+      setTradeLicenseFileName(file.name);
+    }
+
+    const uid = firebaseUser?.uid || applicantId;
+    if (!uid || uid === 'user_me') return;
+
+    try {
+      setUploadingDocType(docKind);
+      const uploadedUrl = await uploadUserAsset(file, uid, 'documents');
+      if (uploadedUrl) {
+        if (docKind === 'nid') setNidFileUrl(uploadedUrl);
+        else setTradeLicenseUrl(uploadedUrl);
+      }
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes('6 MB') || err.message.includes('Unsupported'))) {
+        setErrorMsg(err.message);
+      }
+      // Keep filename reference cleanly if cloud storage is not provisioned in local preview
+    } finally {
+      setUploadingDocType(null);
+    }
+  };
+
   const handleFinishOnboarding = async () => {
     setIsSubmitting(true);
     setErrorMsg(null);
@@ -109,6 +151,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
           id: `doc_${Date.now()}_1`,
           type: 'Trade License',
           fileName: tradeLicenseFileName.trim(),
+          ...(tradeLicenseUrl ? { fileUrl: tradeLicenseUrl } : {}),
           status: 'pending',
           uploadedAt: new Date().toISOString().split('T')[0]
         });
@@ -118,6 +161,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
           id: `doc_${Date.now()}_2`,
           type: 'NID / Passport',
           fileName: nidFileName.trim(),
+          ...(nidFileUrl ? { fileUrl: nidFileUrl } : {}),
           status: 'pending',
           uploadedAt: new Date().toISOString().split('T')[0]
         });
@@ -133,7 +177,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
       }
 
       const response = await vendorApiClient.registerVendorKyc({
-        applicantId,
+        applicantId: firebaseUser?.uid || applicantId,
         storeName: storeName.trim(),
         legalEntityName: (legalEntityName || storeName).trim(),
         sellerTier,
@@ -151,6 +195,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
         location: storeLocation.trim()
       });
 
+      await refetchProfile().catch(() => null);
       onCompleteOnboarding(response.vendorProfile);
       onClose();
     } catch (err: any) {
@@ -438,27 +483,62 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--pm-border)]">
-                <div>
-                  <label className="font-bold text-[var(--pm-text)] block mb-1">
-                    NID Document Scan Reference
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[var(--pm-text)] block">
+                    {isBn ? 'NID ডকুমেন্ট আপলোড / ফাইল নাম' : 'NID Scan Upload / File Ref'}
                   </label>
-                  <input
-                    type="text"
-                    value={nidFileName}
-                    onChange={(e) => setNidFileName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] font-mono text-xs outline-none focus:border-[var(--pm-accent)]"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={nidFileName}
+                      onChange={(e) => setNidFileName(e.target.value)}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] font-mono text-xs outline-none focus:border-[var(--pm-accent)]"
+                    />
+                    <label className="px-2.5 py-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[11px] font-bold text-[var(--pm-text)] flex items-center gap-1 cursor-pointer shrink-0">
+                      {uploadingDocType === 'nid' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>{isBn ? 'আপলোড' : 'Upload'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(e) => void handleDocumentUpload('nid', e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                  {nidFileUrl && (
+                    <span className="text-[10px] font-bold text-[var(--pm-success)] block">
+                      {isBn ? 'ক্লাউড স্টোরেজে আপলোড সম্পন্ন' : 'Uploaded to encrypted storage'}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <label className="font-bold text-[var(--pm-text)] block mb-1">
-                    Trade License File Reference
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[var(--pm-text)] block">
+                    {isBn ? 'ট্রেড লাইসেন্স আপলোড / ফাইল নাম' : 'Trade License Upload / File Ref'}
                   </label>
-                  <input
-                    type="text"
-                    value={tradeLicenseFileName}
-                    onChange={(e) => setTradeLicenseFileName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] font-mono text-xs outline-none focus:border-[var(--pm-accent)]"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={tradeLicenseFileName}
+                      onChange={(e) => setTradeLicenseFileName(e.target.value)}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-[var(--pm-text)] font-mono text-xs outline-none focus:border-[var(--pm-accent)]"
+                    />
+                    <label className="px-2.5 py-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[11px] font-bold text-[var(--pm-text)] flex items-center gap-1 cursor-pointer shrink-0">
+                      {uploadingDocType === 'trade' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>{isBn ? 'আপলোড' : 'Upload'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(e) => void handleDocumentUpload('trade', e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                  {tradeLicenseUrl && (
+                    <span className="text-[10px] font-bold text-[var(--pm-success)] block">
+                      {isBn ? 'ক্লাউড স্টোরেজে আপলোড সম্পন্ন' : 'Uploaded to encrypted storage'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

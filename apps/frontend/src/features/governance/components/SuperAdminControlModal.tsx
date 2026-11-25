@@ -15,6 +15,14 @@ import { UserRole } from '@/types';
 import { isGovernanceRole } from '@paikarmart/shared';
 import { useAuth } from '@/features/auth';
 import { vendorApiClient, KycApplicationItem } from '@/features/vendors';
+import {
+  fetchFlaggedPostsForModeration,
+  fetchPendingCitizenVerifications,
+  reviewCitizenVerification,
+  reviewFlaggedPost,
+  type FlaggedPostModerationItem,
+  type PendingCitizenVerificationItem,
+} from '@/features/identity/services/identityApiClient';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SuperAdminControlModalProps {
@@ -58,12 +66,15 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
   onClose,
   onUpdateUserRole
 }) => {
-  const { firebaseUser, currentUser } = useAuth();
+  const { firebaseUser, currentUser, refetchProfile } = useAuth();
   const { language } = useLanguage();
   const isBn = language === 'bn';
 
   const [adminsList, setAdminsList] = useState(INITIAL_MANAGED_ADMINS);
   const [kycQueue, setKycQueue] = useState<KycApplicationItem[]>([]);
+  const [citizenKycQueue, setCitizenKycQueue] = useState<PendingCitizenVerificationItem[]>([]);
+  const [flaggedPosts, setFlaggedPosts] = useState<FlaggedPostModerationItem[]>([]);
+  const [queueTab, setQueueTab] = useState<'merchant' | 'citizen' | 'posts'>('merchant');
   const [loadingKyc, setLoadingKyc] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
@@ -77,13 +88,16 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
     let active = true;
     setLoadingKyc(true);
     const effectiveRole: UserRole = isGovernanceRole(currentUser.role) ? currentUser.role : 'super_admin';
-    void vendorApiClient
-      .fetchKycQueue(effectiveRole)
-      .then((apps) => {
-        if (active) setKycQueue(apps);
-      })
-      .catch(() => {
-        if (active) setKycQueue([]);
+    void Promise.allSettled([
+      vendorApiClient.fetchKycQueue(effectiveRole),
+      fetchPendingCitizenVerifications(),
+      fetchFlaggedPostsForModeration(),
+    ])
+      .then(([merchantRes, citizenRes, postsRes]) => {
+        if (!active) return;
+        setKycQueue(merchantRes.status === 'fulfilled' ? merchantRes.value : []);
+        setCitizenKycQueue(citizenRes.status === 'fulfilled' ? citizenRes.value : []);
+        setFlaggedPosts(postsRes.status === 'fulfilled' ? postsRes.value : []);
       })
       .finally(() => {
         if (active) setLoadingKyc(false);
@@ -100,38 +114,52 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
     setTimeout(() => setFeedbackMsg(null), 4000);
   };
 
-  const handleGrantRole = (e: React.FormEvent) => {
+  const handleGrantRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) {
       showToast('error', isBn ? 'সঠিক ইমেইল এড্রেস লিখুন।' : 'Please enter a valid email address.');
       return;
     }
 
+    const email = newAdminEmail.trim();
     const newEntry = {
       id: `usr_${Date.now()}`,
-      name: newAdminName.trim() || newAdminEmail.split('@')[0],
-      email: newAdminEmail.trim(),
-      handle: `@${newAdminEmail.split('@')[0]}`,
+      name: newAdminName.trim() || email.split('@')[0],
+      email,
+      handle: `@${email.split('@')[0]}`,
       role: selectedRoleToGrant,
       grantedAt: new Date().toISOString().split('T')[0],
       grantedBy: firebaseUser?.email || currentUser.email || 'super_admin'
     };
 
-    setAdminsList((prev) => [newEntry, ...prev]);
-    onUpdateUserRole(newEntry.id, selectedRoleToGrant);
-    showToast('success', `Assigned ${selectedRoleToGrant.replace('_', ' ')} to ${newEntry.name}.`);
-    setNewAdminEmail('');
-    setNewAdminName('');
+    try {
+      await vendorApiClient.updateGovernanceRole({ email, role: selectedRoleToGrant });
+      await refetchProfile().catch(() => null);
+      setAdminsList((prev) => [newEntry, ...prev]);
+      onUpdateUserRole(newEntry.id, selectedRoleToGrant);
+      showToast('success', `Assigned ${selectedRoleToGrant.replace('_', ' ')} to ${newEntry.name} (synced to database).`);
+      setNewAdminEmail('');
+      setNewAdminName('');
+    } catch (err: any) {
+      showToast('error', err?.message || 'Unable to assign governance role.');
+    }
   };
 
-  const handleRevokeRole = (id: string, name: string) => {
+  const handleRevokeRole = async (id: string, name: string, email?: string) => {
     if (id === 'user_dev_1') {
       showToast('error', 'Cannot revoke Lead Developer Super Admin root access.');
       return;
     }
-    setAdminsList((prev) => prev.filter((a) => a.id !== id));
-    onUpdateUserRole(id, 'consumer');
-    showToast('success', `Revoked governance access from ${name}.`);
+    try {
+      if (email) {
+        await vendorApiClient.updateGovernanceRole({ email, role: 'consumer' }).catch(() => null);
+      }
+      setAdminsList((prev) => prev.filter((a) => a.id !== id));
+      onUpdateUserRole(id, 'consumer');
+      showToast('success', `Revoked governance access from ${name}.`);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Unable to revoke governance role.');
+    }
   };
 
   const handleKycDecision = async (applicationId: string, decision: 'approved' | 'rejected' | 'suspended') => {
@@ -144,9 +172,34 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
         reviewerEmail: firebaseUser?.email || currentUser.email || 'admin@paikarmart.com'
       });
       setKycQueue((prev) => prev.map((a) => (a.id === applicationId ? updated : a)));
+      await refetchProfile().catch(() => null);
       showToast('success', `KYC ${applicationId} marked ${decision.toUpperCase()}.`);
     } catch (err: any) {
       showToast('error', err?.message || 'Unable to process KYC decision.');
+    }
+  };
+
+  const handleCitizenKycDecision = async (verificationId: string, decision: 'verified' | 'rejected') => {
+    try {
+      const updated = await reviewCitizenVerification(verificationId, decision);
+      setCitizenKycQueue((prev) =>
+        prev.map((item) => (item.id === verificationId ? { ...item, status: updated.status } : item))
+      );
+      showToast('success', `Citizen KYC ${verificationId} marked ${decision.toUpperCase()}.`);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Unable to update citizen KYC.');
+    }
+  };
+
+  const handleFlaggedPostDecision = async (postId: string, decision: 'approved' | 'rejected') => {
+    try {
+      const updated = await reviewFlaggedPost(postId, decision);
+      setFlaggedPosts((prev) =>
+        prev.map((post) => (post.id === postId ? updated : post))
+      );
+      showToast('success', `Flagged post marked ${decision.toUpperCase()}.`);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Unable to review flagged post.');
     }
   };
 
@@ -208,78 +261,231 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left 7 cols: Live Backend KYC Verification Queue */}
+              {/* Left 7 cols: Live Backend KYC & Moderation Queues */}
               <div className="lg:col-span-7 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[var(--pm-text)] flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-[var(--pm-success)]" />
-                    <span>Merchant KYC Verification Queue</span>
-                  </h3>
-                  <span className="text-xs font-mono text-[var(--pm-muted)]">{kycQueue.length} applications</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="inline-flex rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-1 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setQueueTab('merchant')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        queueTab === 'merchant'
+                          ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                          : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                      }`}
+                    >
+                      Merchant KYC ({kycQueue.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQueueTab('citizen')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        queueTab === 'citizen'
+                          ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                          : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                      }`}
+                    >
+                      Citizen KYC ({citizenKycQueue.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQueueTab('posts')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        queueTab === 'posts'
+                          ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                          : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                      }`}
+                    >
+                      Flagged Posts ({flaggedPosts.length})
+                    </button>
+                  </div>
                 </div>
 
                 {loadingKyc ? (
                   <div className="p-6 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-xs text-[var(--pm-muted)] text-center">
-                    Loading KYC verification queue...
+                    Loading governance queues...
                   </div>
-                ) : kycQueue.length === 0 ? (
-                  <div className="p-6 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-xs text-[var(--pm-muted)] text-center">
-                    No KYC applications pending review right now.
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                    {kycQueue.map((app) => (
-                      <div
-                        key={app.id}
-                        className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-mono text-[var(--pm-muted)]">
-                              {app.id} · {app.sellerTier.replace(/_/g, ' ')} · {app.status.toUpperCase()}
-                            </p>
-                            <h4 className="text-sm font-bold text-[var(--pm-text)] truncate">
-                              {app.storeName}
-                            </h4>
-                            <p className="text-xs text-[var(--pm-muted)] truncate">
-                              {app.legalEntityName} · NID {app.nidNumber} · License {app.businessRegNumber}
-                            </p>
+                ) : queueTab === 'merchant' ? (
+                  kycQueue.length === 0 ? (
+                    <div className="p-6 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-xs text-[var(--pm-muted)] text-center">
+                      No merchant KYC applications pending review right now.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                      {kycQueue.map((app) => (
+                        <div
+                          key={app.id}
+                          className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-mono text-[var(--pm-muted)]">
+                                {app.id} · {app.sellerTier.replace(/_/g, ' ')} · {app.status.toUpperCase()}
+                              </p>
+                              <h4 className="text-sm font-bold text-[var(--pm-text)] truncate">
+                                {app.storeName}
+                              </h4>
+                              <p className="text-xs text-[var(--pm-muted)] truncate">
+                                {app.legalEntityName} · NID {app.nidNumber} · License {app.businessRegNumber}
+                              </p>
+                            </div>
+
+                            <span
+                              className={`text-xs font-bold shrink-0 flex items-center gap-1 ${
+                                app.status === 'approved'
+                                  ? 'text-[var(--pm-success)]'
+                                  : app.status === 'rejected' || app.status === 'suspended'
+                                  ? 'text-[var(--pm-danger)]'
+                                  : 'text-[var(--pm-warning)]'
+                              }`}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>{app.status.replace(/_/g, ' ')}</span>
+                            </span>
                           </div>
 
-                          <span
-                            className={`text-xs font-bold shrink-0 flex items-center gap-1 ${
-                              app.status === 'approved'
-                                ? 'text-[var(--pm-success)]'
-                                : app.status === 'rejected' || app.status === 'suspended'
-                                ? 'text-[var(--pm-danger)]'
-                                : 'text-[var(--pm-warning)]'
-                            }`}
-                          >
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>{app.status.replace(/_/g, ' ')}</span>
-                          </span>
-                        </div>
+                          {Array.isArray(app.documents) && app.documents.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {app.documents.map((doc) =>
+                                doc.fileUrl && doc.fileUrl.startsWith('https://') ? (
+                                  <a
+                                    key={doc.id}
+                                    href={doc.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-0.5 rounded-md bg-[var(--pm-card)] border border-[var(--pm-accent-border)] text-[10px] font-bold text-[var(--pm-accent)] hover:underline"
+                                  >
+                                    {doc.type}: {doc.fileName}
+                                  </a>
+                                ) : (
+                                  <span
+                                    key={doc.id}
+                                    className="px-2 py-0.5 rounded-md bg-[var(--pm-card)] border border-[var(--pm-border)] text-[10px] font-mono text-[var(--pm-muted)]"
+                                  >
+                                    {doc.type}: {doc.fileName}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          )}
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--pm-border)] text-xs">
-                          <span className="text-[var(--pm-muted)] font-mono truncate">
-                            {app.payoutProvider} · {app.payoutNumber}
-                          </span>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--pm-border)] text-xs">
+                            <span className="text-[var(--pm-muted)] font-mono truncate">
+                              {app.payoutProvider} · {app.payoutNumber}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => void handleKycDecision(app.id, 'approved')}
+                                className="px-3 py-1.5 rounded-lg bg-[var(--pm-success)] hover:opacity-90 text-white font-bold text-xs cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleKycDecision(app.id, 'rejected')}
+                                className="px-3 py-1.5 rounded-lg bg-[var(--pm-danger-soft)] hover:opacity-90 border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] font-bold text-xs cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : queueTab === 'citizen' ? (
+                  citizenKycQueue.length === 0 ? (
+                    <div className="p-6 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-xs text-[var(--pm-muted)] text-center">
+                      No citizen NID/Passport verifications pending review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                      {citizenKycQueue.map((ver) => (
+                        <div
+                          key={ver.id}
+                          className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-mono text-[var(--pm-muted)]">
+                                {ver.documentType} · {ver.documentNumber}
+                              </p>
+                              <h4 className="text-sm font-bold text-[var(--pm-text)] truncate">
+                                {ver.userName} {ver.userHandle ? `(${ver.userHandle})` : ''}
+                              </h4>
+                              {ver.userEmail && (
+                                <p className="text-xs text-[var(--pm-muted)] truncate">{ver.userEmail}</p>
+                              )}
+                            </div>
+                            <span
+                              className={`text-xs font-bold shrink-0 flex items-center gap-1 ${
+                                ver.status === 'verified'
+                                  ? 'text-[var(--pm-success)]'
+                                  : ver.status === 'rejected'
+                                  ? 'text-[var(--pm-danger)]'
+                                  : 'text-[var(--pm-warning)]'
+                              }`}
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>{ver.status}</span>
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-[var(--pm-border)] text-xs">
                             <button
                               type="button"
-                              onClick={() => void handleKycDecision(app.id, 'approved')}
+                              onClick={() => void handleCitizenKycDecision(ver.id, 'verified')}
                               className="px-3 py-1.5 rounded-lg bg-[var(--pm-success)] hover:opacity-90 text-white font-bold text-xs cursor-pointer"
                             >
-                              Approve
+                              Verify Citizen
                             </button>
                             <button
                               type="button"
-                              onClick={() => void handleKycDecision(app.id, 'rejected')}
+                              onClick={() => void handleCitizenKycDecision(ver.id, 'rejected')}
                               className="px-3 py-1.5 rounded-lg bg-[var(--pm-danger-soft)] hover:opacity-90 border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] font-bold text-xs cursor-pointer"
                             >
                               Reject
                             </button>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : flaggedPosts.length === 0 ? (
+                  <div className="p-6 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] text-xs text-[var(--pm-muted)] text-center">
+                    No flagged community posts queued for human review.
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {flaggedPosts.map((post) => (
+                      <div
+                        key={post.id}
+                        className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-mono text-[var(--pm-muted)]">{post.id}</span>
+                          <span className="font-bold text-[var(--pm-warning)]">{post.status}</span>
+                        </div>
+                        <p className="text-xs text-[var(--pm-text)]">{post.contentExcerpt}</p>
+                        <p className="text-[11px] font-mono text-[var(--pm-danger)]">
+                          Flags: {post.flaggedKeywords.join(', ')}
+                        </p>
+                        <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-[var(--pm-border)] text-xs">
+                          <button
+                            type="button"
+                            onClick={() => void handleFlaggedPostDecision(post.id, 'approved')}
+                            className="px-3 py-1.5 rounded-lg bg-[var(--pm-success)] text-white font-bold text-xs cursor-pointer"
+                          >
+                            Approve Post
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleFlaggedPostDecision(post.id, 'rejected')}
+                            className="px-3 py-1.5 rounded-lg bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] font-bold text-xs cursor-pointer"
+                          >
+                            Remove Post
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -352,7 +558,7 @@ export const SuperAdminControlModal: React.FC<SuperAdminControlModalProps> = ({
                         {admin.id !== 'user_dev_1' && (
                           <button
                             type="button"
-                            onClick={() => handleRevokeRole(admin.id, admin.name)}
+                            onClick={() => void handleRevokeRole(admin.id, admin.name, admin.email)}
                             className="px-2.5 py-1 rounded-lg bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] text-[11px] font-bold shrink-0 cursor-pointer"
                           >
                             Revoke

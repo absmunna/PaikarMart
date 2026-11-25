@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { isGovernanceRole, normalizeHandle } from '@paikarmart/shared';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 import { 
   User as UserType, 
   SocialPost, 
@@ -34,12 +35,7 @@ import {
   UserCheck,
   Briefcase,
   GraduationCap,
-  Award,
-  Car,
-  Gavel,
-  Home,
-  Sparkles,
-  AlertCircle
+  Sparkles
 } from 'lucide-react';
 import { FeedPostCard } from '@/features/social';
 import { OrderTrackingStepper } from '@/portals/utilities/user-profile/components/OrderTrackingStepper';
@@ -217,7 +213,7 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
           <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
             <div className="relative">
               <img
-                src={currentUser.avatar}
+                src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
                 alt={currentUser.name}
                 referrerPolicy="no-referrer"
               className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover ring-4 ring-[var(--pm-card)] shadow-xl bg-[var(--pm-card)]"
@@ -248,21 +244,23 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                 {currentUser.handle || '@alexrivera'} · {currentUser.location} · Trust Level {currentUser.trustLevel ?? (currentUser.isVendor ? 5 : 2)}
               </p>
 
-              {/* Public Facebook-style Profile Info: Profession & Education */}
-              <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 pt-1 text-[11px] font-semibold text-[var(--pm-text)]">
-                {currentUser.profession && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                    <Briefcase className="w-3 h-3 text-blue-500" />
-                    <span>{currentUser.profession}</span>
-                  </span>
-                )}
-                {currentUser.education && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                    <GraduationCap className="w-3 h-3 text-emerald-500" />
-                    <span>{currentUser.education}</span>
-                  </span>
-                )}
-              </div>
+              {/* Public Unified Profile Info: Profession & Education */}
+              {(currentUser.profession || currentUser.education) && (
+                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 pt-1 text-[11px] font-semibold text-[var(--pm-text)]">
+                  {currentUser.profession && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                      <Briefcase className="w-3 h-3 text-blue-500" />
+                      <span>{currentUser.profession}</span>
+                    </span>
+                  )}
+                  {currentUser.education && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                      <GraduationCap className="w-3 h-3 text-emerald-500" />
+                      <span>{currentUser.education}</span>
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Skills Tags */}
               {currentUser.skills && currentUser.skills.length > 0 && (
@@ -276,18 +274,12 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               )}
 
               <div className="flex items-center justify-center sm:justify-start flex-wrap gap-1.5 pt-0.5">
-                {currentUser.personalVerification?.status === 'verified' ? (
+                {currentUser.personalVerification?.status === 'verified' && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/30">
                     <ShieldCheck className="w-3 h-3 text-blue-500" />
                     <span>{isBn ? `নাগরিক ভেরিফাইড (${currentUser.personalVerification.documentType})` : `Verified Citizen (${currentUser.personalVerification.documentType})`}</span>
                   </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                    <AlertCircle className="w-3 h-3" />
-                    <span>{isBn ? 'নাগরিক ভেরিফিকেশন অপেক্ষারত' : 'Citizen Verification Pending'}</span>
-                  </span>
                 )}
-
                 {firebaseUser ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--pm-success)] bg-[var(--pm-success-soft)] px-2 py-0.5 rounded-full border border-[var(--pm-success)]/30">
                     <CheckCircle2 className="w-3 h-3" />
@@ -373,7 +365,6 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               <span>{t.nav.settings}</span>
             </button>
 
-            {/* My Business / আমার ব্যবসা Button */}
             <button
               onClick={() => {
                 if (currentUser.isVendor && onSelectTab) {
@@ -433,9 +424,9 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                 {isBn ? 'একক প্রোফাইল · সমন্বিত বিজনেস ও নাগরিক হাব (Unified Profile)' : 'Single Account · Multi-Role Hub Access'}
               </h3>
               <p className="text-[11px] text-[var(--pm-muted)]">
-                {isBn 
-                  ? 'একটি অ্যাকাউন্টেই কেনাকাটা, নিজের কাপড়ের শপ পরিচালনা, সার্ভিস প্রদান ও কনটেন্ট তৈরি' 
-                  : 'Buy products, run your clothing store, provide tutoring, and manage content from one account'}
+                {isBn
+                  ? 'একটি অ্যাকাউন্টেই কেনাকাটা, নিজের স্টোর পরিচালনা, সার্ভিস প্রদান ও কনটেন্ট তৈরি'
+                  : 'Shop, run your storefront, provide services, and manage content from one account'}
               </p>
             </div>
           </div>
@@ -445,9 +436,8 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-          {/* Shop Card */}
-          <div 
-            onClick={() => onSelectTab && onSelectTab('vendor-dash')}
+          <div
+            onClick={() => (currentUser.isVendor && onSelectTab ? onSelectTab('vendor-dash') : onOpenVendorModal())}
             className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between mb-1.5">
@@ -457,15 +447,14 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               </span>
             </div>
             <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
-              {currentUser.vendorProfile?.storeName || (isBn ? 'কাপড়ের দোকান' : 'Clothing Store')}
+              {currentUser.vendorProfile?.storeName || (isBn ? 'আমার স্টোর' : 'My Storefront')}
             </h4>
             <p className="text-[10px] text-[var(--pm-muted)]">
               {isBn ? 'পণ্য মার্কেটপ্লেস ও সেলস ড্যাশবোর্ড' : 'Manage store products & sales'}
             </p>
           </div>
 
-          {/* Service Card */}
-          <div 
+          <div
             onClick={() => onSelectTab && onSelectTab('services')}
             className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
           >
@@ -483,8 +472,7 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
             </p>
           </div>
 
-          {/* Content Creator Card */}
-          <div 
+          <div
             onClick={() => onSelectTab && onSelectTab('creator')}
             className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
           >
@@ -498,13 +486,13 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               {isBn ? 'ভিডিও ও ক্লাস স্টুডিও' : 'Creator Studio'}
             </h4>
             <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'ইউটিউব ক্লাস ও কোর্স পোস্ট' : 'Video lectures & tutorials'}
+              {isBn ? 'ভিডিও ও কোর্স কনটেন্ট' : 'Video lectures & tutorials'}
             </p>
           </div>
 
-          {/* Citizen Powers Card */}
-          <div 
-            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] group"
+          <div
+            onClick={() => onOpenSettingsPortal && onOpenSettingsPortal('account_profile')}
+            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
           >
             <div className="flex items-center justify-between mb-1.5">
               <ShieldCheck className="w-4 h-4 text-amber-500" />
@@ -512,11 +500,11 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                 {isBn ? 'নাগরিক সুবিধা' : 'Citizen Access'}
               </span>
             </div>
-            <h4 className="text-xs font-black text-[var(--pm-text)] truncate">
+            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
               {isBn ? 'হোমমেড, নিলাম ও ফ্ল্যাট' : 'Homemade, Bids & Rent'}
             </h4>
             <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'সাধারণ ভেরিফাইড ইউজার হিসেবে পোস্ট' : 'Post citizen listings'}
+              {isBn ? 'নাগরিক ভেরিফিকেশন ও পোস্ট' : 'Citizen verification & listings'}
             </p>
           </div>
         </div>

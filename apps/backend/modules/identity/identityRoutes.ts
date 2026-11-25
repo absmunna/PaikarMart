@@ -1,18 +1,31 @@
 import { Router } from 'express';
-import multer from 'multer';
-import { submitVerification, getVerificationStatus, uploadDocument } from './identityService.js';
-import { ensureAuth } from '../../middleware/requireFirebaseAuth.js';
+import {
+  submitVerification,
+  getVerificationStatus,
+  uploadDocument,
+  listPendingVerifications,
+  reviewVerification,
+} from './identityService.js';
+import { requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 
 const router = Router();
-router.use(ensureAuth);
 
-// Start or update KYC verification
+// All personal identity / KYC endpoints require verified Firebase Auth
+router.use(requireFirebaseAuth);
+
+// Admin / Moderator Citizen KYC review queue
+router.get('/verifications/pending', requireRole(['moderator', 'admin', 'super_admin']), listPendingVerifications);
+router.get('/pending', requireRole(['moderator', 'admin', 'super_admin']), listPendingVerifications);
+router.patch('/verifications/:id/review', requireRole(['moderator', 'admin', 'super_admin']), reviewVerification);
+router.post('/verifications/:id/review', requireRole(['moderator', 'admin', 'super_admin']), reviewVerification);
+
+// Start or update citizen KYC verification
 router.post('/verification', submitVerification);
 
-// Get verification status by ID
+// Get verification status by ID (owner-scoped)
 router.get('/verification/:id', getVerificationStatus);
 
-// Upload a document for a verification (multipart/form-data)
-router.post('/verification/:id/document', multer().single('file'), uploadDocument);
+// Upload a KYC document (base64 validated payload -> Supabase Storage)
+router.post('/verification/:id/document', uploadDocument);
 
 export default router;

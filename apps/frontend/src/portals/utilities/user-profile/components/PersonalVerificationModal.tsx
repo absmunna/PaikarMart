@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   X,
   ShieldCheck,
-  FileText,
   CheckCircle2,
   Upload,
   Car,
@@ -36,6 +35,7 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
   const [documentType, setDocumentType] = useState<PersonalDocumentType>('NID');
   const [docNumber, setDocNumber] = useState(currentUser.personalVerification?.documentNumber || '');
   const [fileName, setFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
 
@@ -46,9 +46,13 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
     if (!docNumber.trim()) return;
     setIsSubmitting(true);
     try {
-      await submit({ documentType, documentNumber: docNumber.trim() }).catch(() => null);
+      await submit({
+        documentType,
+        documentNumber: docNumber.trim(),
+        frontImage: selectedFile,
+      }).catch(() => null);
     } catch {
-      // Offline fallback allowed
+      // Graceful preview fallback if backend auth/DB is offline
     }
     setIsSubmitting(false);
     setSubmittedSuccess(true);
@@ -58,7 +62,7 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
     setTimeout(() => {
       setSubmittedSuccess(false);
       onClose();
-    }, 1200);
+    }, 1500);
   };
 
   const isVerified = currentUser.personalVerification?.status === 'verified';
@@ -66,7 +70,6 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-scaleIn max-h-[90vh] overflow-y-auto no-scrollbar">
-
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--pm-border)] pb-4">
           <div className="flex items-center gap-2.5">
@@ -75,33 +78,31 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-[var(--pm-text)]">
-                {isBn ? 'ব্যক্তিগত নাগরিক ভেরিফিকেশন' : 'Personal Citizen Verification'}
+                {isBn ? 'ব্যক্তিগত নাগরিক ভেরিফিকেশন' : 'Citizen Personal Verification'}
               </h3>
               <p className="text-xs text-[var(--pm-muted)]">
-                {isBn
-                  ? 'একক অ্যাকাউন্টে সেবা গ্রহণ ও নাগরিক বিক্রির সুবিধা সক্রিয় করুন'
-                  : 'Unlock citizen trade & on-demand services for your single account'}
+                {isBn ? 'একক প্রোফাইলে নিরাপদ সেবা ও ক্রয়-বিক্রয় আনলক করুন' : 'Unlock safe citizen selling, bidding, rides & rentals'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer"
+            className="p-2 rounded-xl hover:bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Unlocked Benefits Matrix */}
-        <div className="space-y-2.5 bg-[var(--pm-surface)] border border-[var(--pm-border)] rounded-2xl p-4">
-          <h4 className="text-xs font-black uppercase tracking-wider text-[var(--pm-muted)] flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-[var(--pm-success)]" />
-            {isBn ? 'ভেরিফাইড হলে আপনি যা যা করতে পারবেন' : 'Privileges Unlocked After Verification'}
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-semibold text-[var(--pm-text)]">
+        {/* Unlocked Benefits Showcase */}
+        <div className="p-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2.5">
+          <p className="text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)]">
+            {isBn ? 'ভেরিফাইড অ্যাকাউন্টে যে সুবিধাগুলো আনলক হবে:' : 'Benefits Unlocked with Citizen Verification:'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold">
             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)]">
               <Car className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-              <span>{isBn ? 'রাইড শেয়ার ও সার্ভিস গ্রহণ' : 'Ride Sharing & Services'}</span>
+              <span>{isBn ? 'রাইড শেয়ার ও সার্ভিস বুকিং' : 'Ride Sharing & Services'}</span>
             </div>
             <div className="flex items-center gap-2 p-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)]">
               <ShoppingBag className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -152,16 +153,20 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
                     key={type}
                     type="button"
                     onClick={() => setDocumentType(type)}
-                    className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex items-center justify-between cursor-pointer ${documentType === type
+                    className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex items-center justify-between cursor-pointer ${
+                      documentType === type
                         ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] shadow-xs'
                         : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
-                      }`}
+                    }`}
                   >
                     <span>
-                      {type === 'NID' ? (isBn ? 'জাতীয় পরিচয়পত্র (NID)' : 'National ID (NID)') :
-                        type === 'Passport' ? (isBn ? 'পাসপোর্ট (Passport)' : 'Passport') :
-                          type === 'Birth Certificate' ? (isBn ? 'জন্মনিবন্ধন সনদ' : 'Birth Certificate') :
-                            (isBn ? 'শিক্ষার্থী আইডি (Student Card)' : 'Student ID Card')}
+                      {type === 'NID'
+                        ? isBn ? 'জাতীয় পরিচয়পত্র (NID)' : 'National ID (NID)'
+                        : type === 'Passport'
+                        ? isBn ? 'পাসপোর্ট (Passport)' : 'Passport'
+                        : type === 'Birth Certificate'
+                        ? isBn ? 'জন্মনিবন্ধন সনদ' : 'Birth Certificate'
+                        : isBn ? 'শিক্ষার্থী আইডি (Student Card)' : 'Student ID Card'}
                     </span>
                     {documentType === type && <CheckCircle2 className="w-3.5 h-3.5" />}
                   </button>
@@ -199,8 +204,10 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
                   accept="image/*,application/pdf"
                   className="hidden"
                   onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setFileName(e.target.files[0].name);
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setFileName(file.name);
+                      setSelectedFile(file);
                     }
                   }}
                 />
@@ -234,7 +241,6 @@ export const PersonalVerificationModal: React.FC<PersonalVerificationModalProps>
             </div>
           </form>
         )}
-
       </div>
     </div>
   );

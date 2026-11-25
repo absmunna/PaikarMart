@@ -10,6 +10,7 @@ import type {
   ServiceBooking,
   SocialPost,
   TaggedProduct,
+  CitizenPostCategory,
   User,
 } from '@/types';
 import type { PortalFilterType } from '@/features/marketplace';
@@ -19,36 +20,79 @@ import { RoleGuard } from '@/app/guards/RoleGuard';
 import { ROUTE_PATHS } from '@/app/router/routeIds';
 import { FeedSkeleton, PortalSkeleton } from '@/design-system/components';
 
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return React.lazy(async () => {
+    const reloadKey = 'paikarmart_chunk_retry_once';
+    try {
+      const mod = await importer();
+      try {
+        sessionStorage.removeItem(reloadKey);
+      } catch {
+        // ignore storage restrictions
+      }
+      return mod;
+    } catch (error) {
+      let alreadyRetried = false;
+      try {
+        alreadyRetried = sessionStorage.getItem(reloadKey) === '1';
+      } catch {
+        alreadyRetried = false;
+      }
+
+      if (!alreadyRetried) {
+        try {
+          sessionStorage.setItem(reloadKey, '1');
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        } catch {
+          // ignore cleanup errors
+        }
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
 // Lazy-loaded Domain-Grouped Portal Modules
-const SocialPortal = React.lazy(() => import('@/portals/community/social-feed').then((m) => ({ default: m.SocialPortal })));
-const ExplorePortal = React.lazy(() => import('@/portals/utilities/explore').then((m) => ({ default: m.ExplorePortal })));
-const MarketplaceHub = React.lazy(() => import('@/hubs/marketplace-hub').then((m) => ({ default: m.MarketplaceHub })));
-const WholesalePortal = React.lazy(() => import('@/portals/marketplaces/wholesale').then((m) => ({ default: m.WholesalePortal })));
-const ServicesHub = React.lazy(() => import('@/hubs/services-hub').then((m) => ({ default: m.ServicesHub })));
-const CommunityHub = React.lazy(() => import('@/hubs/community-hub').then((m) => ({ default: m.CommunityHub })));
-const UtilityHub = React.lazy(() => import('@/hubs/utility-hub').then((m) => ({ default: m.UtilityHub })));
-const TransitPortal = React.lazy(() => import('@/portals/logistics/transit-logistics').then((m) => ({ default: m.TransitPortal })));
-const CreatorPortal = React.lazy(() => import('@/portals/community/creator-studio').then((m) => ({ default: m.CreatorPortal })));
-const SellerCentralPortal = React.lazy(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerCentralPortal })));
-const SellerInventoryPage = React.lazy(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerInventoryPage })));
-const ProfilePortal = React.lazy(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.ProfilePortal })));
-const PublicStorefrontPage = React.lazy(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.PublicStorefrontPage })));
-const NotificationsPortal = React.lazy(() => import('@/portals/utilities/notifications-center').then((m) => ({ default: m.NotificationsPortal })));
-const OrdersPortal = React.lazy(() => import('@/portals/utilities/orders-hub').then((m) => ({ default: m.OrdersPortal })));
-const WalletPortal = React.lazy(() => import('@/portals/utilities/wallet').then((m) => ({ default: m.WalletPortal })));
-const UserGuidePortal = React.lazy(() => import('@/portals/utilities/guide').then((m) => ({ default: m.UserGuidePortal })));
-const ProductDetailsLanding = React.lazy(() => import('@/portals/marketplaces/retail').then((m) => ({ default: m.ProductDetailsLanding })));
-const SettingsPortal = React.lazy(() =>
+const SocialPortal = lazyWithRetry(() => import('@/portals/community/social-feed').then((m) => ({ default: m.SocialPortal })));
+const ExplorePortal = lazyWithRetry(() => import('@/portals/utilities/explore').then((m) => ({ default: m.ExplorePortal })));
+const MarketplaceHub = lazyWithRetry(() => import('@/hubs/marketplace-hub').then((m) => ({ default: m.MarketplaceHub })));
+const WholesalePortal = lazyWithRetry(() => import('@/portals/marketplaces/wholesale').then((m) => ({ default: m.WholesalePortal })));
+const ServicesHub = lazyWithRetry(() => import('@/hubs/services-hub').then((m) => ({ default: m.ServicesHub })));
+const CommunityHub = lazyWithRetry(() => import('@/hubs/community-hub').then((m) => ({ default: m.CommunityHub })));
+const UtilityHub = lazyWithRetry(() => import('@/hubs/utility-hub').then((m) => ({ default: m.UtilityHub })));
+const TransitPortal = lazyWithRetry(() => import('@/portals/logistics/transit-logistics').then((m) => ({ default: m.TransitPortal })));
+const CreatorPortal = lazyWithRetry(() => import('@/portals/community/creator-studio').then((m) => ({ default: m.CreatorPortal })));
+const SellerCentralPortal = lazyWithRetry(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerCentralPortal })));
+const SellerInventoryPage = lazyWithRetry(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerInventoryPage })));
+const ProfilePortal = lazyWithRetry(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.ProfilePortal })));
+const PublicStorefrontPage = lazyWithRetry(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.PublicStorefrontPage })));
+const NotificationsPortal = lazyWithRetry(() => import('@/portals/utilities/notifications-center').then((m) => ({ default: m.NotificationsPortal })));
+const OrdersPortal = lazyWithRetry(() => import('@/portals/utilities/orders-hub').then((m) => ({ default: m.OrdersPortal })));
+const WalletPortal = lazyWithRetry(() => import('@/portals/utilities/wallet').then((m) => ({ default: m.WalletPortal })));
+const UserGuidePortal = lazyWithRetry(() => import('@/portals/utilities/guide').then((m) => ({ default: m.UserGuidePortal })));
+const ProductDetailsLanding = lazyWithRetry(() => import('@/portals/marketplaces/retail').then((m) => ({ default: m.ProductDetailsLanding })));
+const SettingsPortal = lazyWithRetry(() =>
   import('@/portals/utilities/settings-center').then((m) => ({ default: m.SettingsPortal }))
 );
-const MessagesPortal = React.lazy(() => import('@/portals/community/messages').then((m) => ({ default: m.MessagesPortal })));
-const DemandBoardPortal = React.lazy(() =>
+const MessagesPortal = lazyWithRetry(() => import('@/portals/community/messages').then((m) => ({ default: m.MessagesPortal })));
+const DemandBoardPortal = lazyWithRetry(() =>
   import('@/portals/shared/demand-board').then((m) => ({ default: m.DemandBoardPortal }))
 );
-const NearbyRadarPortal = React.lazy(() =>
+const NearbyRadarPortal = lazyWithRetry(() =>
   import('@/portals/shared/nearby-radar').then((m) => ({ default: m.NearbyRadarPortal }))
 );
-const WishlistPortal = React.lazy(() =>
+const WishlistPortal = lazyWithRetry(() =>
   import('@/portals/marketplaces/wishlist').then((m) => ({ default: m.WishlistPortal }))
 );
 
@@ -83,7 +127,15 @@ export interface AppRouteManifestProps {
   onOpenAuthModal: (tab?: 'login' | 'register') => void;
   onOpenSettingsPortal: (section?: SettingsSectionId) => void;
   onOpenSuperAdminModal: () => void;
-  onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
+  onCreatePost: (
+    content: string,
+    taggedProduct?: TaggedProduct,
+    mediaUrl?: string,
+    postType?: PostType,
+    citizenCategory?: CitizenPostCategory,
+    aiSafetyVerified?: boolean,
+    aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged'
+  ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
   onAddToCart: (product: CommerceItem, quantity?: number, isWholesale?: boolean, specialInstructions?: string) => void;
@@ -271,7 +323,14 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
 
         <Route
           path={ROUTE_PATHS.CREATOR}
-          element={<CreatorPortal currentUser={currentUser} onDeductBalance={onDeductBalance} />}
+          element={
+            <CreatorPortal
+              currentUser={currentUser}
+              onDeductBalance={onDeductBalance}
+              commerceItems={commerceItems}
+              onAddToCart={(item) => onAddToCart(item, 1, item.tradeMode === 'wholesale')}
+            />
+          }
         />
 
         <Route

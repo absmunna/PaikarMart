@@ -180,8 +180,11 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
               <p>Plan: <span className="text-emerald-400">Free</span></p>
               <div className="pt-2 border-t border-slate-800 text-slate-400">
                 <p>Environment Variables to set in Render Dashboard:</p>
+                <p className="text-yellow-400">FIREBASE_PROJECT_ID=gen-lang-client-0609196204</p>
                 <p className="text-yellow-400">SUPABASE_URL=https://your-app.supabase.co</p>
                 <p className="text-yellow-400">SUPABASE_ANON_KEY=your-supabase-anon-key</p>
+                <p className="text-yellow-400">SUPABASE_SERVICE_ROLE_KEY=your-service-role-key</p>
+                <p className="text-yellow-400">CORS_ORIGINS=https://your-app.vercel.app</p>
                 <p className="text-yellow-400">GEMINI_API_KEY=your-gemini-key</p>
               </div>
             </div>
@@ -222,6 +225,7 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
                 <p>Build Command: <span className="text-blue-400">npm run build:frontend</span></p>
                 <p>Output Directory: <span className="text-blue-400">apps/frontend/dist</span></p>
                 <p>API Proxy Rewrite: <span className="text-blue-400">/api/* → Render Backend</span></p>
+                <p>Env Precedence: <span className="text-emerald-400">VITE_FIREBASE_* overrides JSON (AI Studio preview stays intact)</span></p>
                 <p>Firestore Rules Only: <span className="text-blue-400">firebase deploy --only firestore:rules</span></p>
               </div>
             </div>
@@ -265,6 +269,7 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
               <p className="text-slate-300">✓ public.stores, master_products, seller_listings (PMIN 1:N & Geofence)</p>
               <p className="text-slate-300">✓ public.shipment_waybills, return_pickups, escrow_records, wallet_transactions</p>
               <p className="text-slate-300">✓ public.orders, service_bookings, social_posts & social_comments</p>
+              <p className="text-slate-300">✓ storage.buckets: paikarmart-avatars & paikarmart-kyc-docs (Spark-free uploads)</p>
             </div>
           </div>
         )}
@@ -273,9 +278,9 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
         {activeTab === 'firebase' && (
           <div className="space-y-4 animate-fadeIn">
             <h3 className="text-base font-bold text-[var(--pm-text)] flex items-center justify-between">
-              <span>Firebase Authentication (Configured & Provisioned)</span>
+              <span>Firebase Authentication (Spark Free Tier · Zero Billing)</span>
               <a 
-                href="https://console.firebase.google.com" 
+                href="https://console.firebase.google.com/project/gen-lang-client-0609196204/overview" 
                 target="_blank" 
                 rel="noreferrer" 
                 className="text-xs text-[var(--pm-warning)] flex items-center gap-1 hover:underline"
@@ -288,15 +293,15 @@ export const DeploymentGuideModal: React.FC<DeploymentGuideModalProps> = ({
             <div className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
               <div className="flex items-center gap-2 text-[var(--pm-success)] font-bold text-xs">
                 <ShieldCheck className="w-4 h-4" />
-                <span>Project Provisioned Successfully</span>
+                <span>Connected Project: gen-lang-client-0609196204</span>
               </div>
               <p className="text-xs text-[var(--pm-muted)]">
-                Your Firebase project is provisioned with configuration stored in <code className="font-mono text-[var(--pm-warning)] font-bold">firebase-applet-config.json</code>.
+                Provisioned in <code className="font-mono text-[var(--pm-warning)] font-bold">firebase-applet-config.json</code> with Vercel <code className="font-mono text-[var(--pm-accent)]">VITE_FIREBASE_*</code> overrides so both AI Studio preview and Vercel deploy work cleanly.
               </p>
               <ul className="text-xs text-[var(--pm-muted)] space-y-1 list-disc list-inside">
-                <li>Google OAuth Sign-In with popup is enabled (add your <code className="font-mono text-[var(--pm-accent)]">*.vercel.app</code> domain to Firebase Authorized Domains).</li>
-                <li>Hardened Firestore Security Rules deployed via <code className="font-mono text-[var(--pm-accent)]">firestore.rules</code>.</li>
-                <li>User session and profile synchronization configured in <code className="font-mono text-[var(--pm-accent)]">AuthContext.tsx</code> & <code className="font-mono text-[var(--pm-accent)]">useFirebaseSupabaseSync.ts</code>.</li>
+                <li>Add your <code className="font-mono text-[var(--pm-accent)]">your-app.vercel.app</code> domain under Authentication → Settings → Authorized domains.</li>
+                <li>Avatar & KYC document uploads route to <strong>Supabase Free Storage</strong> so no Firebase Blaze billing card is needed.</li>
+                <li>Backend verifies Firebase ID tokens via public Google keys on Render Free Tier without IAM service-account credentials.</li>
               </ul>
             </div>
           </div>

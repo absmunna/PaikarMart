@@ -18,6 +18,7 @@ export const BrandShopsPortal: React.FC<MarketplacePortalBaseProps> = (props) =>
       subtitleEn: 'Authentic flagship stores, manufacturer warranties, and verified brand catalogs.',
       subtitleBn: 'Official flagship shop, গ্যারান্টিযুক্ত পণ্য ও verified brand catalog।',
       accentGradient: 'from-amber-600 to-red-700',
+      showFlashDeals: true,
       itemMatcher: (item) => {
         const text = `${item.badge || ''} ${item.storeName || ''} ${item.title} ${item.description || ''}`.toLowerCase();
         return BRAND_KEYWORDS.some((kw) => text.includes(kw));

@@ -8,6 +8,8 @@ import {
   CoPilotAdvice
 } from '@/features/messaging/types/messaging';
 
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 async function getAuthHeaders(includeJson = false): Promise<Record<string, string>> {
   const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
   const headers: Record<string, string> = {};
@@ -17,14 +19,14 @@ async function getAuthHeaders(includeJson = false): Promise<Record<string, strin
 }
 
 export async function fetchConversationsApi(): Promise<Conversation[]> {
-  const res = await fetch('/api/messages/conversations', { headers: await getAuthHeaders() });
+  const res = await fetch(`${API_BASE}/api/messages/conversations`, { headers: await getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to load conversations');
   const data = await res.json();
   return data.conversations || [];
 }
 
 export async function fetchThreadMessagesApi(conversationId: string): Promise<MessageItem[]> {
-  const res = await fetch(`/api/messages/thread/${encodeURIComponent(conversationId)}`, {
+  const res = await fetch(`${API_BASE}/api/messages/thread/${encodeURIComponent(conversationId)}`, {
     headers: await getAuthHeaders(),
   });
   if (!res.ok) throw new Error('Failed to load thread messages');
@@ -38,7 +40,7 @@ export async function initConversationApi(payload: {
   productContext?: ProductContext;
   initialMessage?: string;
 }): Promise<{ conversation: Conversation; messages: MessageItem[] }> {
-  const res = await fetch('/api/messages/conversations/init', {
+  const res = await fetch(`${API_BASE}/api/messages/conversations/init`, {
     method: 'POST',
     headers: await getAuthHeaders(true),
     body: JSON.stringify(payload)
@@ -58,7 +60,7 @@ export async function sendMessageApi(payload: {
   role?: 'general' | 'wholesale' | 'vendor' | 'services';
   history?: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }>;
 }) {
-  const res = await fetch('/api/messages/send', {
+  const res = await fetch(`${API_BASE}/api/messages/send`, {
     method: 'POST',
     headers: await getAuthHeaders(true),
     body: JSON.stringify(payload)
@@ -75,7 +77,7 @@ export async function requestAiCoPilotApi(payload: {
   userRole?: 'buyer' | 'vendor';
   targetLang?: 'bn' | 'en';
 }): Promise<CoPilotAdvice> {
-  const res = await fetch('/api/messages/ai-copilot', {
+  const res = await fetch(`${API_BASE}/api/messages/ai-copilot`, {
     method: 'POST',
     headers: await getAuthHeaders(true),
     body: JSON.stringify(payload)
@@ -89,7 +91,7 @@ export async function updateQuoteStatusApi(
   conversationId: string,
   status: 'accepted' | 'declined'
 ) {
-  const res = await fetch(`/api/messages/quote/${encodeURIComponent(messageId)}`, {
+  const res = await fetch(`${API_BASE}/api/messages/quote/${encodeURIComponent(messageId)}`, {
     method: 'PATCH',
     headers: await getAuthHeaders(true),
     body: JSON.stringify({ conversationId, status })

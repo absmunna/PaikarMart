@@ -4,8 +4,10 @@ import { CommerceItem, Order, PortalTab, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLocationSettings } from '@/contexts';
 import { computeLocalGeofenceMeta } from '@/features/logistics';
+import { DEFAULT_AVATAR_URL } from '@/shared/utils';
 import {
   CommerceProductCard,
+  FlashDealsSection,
   PrescriptionUploadModal,
   VoucherDealsStrip,
   type PortalFilterType,
@@ -42,7 +44,9 @@ interface MarketplaceCategoryPortalConfig {
   subtitleBn: string;
   accentGradient: string;
   showVouchers?: boolean;
+  showFlashDeals?: boolean;
   showRxUploadCta?: boolean;
+  topSlot?: React.ReactNode;
   itemMatcher?: (item: CommerceItem) => boolean;
 }
 
@@ -266,6 +270,16 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
         />
       )}
 
+      {config.showFlashDeals && !isLoading && (
+        <FlashDealsSection
+          items={items}
+          isBn={isBn}
+          onAddToCart={onAddToCart}
+        />
+      )}
+
+      {config.topSlot}
+
       {isLoading ? (
         <MarketplaceGridSkeleton count={6} />
       ) : visibleItems.length > 0 ? (
@@ -349,7 +363,7 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
             id: 'guest_buyer',
             name: 'Guest Buyer',
             handle: '@guest',
-            avatar: '',
+            avatar: DEFAULT_AVATAR_URL,
             role: 'consumer',
             isVendor: false,
             location: activeLocation || 'Dhaka, Bangladesh',

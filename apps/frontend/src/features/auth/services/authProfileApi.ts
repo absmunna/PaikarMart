@@ -49,3 +49,77 @@ export async function fetchAuthenticatedProfile(): Promise<unknown | null> {
   }
   return (await response.json()).profile || null;
 }
+
+export async function fetchAuthSecurityStatus(): Promise<{
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  phoneNumber: string | null;
+  role: string;
+  roles: string[];
+  isVendor: boolean;
+  kycStatus: string;
+  trustLevel: number;
+} | null> {
+  const response = await fetch(`${API_BASE}/api/auth/security-status`, { headers: await authHeaders() });
+  if (!response.ok) return null;
+  const data = await response.json().catch(() => ({}));
+  return data?.security || null;
+}
+
+export async function revokeAllAuthSessions(): Promise<{
+  success: boolean;
+  revokedAt?: string;
+  serverRevocationSkipped?: boolean;
+}> {
+  const response = await fetch(`${API_BASE}/api/auth/revoke-sessions`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || 'Unable to revoke active sessions.');
+  }
+  return data;
+}
+
+export async function promoteToSellerApi(payload: {
+  shopName: string;
+  type?: 'retail' | 'wholesale' | 'service';
+  address?: string;
+}): Promise<{
+  success: boolean;
+  activeRoles: string[];
+  user: Record<string, any>;
+}> {
+  const response = await fetch(`${API_BASE}/api/auth/promote-seller`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || 'Unable to activate seller role.');
+  }
+  return data;
+}
+
+export async function promoteToCreatorApi(payload?: {
+  channelName?: string;
+}): Promise<{
+  success: boolean;
+  activeRoles: string[];
+  user: Record<string, any>;
+}> {
+  const response = await fetch(`${API_BASE}/api/auth/promote-creator`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || 'Unable to activate creator capability.');
+  }
+  return data;
+}
+

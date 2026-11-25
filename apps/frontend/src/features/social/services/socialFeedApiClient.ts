@@ -77,8 +77,9 @@ export function normalizeFeedPost(raw: any, index = 0): SocialPost {
 export async function fetchSocialFeedResult(
   signal?: AbortSignal
 ): Promise<SocialFeedResult> {
+  const apiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
   try {
-    const response = await fetch('/api/feed', {
+    const response = await fetch(`${apiBase}/api/feed`, {
       headers: { Accept: 'application/json' },
       signal,
     });

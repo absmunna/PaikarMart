@@ -261,7 +261,7 @@ export interface Story {
   id: string;
   authorName: string;
   authorAvatar: string;
-  mediaUrl: string;
+  mediaUrl?: string;
   isLive?: boolean;
   viewed?: boolean;
 }
@@ -302,6 +302,7 @@ export interface SampleRequest {
 
 export interface MasterProduct {
   id: string;
+  pmin?: string;
   barcode?: string;
   titleEn: string;
   titleBn: string;
@@ -318,12 +319,17 @@ export interface MasterProduct {
 export interface SellerListing {
   id: string;
   masterProductId: string;
+  pmin?: string;
   sellerId: string;
   sellerName: string;
   sellerRating: number;
   sellerReviewsCount: number;
   price: number;
   originalPrice?: number;
+  shippingFee?: number;
+  condition?: string;
+  fulfillmentType?: string;
+  isBuyBoxWinner?: boolean;
   stockQuantity: number;
   tradeMode: TradeMode;
   minWholesaleQty?: number;
@@ -382,6 +388,7 @@ export interface ProviderServiceOffer {
 export interface CommerceItem {
   id: string;
   masterProductId?: string;
+  pmin?: string;
   storeId: string;
   storeName: string;
   storeHandle?: string;
@@ -392,6 +399,9 @@ export interface CommerceItem {
   description: string;
   price: number;
   originalPrice?: number;
+  shippingFee?: number;
+  isBuyBoxWinner?: boolean;
+  masterOfferCount?: number;
   wholesaleTiers?: WholesaleTier[];
   minWholesaleQty?: number;
   rating: number;

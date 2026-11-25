@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ClipboardList, MessageSquare, Newspaper, Video } from 'lucide-react';
-import type { CommerceItem, PortalTab, PostType, ReactionType, SocialPost, TaggedProduct, User } from '@/types';
+import type { CitizenPostCategory, CommerceItem, PortalTab, PostType, ReactionType, SocialPost, TaggedProduct, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { findRegisteredPortal, getPortalsForHub } from '@/hubs/shared/portalRegistry';
 import { HubFeedCard } from '@/hubs/shared/HubFeedCard';
@@ -20,7 +20,15 @@ interface CommunityMixedFeedProps {
   posts: SocialPost[];
   commerceItems: CommerceItem[];
   isLoading?: boolean;
-  onCreatePost: (content: string, taggedProduct?: TaggedProduct, mediaUrl?: string, postType?: PostType) => void;
+  onCreatePost: (
+    content: string,
+    taggedProduct?: TaggedProduct,
+    mediaUrl?: string,
+    postType?: PostType,
+    citizenCategory?: CitizenPostCategory,
+    aiSafetyVerified?: boolean,
+    aiRiskAssessment?: 'safe' | 'low_risk' | 'high_risk_flagged'
+  ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
   onAddToCart: (item: CommerceItem) => void;
@@ -138,6 +146,8 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
         <CreatorPortal
           currentUser={currentUser}
           onDeductBalance={onDeductBalance}
+          commerceItems={commerceItems}
+          onAddToCart={onAddToCart}
         />
       ) : (
         <div className="space-y-6">

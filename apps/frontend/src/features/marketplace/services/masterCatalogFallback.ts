@@ -11,6 +11,7 @@ import {
 export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
   {
     id: 'master_iphone_15_pro_max',
+    pmin: 'PMIN-B00IP15PMX',
     barcode: '019425371001',
     titleEn: 'Apple iPhone 15 Pro Max (Natural Titanium)',
     titleBn: 'অ্যাপল আইফোন ১৫ প্রো ম্যাক্স (ন্যাচারাল টাইটানিয়াম)',
@@ -27,6 +28,7 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
   },
   {
     id: 'master_samsung_s24_ultra',
+    pmin: 'PMIN-B00SS24ULT',
     barcode: '880609534001',
     titleEn: 'Samsung Galaxy S24 Ultra (Titanium Series)',
     titleBn: 'স্যামসাং গ্যালাক্সি এস২৪ আল্ট্রা (টাইটানিয়াম সিরিজ)',
@@ -48,6 +50,7 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
   },
   {
     id: 'master_cotton_tshirt_bulk',
+    pmin: 'PMIN-B00CTN180G',
     barcode: '894000123984',
     titleEn: '180 GSM Pre-Shrunk Pure Cotton Crewneck T-Shirt',
     titleBn: '১৮০ জিএসএম প্রিস্রাঙ্ক খাঁটি সুতি ক্রুনেক টি-শার্ট',
@@ -69,6 +72,7 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
   },
   {
     id: 'master_usbc_braided_cable',
+    pmin: 'PMIN-B00USBC65W',
     barcode: '697012345678',
     titleEn: '65W PD Fast Charging USB-C to USB-C Braided Cable (1.2m)',
     titleBn: '৬৫W পিডি ফাস্ট চার্জিং ইউএসবি-সি ব্রেইডেড ক্যাবল (১.২ মি)',
@@ -90,6 +94,7 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
   },
   {
     id: 'master_hass_avocados',
+    pmin: 'PMIN-B00AVO0001',
     barcode: '0401123998',
     titleEn: 'Fresh Organic Hass Avocados (Farm Selected)',
     titleBn: 'ফ্রেশ অর্গানিক হাস অ্যাভোকাডো (ফার্ম সিলেকশন)',
@@ -115,12 +120,15 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_avocado_green_valley',
     masterProductId: 'master_hass_avocados',
+    pmin: 'PMIN-B00AVO0001',
     sellerId: 'vendor_corner_mart',
     sellerName: 'Green Valley Local Mart',
     sellerRating: 4.8,
     sellerReviewsCount: 85,
     price: 5.50,
     originalPrice: 6.00,
+    shippingFee: 0,
+    condition: 'New',
     stockQuantity: 24,
     tradeMode: 'retail',
     deliveryEta: '15 min',
@@ -133,12 +141,15 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_avocado_fresh_basket',
     masterProductId: 'master_hass_avocados',
+    pmin: 'PMIN-B00AVO0001',
     sellerId: 'vendor_fresh_basket',
     sellerName: 'Fresh Basket Organic Shop',
     sellerRating: 4.7,
     sellerReviewsCount: 51,
     price: 5.25,
     originalPrice: 5.75,
+    shippingFee: 1.5,
+    condition: 'New',
     stockQuantity: 16,
     tradeMode: 'retail',
     deliveryEta: '25 min',
@@ -151,12 +162,16 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_avocado_farm_direct',
     masterProductId: 'master_hass_avocados',
+    pmin: 'PMIN-B00AVO0001',
     sellerId: 'vendor_green_valley_farms',
     sellerName: 'Green Valley Organic Farms',
     sellerRating: 4.9,
     sellerReviewsCount: 39,
     price: 4.95,
     originalPrice: 5.50,
+    shippingFee: 0,
+    condition: 'New',
+    isBuyBoxWinner: true,
     stockQuantity: 40,
     tradeMode: 'retail',
     deliveryEta: 'Same Day',
@@ -170,12 +185,15 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_iphone_gadget_gear',
     masterProductId: 'master_iphone_15_pro_max',
+    pmin: 'PMIN-B00IP15PMX',
     sellerId: 'vendor_apple_authorized',
     sellerName: 'Gadget & Gear Official',
     sellerRating: 4.9,
     sellerReviewsCount: 150,
     price: 185000,
     originalPrice: 194000,
+    shippingFee: 0,
+    condition: 'New',
     stockQuantity: 12,
     tradeMode: 'retail',
     deliveryEta: '2-3 Days',
@@ -188,12 +206,16 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_iphone_dhaka_telecom',
     masterProductId: 'master_iphone_15_pro_max',
+    pmin: 'PMIN-B00IP15PMX',
     sellerId: 'vendor_dhaka_telecom',
     sellerName: 'Dhaka Telecom & Gadgets',
     sellerRating: 4.8,
     sellerReviewsCount: 115,
     price: 181500,
     originalPrice: 189000,
+    shippingFee: 0,
+    condition: 'New',
+    isBuyBoxWinner: true,
     stockQuantity: 5,
     tradeMode: 'retail',
     deliveryEta: '1-2 Hours',
@@ -206,12 +228,15 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
   {
     id: 'listing_iphone_chittagong',
     masterProductId: 'master_iphone_15_pro_max',
+    pmin: 'PMIN-B00IP15PMX',
     sellerId: 'vendor_ctg_electronics',
     sellerName: 'Chittagong Electronics Mart',
     sellerRating: 4.7,
     sellerReviewsCount: 64,
     price: 179900,
     originalPrice: 187000,
+    shippingFee: 1800,
+    condition: 'New',
     stockQuantity: 8,
     tradeMode: 'retail',
     deliveryEta: '2-3 Days',
@@ -451,7 +476,8 @@ export const getMasterProducts = (searchQuery?: string, category?: string): Mast
       const matchTitleBn = mp.titleBn.toLowerCase().includes(q);
       const matchBrand = mp.brand.toLowerCase().includes(q);
       const matchBarcode = mp.barcode?.toLowerCase().includes(q);
-      if (!matchTitleEn && !matchTitleBn && !matchBrand && !matchBarcode) return false;
+      const matchPmin = mp.pmin?.toLowerCase().includes(q);
+      if (!matchTitleEn && !matchTitleBn && !matchBrand && !matchBarcode && !matchPmin) return false;
     }
     return true;
   });

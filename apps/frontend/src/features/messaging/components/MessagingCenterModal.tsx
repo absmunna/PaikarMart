@@ -15,6 +15,7 @@ import { CoPilotAction, ProductContext, QuoteOffer } from '@/features/messaging/
 import { useMessagingStore } from '@/features/messaging/store/useMessagingStore';
 import { AiCoPilotPanel } from '@/features/messaging/components/AiCoPilotPanel';
 import { useAuth } from '@/features/auth';
+import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
 interface MessagingCenterModalProps {
   isOpen: boolean;
@@ -314,7 +315,7 @@ export const MessagingCenterModal: React.FC<MessagingCenterModalProps> = ({
                       </div>
                     ) : (
                       <img
-                        src={conv.participantAvatar}
+                        src={safeMediaSrc(conv.participantAvatar, DEFAULT_AVATAR_URL)}
                         alt={conv.participantName}
                         className="w-11 h-11 rounded-[1.25rem] object-cover bg-[var(--pm-card)]"
                       />
@@ -405,7 +406,7 @@ export const MessagingCenterModal: React.FC<MessagingCenterModalProps> = ({
                 </div>
               ) : (
                 <img
-                  src={currentConv?.participantAvatar}
+                  src={safeMediaSrc(currentConv?.participantAvatar, DEFAULT_AVATAR_URL)}
                   alt={currentConv?.participantName}
                   className="w-10 h-10 rounded-[1.25rem] object-cover bg-[var(--pm-surface)] shrink-0"
                 />
@@ -487,7 +488,7 @@ export const MessagingCenterModal: React.FC<MessagingCenterModalProps> = ({
             <div className="px-4 py-2.5 bg-[var(--pm-accent-soft)] border-b border-[var(--pm-accent-border)] flex items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <img
-                  src={currentConv.productContext.imageUrl}
+                  src={safeMediaSrc(currentConv.productContext.imageUrl, DEFAULT_PRODUCT_IMAGE_URL)}
                   alt={currentConv.productContext.title}
                   className="w-9 h-9 rounded-[1rem] object-cover bg-[var(--pm-card)] border border-[var(--pm-border)] shrink-0"
                 />
@@ -548,7 +549,7 @@ export const MessagingCenterModal: React.FC<MessagingCenterModalProps> = ({
                       </div>
                     ) : (
                       <img
-                        src={msg.senderAvatar}
+                        src={safeMediaSrc(msg.senderAvatar, DEFAULT_AVATAR_URL)}
                         alt={msg.senderName}
                         className="w-8 h-8 rounded-[1rem] object-cover shrink-0 mt-0.5"
                       />

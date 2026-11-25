@@ -40,6 +40,8 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
 
   // Form states for attaching to existing Master Product
   const [price, setPrice] = useState<number>(0);
+  const [shippingFee, setShippingFee] = useState<number>(0);
+  const [condition, setCondition] = useState<string>('New');
   const [stockQuantity, setStockQuantity] = useState<number>(50);
   const [tradeMode, setTradeMode] = useState<TradeMode>('retail');
   const [minWholesaleQty, setMinWholesaleQty] = useState<number>(20);
@@ -47,6 +49,8 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
   const [location, setLocation] = useState('Dhaka Store');
   const [realPhotos, setRealPhotos] = useState<string[]>([]);
   const [photoInput, setPhotoInput] = useState('');
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [isAttaching, setIsAttaching] = useState(false);
 
   // Form states for submitting new uncatalogued product
   const [newTitle, setNewTitle] = useState('');
@@ -86,13 +90,18 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
       item.titleEn.toLowerCase().includes(q) ||
       item.titleBn.toLowerCase().includes(q) ||
       item.brand.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
+      item.category.toLowerCase().includes(q) ||
+      Boolean(item.pmin && item.pmin.toLowerCase().includes(q)) ||
+      Boolean(item.barcode && item.barcode.toLowerCase().includes(q))
     );
   });
 
   const handleSelectMaster = (product: MasterProduct) => {
     setSelectedMasterProduct(product);
     setPrice(1200);
+    setShippingFee(0);
+    setCondition('New');
+    setAttachError(null);
     setActiveStep('attach');
   };
 
@@ -106,10 +115,15 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
   const handleConfirmAttach = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMasterProduct) return;
+    setAttachError(null);
+    setIsAttaching(true);
 
     const payload: Partial<SellerListing> = {
       masterProductId: selectedMasterProduct.id,
+      pmin: selectedMasterProduct.pmin,
       price: Number(price),
+      shippingFee: Math.max(0, Number(shippingFee) || 0),
+      condition,
       stockQuantity: Number(stockQuantity),
       tradeMode,
       minWholesaleQty: tradeMode === 'wholesale' ? Number(minWholesaleQty) : 1,
@@ -122,12 +136,20 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
     try {
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
       if (token && catalogStatus !== 'unconfigured') {
-        await createSellerListingOffer(token, payload);
+        const result = await createSellerListingOffer(token, payload);
+        if (!result.ok) {
+          setAttachError(result.error || 'Failed to publish listing.');
+          setIsAttaching(false);
+          return;
+        }
       }
     } catch (err) {
-      console.warn('Listing attach sync warning:', err);
+      setAttachError(err instanceof Error ? err.message : 'Unable to publish listing.');
+      setIsAttaching(false);
+      return;
     }
 
+    setIsAttaching(false);
     onAttachOffer(payload);
     onClose();
   };
@@ -144,7 +166,8 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch('/api/catalog/verify-product', {
+      const apiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+      const response = await fetch(`${apiBase}/api/catalog/verify-product`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -249,7 +272,7 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                 <Search className="absolute left-3.5 top-3 w-4 h-4 text-[var(--pm-muted)]" />
                 <input
                   type="text"
-                  placeholder="Type product name, brand, or barcode to search catalog..."
+                  placeholder="Search by product name, brand, PMIN, or barcode..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-[var(--pm-border)] bg-[var(--pm-input)] text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:border-[var(--pm-accent)] focus:outline-none"
@@ -278,6 +301,7 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                         <div className="min-w-0">
                           <span className="text-[10px] font-bold text-[var(--pm-accent)] uppercase">
                             {mp.brand} · {mp.category}
+                            {mp.pmin && <span className="font-mono text-[var(--pm-muted)]"> · {mp.pmin}</span>}
                           </span>
                           <h4 className="text-xs font-bold text-[var(--pm-text)] truncate group-hover:text-[var(--pm-accent)]">
                             {mp.titleEn}
@@ -337,7 +361,7 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                 />
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-bold uppercase text-[var(--pm-success)]">
-                    Selected Master SKU
+                    Selected Master SKU{selectedMasterProduct.pmin ? ` · ${selectedMasterProduct.pmin}` : ''}
                   </span>
                   <h4 className="text-xs font-bold text-[var(--pm-text)] truncate">
                     {selectedMasterProduct.titleEn}
@@ -355,14 +379,21 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                 </button>
               </div>
 
+              {attachError && (
+                <div role="alert" className="p-3 rounded-xl bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 text-xs font-semibold text-[var(--pm-danger)]">
+                  {attachError}
+                </div>
+              )}
+
               {/* Vendor Business Variables Input */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[var(--pm-text)] mb-1">
                     Your Selling Price (৳) *
                   </label>
                   <input
                     type="number"
+                    min={1}
                     value={price}
                     onChange={(e) => setPrice(Number(e.target.value))}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-[var(--pm-border)] bg-[var(--pm-input)] text-[var(--pm-text)] font-mono font-bold focus:border-[var(--pm-accent)] outline-none"
@@ -372,10 +403,24 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
 
                 <div>
                   <label className="block text-xs font-bold text-[var(--pm-text)] mb-1">
-                    Available Stock Quantity *
+                    Shipping Fee (৳)
                   </label>
                   <input
                     type="number"
+                    min={0}
+                    value={shippingFee}
+                    onChange={(e) => setShippingFee(Math.max(0, Number(e.target.value)))}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[var(--pm-border)] bg-[var(--pm-input)] text-[var(--pm-text)] font-mono font-bold focus:border-[var(--pm-accent)] outline-none"
+                  />
+                </div>
+
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-bold text-[var(--pm-text)] mb-1">
+                    Available Stock *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
                     value={stockQuantity}
                     onChange={(e) => setStockQuantity(Number(e.target.value))}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-[var(--pm-border)] bg-[var(--pm-input)] text-[var(--pm-text)] font-mono font-bold focus:border-[var(--pm-accent)] outline-none"
@@ -384,7 +429,7 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-[var(--pm-text)] mb-1">
                     Trade Selling Mode
@@ -396,6 +441,21 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                   >
                     <option value="retail">Retail (B2C Single Unit)</option>
                     <option value="wholesale">Wholesale (B2B Bulk MOQ)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--pm-text)] mb-1">
+                    Item Condition
+                  </label>
+                  <select
+                    value={condition}
+                    onChange={(e) => setCondition(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[var(--pm-border)] bg-[var(--pm-input)] text-[var(--pm-text)] font-medium focus:border-[var(--pm-accent)] outline-none"
+                  >
+                    <option value="New">New (Factory Sealed)</option>
+                    <option value="Open Box">Open Box</option>
+                    <option value="Refurbished">Certified Refurbished</option>
                   </select>
                 </div>
 
@@ -458,8 +518,10 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] shadow-xs cursor-pointer transition-colors"
+                  disabled={isAttaching}
+                  className="px-5 py-2 text-xs font-bold rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-60 text-[var(--pm-accent-fg)] shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
                 >
+                  {isAttaching && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Publish Offer to My Shop
                 </button>
               </div>

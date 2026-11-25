@@ -1,9 +1,78 @@
+import crypto from 'crypto';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { isPrivilegedRole, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 import { resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
 
 export const catalogRouter = Router();
+
+const PMIN_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/**
+ * Generates an Amazon ASIN-style Master Catalog identifier (PMIN-B + 10 chars).
+ * Server-side only — clients never invent canonical PMIN codes.
+ */
+export function generatePmin(): string {
+  const bytes = crypto.randomBytes(10);
+  let suffix = '';
+  for (let i = 0; i < 10; i++) {
+    suffix += PMIN_ALPHABET[bytes[i] % PMIN_ALPHABET.length];
+  }
+  return `PMIN-B${suffix}`;
+}
+
+export interface BuyBoxRankableOffer {
+  id: string;
+  isActive: boolean;
+  stockQuantity: number;
+  price: number;
+  shippingFee?: number;
+  sellerVerified?: boolean;
+  isBuyBoxWinner?: boolean;
+  createdAt?: string;
+}
+
+/**
+ * Amazon-style Buy-Box winner selector:
+ * 1. Active & in-stock (stockQuantity > 0) offers always outrank out-of-stock offers
+ * 2. Lowest landed cost (price + shippingFee)
+ * 3. Verified merchant priority
+ * 4. Lower shippingFee tie-breaker
+ * 5. Newer listing tie-breaker
+ */
+export function rankSellerOffersForBuyBox<T extends BuyBoxRankableOffer>(offers: T[]): Array<T & { isBuyBoxWinner: boolean }> {
+  const sorted = [...offers].sort((a, b) => {
+    const aAvail = a.isActive && a.stockQuantity > 0 ? 1 : 0;
+    const bAvail = b.isActive && b.stockQuantity > 0 ? 1 : 0;
+    if (aAvail !== bAvail) return bAvail - aAvail;
+
+    const aLanded = Number(a.price || 0) + Number(a.shippingFee || 0);
+    const bLanded = Number(b.price || 0) + Number(b.shippingFee || 0);
+    if (aLanded !== bLanded) return aLanded - bLanded;
+
+    const aVerified = a.sellerVerified ? 1 : 0;
+    const bVerified = b.sellerVerified ? 1 : 0;
+    if (aVerified !== bVerified) return bVerified - aVerified;
+
+    const aShip = Number(a.shippingFee || 0);
+    const bShip = Number(b.shippingFee || 0);
+    if (aShip !== bShip) return aShip - bShip;
+
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  let winnerAssigned = false;
+  return sorted.map((offer) => {
+    const eligible = Boolean(offer.isActive && offer.stockQuantity > 0);
+    if (!winnerAssigned && eligible) {
+      winnerAssigned = true;
+      return { ...offer, isBuyBoxWinner: true };
+    }
+    return { ...offer, isBuyBoxWinner: false };
+  });
+}
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const parsed = Number(value);
@@ -21,6 +90,13 @@ const isMissingTableError = (err?: { code?: string; message?: string } | null): 
   return code === 'PGRST205' || code === '42P01' || msg.includes('schema cache') || msg.includes('does not exist');
 };
 
+const isMissingColumnError = (err?: { code?: string; message?: string } | null): boolean => {
+  if (!err) return false;
+  const code = String(err.code || '');
+  const msg = String(err.message || '').toLowerCase();
+  return code === '42703' || msg.includes('column') && msg.includes('does not exist');
+};
+
 const mapListing = (listing: any) => {
   const product = firstRelation(listing.master_product) || {};
   const store = firstRelation(listing.store) || {};
@@ -29,6 +105,7 @@ const mapListing = (listing: any) => {
   return {
     id: listing.id,
     masterProductId: listing.master_product_id,
+    pmin: product.pmin || listing.pmin || undefined,
     storeId: listing.store_id,
     storeName: store.store_name || 'Verified Store',
     storeHandle: store.handle || undefined,
@@ -38,6 +115,8 @@ const mapListing = (listing: any) => {
     description: product.description || '',
     price: toNumber(listing.price),
     originalPrice: listing.original_price == null ? undefined : toNumber(listing.original_price),
+    shippingFee: listing.shipping_fee == null ? 0 : toNumber(listing.shipping_fee),
+    isBuyBoxWinner: Boolean(listing.is_buy_box_winner),
     minWholesaleQty: toNumber(listing.min_wholesale_qty, 1),
     wholesaleTiers: Array.isArray(listing.wholesale_tiers) ? listing.wholesale_tiers : [],
     rating: toNumber(store.rating, 5),
@@ -66,6 +145,8 @@ const mapStandaloneProduct = (row: any) => {
   const tradeMode = type === 'wholesale' ? 'wholesale' : 'retail';
   return {
     id: String(row.id),
+    masterProductId: row.master_product_id ? String(row.master_product_id) : undefined,
+    pmin: row.pmin ? String(row.pmin) : undefined,
     storeId: String(row.store_id || store.id || ''),
     storeName: store.store_name || row.store_name || 'Verified Store',
     storeHandle: store.handle || undefined,
@@ -91,6 +172,7 @@ const mapStandaloneProduct = (row: any) => {
 
 const mapMasterProduct = (row: any) => ({
   id: String(row.id),
+  pmin: row.pmin ? String(row.pmin) : undefined,
   barcode: row.barcode || undefined,
   titleEn: String(row.title_en || ''),
   titleBn: String(row.title_bn || row.title_en || ''),
@@ -105,6 +187,35 @@ const mapMasterProduct = (row: any) => ({
   createdAt: String(row.created_at || new Date().toISOString()).split('T')[0],
 });
 
+const mapSellerListingRow = (row: any) => {
+  const store = firstRelation(row.store) || {};
+  return {
+    id: String(row.id),
+    masterProductId: String(row.master_product_id),
+    pmin: row.pmin ? String(row.pmin) : undefined,
+    storeId: String(row.store_id),
+    sellerId: String(row.seller_id),
+    sellerName: String(store.store_name || 'Verified Merchant'),
+    sellerRating: toNumber(store.rating, 5),
+    sellerVerified: Boolean(store.is_verified ?? true),
+    price: toNumber(row.price),
+    originalPrice: row.original_price == null ? undefined : toNumber(row.original_price),
+    shippingFee: row.shipping_fee == null ? 0 : toNumber(row.shipping_fee),
+    condition: row.condition ? String(row.condition) : 'New',
+    fulfillmentType: row.fulfillment_type ? String(row.fulfillment_type) : 'seller_fulfilled',
+    isBuyBoxWinner: Boolean(row.is_buy_box_winner),
+    stockQuantity: toNumber(row.stock_quantity, 0),
+    tradeMode: (row.trade_mode === 'wholesale' ? 'wholesale' : 'retail') as 'retail' | 'wholesale',
+    minWholesaleQty: toNumber(row.min_wholesale_qty, 1),
+    wholesaleTiers: Array.isArray(row.wholesale_tiers) ? row.wholesale_tiers : [],
+    sellerRealPhotos: Array.isArray(row.seller_real_photos) ? row.seller_real_photos : [],
+    deliveryEta: String(row.delivery_eta || '1-2 Days'),
+    location: String(row.location || 'Dhaka, Bangladesh'),
+    isActive: Boolean(row.is_active),
+    createdAt: String(row.created_at || ''),
+  };
+};
+
 /** Public catalog read model. Never returns seller PII or private credentials. */
 catalogRouter.get('/products', async (_req: Request, res: Response) => {
   if (!supabaseAdmin) {
@@ -118,7 +229,7 @@ catalogRouter.get('/products', async (_req: Request, res: Response) => {
       id, master_product_id, store_id, price, original_price, stock_quantity,
       trade_mode, min_wholesale_qty, wholesale_tiers, seller_real_photos,
       delivery_eta, location, is_active,
-      master_product:master_products!inner(title_en, title_bn, brand, category, description, canonical_images, specifications, variant_options, variant_offers, is_verified),
+      master_product:master_products!inner(*),
       store:stores!inner(store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes, status)
     `)
     .eq('is_active', true)
@@ -193,7 +304,7 @@ catalogRouter.get('/products/:id', async (req: Request, res: Response) => {
       id, master_product_id, store_id, price, original_price, stock_quantity,
       trade_mode, min_wholesale_qty, wholesale_tiers, seller_real_photos,
       delivery_eta, location, is_active,
-      master_product:master_products!inner(title_en, title_bn, brand, category, description, canonical_images, specifications, variant_options, variant_offers, is_verified),
+      master_product:master_products!inner(*),
       store:stores!inner(store_name, handle, category, rating, is_open, opening_hours_label, prep_minutes, status)
     `)
     .eq('id', id)
@@ -247,18 +358,70 @@ catalogRouter.get('/master-products', async (_req: Request, res: Response) => {
   res.json({ masterProducts: (data || []).map(mapMasterProduct), source: 'supabase' });
 });
 
+catalogRouter.get('/master-products/by-pmin/:pmin', async (req: Request, res: Response) => {
+  const normalizedPmin = String(req.params.pmin || '').trim().toUpperCase();
+  if (!normalizedPmin) {
+    res.status(400).json({ error: 'Valid PMIN code is required.' });
+    return;
+  }
+  if (!supabaseAdmin) {
+    res.json({ masterProduct: null, listings: [], buyBoxWinner: null, offerCount: 0, source: 'unconfigured' });
+    return;
+  }
+
+  const { data: master, error } = await supabaseAdmin
+    .from('master_products')
+    .select('*')
+    .eq('pmin', normalizedPmin)
+    .eq('is_verified', true)
+    .maybeSingle();
+
+  if (error) {
+    res.status(isMissingTableError(error) || isMissingColumnError(error) ? 200 : 500).json({
+      masterProduct: null,
+      listings: [],
+      buyBoxWinner: null,
+      offerCount: 0,
+      source: isMissingTableError(error) ? 'schema_missing' : 'error',
+    });
+    return;
+  }
+
+  if (!master) {
+    res.status(404).json({ masterProduct: null, listings: [], buyBoxWinner: null, offerCount: 0, error: 'Master product not found for PMIN.' });
+    return;
+  }
+
+  const { data: rawOffers } = await supabaseAdmin
+    .from('seller_listings')
+    .select(`*, store:stores!inner(store_name, rating, status, is_verified)`)
+    .eq('master_product_id', master.id)
+    .eq('is_active', true)
+    .eq('store.status', 'active')
+    .eq('store.is_verified', true);
+
+  const ranked = rankSellerOffersForBuyBox((rawOffers || []).map(mapSellerListingRow));
+  const buyBoxWinner = ranked.find((item) => item.isBuyBoxWinner) || ranked[0] || null;
+
+  res.json({
+    masterProduct: mapMasterProduct(master),
+    listings: ranked,
+    buyBoxWinner,
+    offerCount: ranked.length,
+    source: 'supabase',
+  });
+});
+
 catalogRouter.get('/listings/by-master/:masterProductId', async (req: Request, res: Response) => {
   if (!supabaseAdmin) {
-    res.json({ listings: [], source: 'unconfigured' });
+    res.json({ listings: [], buyBoxWinner: null, offerCount: 0, source: 'unconfigured' });
     return;
   }
 
   const { data, error } = await supabaseAdmin
     .from('seller_listings')
     .select(`
-      id, master_product_id, store_id, seller_id, price, original_price,
-      stock_quantity, trade_mode, min_wholesale_qty, wholesale_tiers,
-      seller_real_photos, delivery_eta, location, is_active, created_at,
+      *,
       store:stores!inner(store_name, rating, status, is_verified)
     `)
     .eq('master_product_id', req.params.masterProductId)
@@ -268,38 +431,58 @@ catalogRouter.get('/listings/by-master/:masterProductId', async (req: Request, r
     .order('price', { ascending: true });
 
   if (error) {
-    res.json({ listings: [], source: isMissingTableError(error) ? 'schema_missing' : 'error' });
+    res.json({ listings: [], buyBoxWinner: null, offerCount: 0, source: isMissingTableError(error) ? 'schema_missing' : 'error' });
     return;
   }
 
-  const listings = (data || []).map((row: any) => {
-    const store = firstRelation(row.store) || {};
-    return {
-      id: String(row.id),
-      masterProductId: String(row.master_product_id),
-      storeId: String(row.store_id),
-      sellerId: String(row.seller_id),
-      sellerName: String(store.store_name || 'Verified Merchant'),
-      sellerRating: toNumber(store.rating, 5),
-      sellerVerified: true,
-      price: toNumber(row.price),
-      originalPrice: row.original_price == null ? undefined : toNumber(row.original_price),
-      stockQuantity: toNumber(row.stock_quantity, 0),
-      tradeMode: row.trade_mode === 'wholesale' ? 'wholesale' : 'retail',
-      minWholesaleQty: toNumber(row.min_wholesale_qty, 1),
-      wholesaleTiers: Array.isArray(row.wholesale_tiers) ? row.wholesale_tiers : [],
-      sellerRealPhotos: Array.isArray(row.seller_real_photos) ? row.seller_real_photos : [],
-      deliveryEta: String(row.delivery_eta || '1-2 Days'),
-      location: String(row.location || 'Dhaka, Bangladesh'),
-      isActive: Boolean(row.is_active),
-      createdAt: String(row.created_at || ''),
-    };
-  });
+  const ranked = rankSellerOffersForBuyBox((data || []).map(mapSellerListingRow));
+  const buyBoxWinner = ranked.find((item) => item.isBuyBoxWinner) || ranked[0] || null;
 
-  res.json({ listings, source: 'supabase' });
+  res.json({ listings: ranked, buyBoxWinner, offerCount: ranked.length, source: 'supabase' });
 });
 
-catalogRouter.post('/listings', requireFirebaseAuth, async (req: Request, res: Response) => {
+catalogRouter.get('/listings/by-pmin/:pmin', async (req: Request, res: Response) => {
+  const normalizedPmin = String(req.params.pmin || '').trim().toUpperCase();
+  if (!normalizedPmin) {
+    res.status(400).json({ error: 'Valid PMIN code is required.' });
+    return;
+  }
+  if (!supabaseAdmin) {
+    res.json({ listings: [], buyBoxWinner: null, offerCount: 0, source: 'unconfigured' });
+    return;
+  }
+
+  const { data: master } = await supabaseAdmin
+    .from('master_products')
+    .select('id')
+    .eq('pmin', normalizedPmin)
+    .maybeSingle();
+
+  if (!master?.id) {
+    res.json({ listings: [], buyBoxWinner: null, offerCount: 0, source: 'supabase' });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('seller_listings')
+    .select(`*, store:stores!inner(store_name, rating, status, is_verified)`)
+    .eq('master_product_id', master.id)
+    .eq('is_active', true)
+    .eq('store.status', 'active')
+    .eq('store.is_verified', true);
+
+  if (error) {
+    res.json({ listings: [], buyBoxWinner: null, offerCount: 0, source: 'error' });
+    return;
+  }
+
+  const ranked = rankSellerOffersForBuyBox((data || []).map(mapSellerListingRow));
+  const buyBoxWinner = ranked.find((item) => item.isBuyBoxWinner) || ranked[0] || null;
+
+  res.json({ listings: ranked, buyBoxWinner, offerCount: ranked.length, source: 'supabase' });
+});
+
+catalogRouter.post('/listings', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   if (!supabaseAdmin) {
     res.status(503).json({ error: 'Supabase is not configured.' });
     return;
@@ -327,6 +510,9 @@ catalogRouter.post('/listings', requireFirebaseAuth, async (req: Request, res: R
   const {
     masterProductId,
     price,
+    shippingFee,
+    condition,
+    fulfillmentType,
     stockQuantity,
     tradeMode,
     minWholesaleQty,
@@ -340,33 +526,57 @@ catalogRouter.post('/listings', requireFirebaseAuth, async (req: Request, res: R
     return;
   }
 
-  const { data: inserted, error } = await supabaseAdmin
+  const { data: masterRow } = await supabaseAdmin
+    .from('master_products')
+    .select('*')
+    .eq('id', String(masterProductId))
+    .maybeSingle();
+
+  const basePayload: Record<string, unknown> = {
+    master_product_id: String(masterProductId),
+    store_id: storeRow.id,
+    seller_id: profileUuid,
+    price: Number(price),
+    stock_quantity: Math.max(0, Math.floor(Number(stockQuantity ?? 1))),
+    trade_mode: tradeMode === 'wholesale' ? 'wholesale' : 'retail',
+    min_wholesale_qty: tradeMode === 'wholesale' ? Math.max(1, Math.floor(Number(minWholesaleQty ?? 10))) : 1,
+    seller_real_photos: Array.isArray(sellerRealPhotos) ? sellerRealPhotos : [],
+    delivery_eta: String(deliveryEta || '1-2 Days'),
+    location: String(location || 'Dhaka, Bangladesh'),
+    is_active: true,
+  };
+
+  const extendedPayload: Record<string, unknown> = {
+    ...basePayload,
+    ...(masterRow?.pmin ? { pmin: masterRow.pmin } : {}),
+    shipping_fee: Number.isFinite(Number(shippingFee)) && Number(shippingFee) >= 0 ? Number(shippingFee) : 0,
+    condition: String(condition || 'New').slice(0, 40),
+    fulfillment_type: String(fulfillmentType || 'seller_fulfilled').slice(0, 40),
+  };
+
+  let insertResult = await supabaseAdmin
     .from('seller_listings')
-    .insert({
-      master_product_id: String(masterProductId),
-      store_id: storeRow.id,
-      seller_id: profileUuid,
-      price: Number(price),
-      stock_quantity: Math.max(0, Math.floor(Number(stockQuantity ?? 1))),
-      trade_mode: tradeMode === 'wholesale' ? 'wholesale' : 'retail',
-      min_wholesale_qty: tradeMode === 'wholesale' ? Math.max(1, Math.floor(Number(minWholesaleQty ?? 10))) : 1,
-      seller_real_photos: Array.isArray(sellerRealPhotos) ? sellerRealPhotos : [],
-      delivery_eta: String(deliveryEta || '1-2 Days'),
-      location: String(location || 'Dhaka, Bangladesh'),
-      is_active: true,
-    })
+    .insert(extendedPayload)
     .select('*')
     .single();
 
-  if (error || !inserted) {
-    res.status(400).json({ error: error?.message || 'Failed to attach listing.' });
+  if (insertResult.error && isMissingColumnError(insertResult.error)) {
+    insertResult = await supabaseAdmin
+      .from('seller_listings')
+      .insert(basePayload)
+      .select('*')
+      .single();
+  }
+
+  if (insertResult.error || !insertResult.data) {
+    res.status(400).json({ error: insertResult.error?.message || 'Failed to attach listing.' });
     return;
   }
 
-  res.status(201).json({ success: true, listing: inserted });
+  res.status(201).json({ success: true, listing: insertResult.data });
 });
 
-catalogRouter.get('/submissions', requireFirebaseAuth, async (_req: Request, res: Response) => {
+catalogRouter.get('/submissions', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), async (_req: Request, res: Response) => {
   if (!isPrivilegedRole(res.locals.auth)) {
     res.status(403).json({ error: 'Governance privileges required.' });
     return;
@@ -407,7 +617,7 @@ catalogRouter.get('/submissions', requireFirebaseAuth, async (_req: Request, res
   res.json({ submissions, source: 'supabase' });
 });
 
-catalogRouter.post('/submissions', requireFirebaseAuth, async (req: Request, res: Response) => {
+catalogRouter.post('/submissions', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   if (!supabaseAdmin) {
     res.status(503).json({ error: 'Supabase is not configured.' });
     return;
@@ -450,7 +660,7 @@ catalogRouter.post('/submissions', requireFirebaseAuth, async (req: Request, res
   res.status(201).json({ success: true, submission: data });
 });
 
-catalogRouter.post('/submissions/:id/review', requireFirebaseAuth, async (req: Request, res: Response) => {
+catalogRouter.post('/submissions/:id/review', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   if (!isPrivilegedRole(res.locals.auth)) {
     res.status(403).json({ error: 'Governance privileges required.' });
     return;
@@ -477,21 +687,33 @@ catalogRouter.post('/submissions/:id/review', requireFirebaseAuth, async (req: R
 
   let masterProduct = null;
   if (decision === 'approved') {
-    const { data: createdMaster } = await supabaseAdmin
+    const generatedPmin = generatePmin();
+    const baseMaster = {
+      title_en: sub.proposed_title,
+      title_bn: sub.proposed_title,
+      brand: sub.proposed_brand || 'Generic',
+      category: sub.proposed_category,
+      description: sub.proposed_description || '',
+      canonical_images: sub.proposed_images || [],
+      specifications: { Approval: 'Verified by Governance & Gemini AI', PMIN: generatedPmin },
+      is_verified: true,
+    };
+
+    let masterRes = await supabaseAdmin
       .from('master_products')
-      .insert({
-        title_en: sub.proposed_title,
-        title_bn: sub.proposed_title,
-        brand: sub.proposed_brand || 'Generic',
-        category: sub.proposed_category,
-        description: sub.proposed_description || '',
-        canonical_images: sub.proposed_images || [],
-        specifications: { Approval: 'Verified by Governance & Gemini AI' },
-        is_verified: true,
-      })
+      .insert({ ...baseMaster, pmin: generatedPmin })
       .select('*')
       .maybeSingle();
-    masterProduct = createdMaster ? mapMasterProduct(createdMaster) : null;
+
+    if (masterRes.error && isMissingColumnError(masterRes.error)) {
+      masterRes = await supabaseAdmin
+        .from('master_products')
+        .insert(baseMaster)
+        .select('*')
+        .maybeSingle();
+    }
+
+    masterProduct = masterRes.data ? mapMasterProduct(masterRes.data) : null;
   }
 
   res.json({ success: true, decision, submission: sub, masterProduct });

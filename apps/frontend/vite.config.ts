@@ -14,6 +14,17 @@ export default defineConfig(() => {
         '@firebase-config': path.resolve(import.meta.dirname, '../../firebase-applet-config.json'),
       },
     },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-router-dom',
+        'lucide-react',
+      ],
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

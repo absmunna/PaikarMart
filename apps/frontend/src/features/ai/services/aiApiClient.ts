@@ -6,6 +6,8 @@ import {
   TranscriptionResponse 
 } from '@/features/ai/types/ai';
 
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 export async function sendChatMessage(
   history: ChatMessage[],
   message: string,
@@ -17,7 +19,7 @@ export async function sendChatMessage(
     parts: [{ text: h.text }]
   }));
 
-  const res = await fetch('/api/ai/chat', {
+  const res = await fetch(`${API_BASE}/api/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -38,7 +40,7 @@ export async function sendChatMessage(
 }
 
 export async function fetchSearchGrounding(prompt: string): Promise<SearchGroundingResponse> {
-  const res = await fetch('/api/ai/search-grounding', {
+  const res = await fetch(`${API_BASE}/api/ai/search-grounding`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt })
@@ -56,7 +58,7 @@ export async function fetchMapsGrounding(
   prompt: string, 
   userLatLng?: { latitude: number; longitude: number }
 ): Promise<MapsGroundingResponse> {
-  const res = await fetch('/api/ai/maps-grounding', {
+  const res = await fetch(`${API_BASE}/api/ai/maps-grounding`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, userLatLng })
@@ -74,7 +76,7 @@ export async function transcribeVoiceAudio(
   base64Audio: string, 
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptionResponse> {
-  const res = await fetch('/api/ai/transcribe', {
+  const res = await fetch(`${API_BASE}/api/ai/transcribe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ base64Audio, mimeType })

@@ -16,11 +16,15 @@ import {
 import { useAuth } from '@/features/auth/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useBodyScrollLock } from '@/shared/hooks/useBodyScrollLock';
+import { AccountSecurityPanel } from '@/features/auth/components/AccountSecurityPanel';
+import { PhoneOtpForm } from '@/features/auth/components/PhoneOtpForm';
+import { VerifyEmailBanner } from '@/features/auth/components/VerifyEmailBanner';
+import { getPasswordStrength, isValidEmailFormat } from '@/features/auth/services/userVerification';
 
 interface AuthPortalModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'login' | 'register';
+  initialTab?: 'login' | 'phone' | 'register';
 }
 
 export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
@@ -35,31 +39,36 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
     signUpWithEmail, 
     signInWithEmail, 
     sendPasswordReset,
-    sendEmailVerificationSignal,
-    reloadUser,
+    clearPhoneOtpSession,
     signOut, 
     loading 
   } = useAuth();
   const { language } = useLanguage();
   const isBn = language === 'bn';
 
-  const [tab, setTab] = useState<'login' | 'register' | 'forgot'>(initialTab);
+  const [tab, setTab] = useState<'login' | 'phone' | 'register' | 'forgot'>(initialTab);
+  const [accountView, setAccountView] = useState<'overview' | 'security'>('overview');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showCredentialRecovery, setShowCredentialRecovery] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Keep tab & feedback messages synced whenever view opens or initialTab changes
   useEffect(() => {
     if (isOpen) {
       setTab(initialTab);
+      setAccountView('overview');
       setErrorMessage('');
       setSuccessMessage('');
+      setShowCredentialRecovery(false);
+    } else {
+      clearPhoneOtpSession();
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, clearPhoneOtpSession]);
 
   // Close on Escape key when view is open
   useEffect(() => {
@@ -79,57 +88,54 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
 
   const isBusy = isSubmitting || loading;
 
-  const switchTab = (nextTab: 'login' | 'register' | 'forgot') => {
+  const switchTab = (nextTab: 'login' | 'phone' | 'register' | 'forgot') => {
+    if (tab === 'phone' && nextTab !== 'phone') {
+      clearPhoneOtpSession();
+    }
     setTab(nextTab);
     setErrorMessage('');
     setSuccessMessage('');
+    setShowCredentialRecovery(false);
   };
+
+  const passwordStrength = tab === 'register' && password ? getPasswordStrength(password) : null;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
-
-    console.log('[AuthPortalModal:handleRegister] Form submission initiated.', { name: name.trim(), email: email.trim(), tab });
+    setShowCredentialRecovery(false);
 
     if (!name.trim()) {
-      console.warn('[AuthPortalModal:handleRegister] Validation error: Name is empty.');
       setErrorMessage(isBn ? 'অনুগ্রহ করে আপনার নাম দিন' : 'Please enter your full name');
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
-      console.warn('[AuthPortalModal:handleRegister] Validation error: Invalid email format.');
+    if (!isValidEmailFormat(email)) {
       setErrorMessage(isBn ? 'সঠিক ইমেইল এড্রেস দিন' : 'Please enter a valid email address');
       return;
     }
     if (password.length < 6) {
-      console.warn('[AuthPortalModal:handleRegister] Validation error: Password length < 6.');
       setErrorMessage(isBn ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' : 'Password must be at least 6 characters');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      console.log('[AuthPortalModal:handleRegister] Calling signUpWithEmail...');
       await signUpWithEmail(email.trim(), password, name.trim(), 'consumer');
-      console.log('[AuthPortalModal:handleRegister] Registration succeeded. Setting success message.');
       setSuccessMessage(isBn ? 'একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম পাইকারমার্টে।' : 'Account created successfully! Welcome to PaikarMart.');
       setTimeout(() => {
-        console.log('[AuthPortalModal:handleRegister] Auto-closing AuthPortalModal.');
         onClose();
       }, 1200);
     } catch (err: any) {
-      console.error('[AuthPortalModal:handleRegister] Registration failed with error:', {
-        code: err?.code,
-        message: err?.message,
-        timestamp: new Date().toISOString()
-      });
-      if (err.code === 'auth/email-already-in-use') {
+      console.warn('[AuthPortalModal:handleRegister] Registration rejected:', err?.code || err?.message);
+      if (err?.code === 'auth/email-already-in-use') {
         setErrorMessage(isBn ? 'এই ইমেইলটি দিয়ে ইতোমধ্যে একাউন্ট তৈরি করা আছে। লগইন করুন।' : 'An account with this email already exists. Please sign in.');
-      } else if (err.code === 'auth/weak-password') {
+      } else if (err?.code === 'auth/weak-password') {
         setErrorMessage(isBn ? 'পাসওয়ার্ডটি খুব দুর্বল। আরও শক্তিশালী পাসওয়ার্ড দিন।' : 'Password is too weak. Please choose a stronger password.');
+      } else if (err?.code === 'auth/operation-not-allowed') {
+        setErrorMessage(isBn ? 'ইমেইল নিবন্ধন সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে Google দিয়ে সাইন ইন করুন।' : 'Email registration is currently disabled. Please continue with Google.');
       } else {
-        setErrorMessage(err.message || (isBn ? 'নিবন্ধন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' : 'Registration failed. Please try again.'));
+        setErrorMessage(err?.message || (isBn ? 'নিবন্ধন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' : 'Registration failed. Please try again.'));
       }
     } finally {
       setIsSubmitting(false);
@@ -140,42 +146,45 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+    setShowCredentialRecovery(false);
 
-    console.log('[AuthPortalModal:handleLogin] Login attempt initiated for email:', email.trim());
-
-    if (!email.trim()) {
-      console.warn('[AuthPortalModal:handleLogin] Validation error: Email is empty.');
-      setErrorMessage(isBn ? 'ইমেইল দিন' : 'Please enter your email');
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !isValidEmailFormat(trimmedEmail)) {
+      setErrorMessage(isBn ? 'সঠিক ইমেইল এড্রেস দিন' : 'Please enter a valid email address');
       return;
     }
     if (!password) {
-      console.warn('[AuthPortalModal:handleLogin] Validation error: Password is empty.');
       setErrorMessage(isBn ? 'পাসওয়ার্ড দিন' : 'Please enter your password');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      console.log('[AuthPortalModal:handleLogin] Calling signInWithEmail...');
-      await signInWithEmail(email.trim(), password);
-      console.log('[AuthPortalModal:handleLogin] Sign-in succeeded. Setting success state.');
+      await signInWithEmail(trimmedEmail, password);
       setSuccessMessage(isBn ? 'সফলভাবে লগইন হয়েছে!' : 'Signed in successfully!');
       setTimeout(() => {
-        console.log('[AuthPortalModal:handleLogin] Auto-closing AuthPortalModal after login.');
         onClose();
       }, 1000);
     } catch (err: any) {
-      console.error('[AuthPortalModal:handleLogin] Sign-in failed with error:', {
-        code: err?.code,
-        message: err?.message,
-        timestamp: new Date().toISOString()
-      });
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        setErrorMessage(isBn ? 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' : 'Incorrect email or password.');
-      } else if (err.code === 'auth/user-not-found') {
+      console.warn('[AuthPortalModal:handleLogin] Sign-in rejected:', err?.code || err?.message);
+      const code = err?.code;
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+        setErrorMessage(
+          isBn
+            ? 'ইমেইল বা পাসওয়ার্ড সঠিক নয়। আপনি যদি আগে রেজিস্ট্রেশন না করে থাকেন তবে নিবন্ধন করুন অথবা Google দিয়ে সাইন ইন করুন।'
+            : 'Incorrect email or password. If you do not have an account yet, create one or continue with Google below.'
+        );
+        setShowCredentialRecovery(true);
+      } else if (code === 'auth/user-not-found') {
         setErrorMessage(isBn ? 'এই ইমেইলে কোনো একাউন্ট পাওয়া যায়নি। রেজিস্ট্রেশন করুন।' : 'No account found for this email. Please register.');
+        setShowCredentialRecovery(true);
+      } else if (code === 'auth/too-many-requests') {
+        setErrorMessage(isBn ? 'অনেকবার ভুল চেষ্টার কারণে সাময়িকভাবে স্থগিত করা হয়েছে। পাসওয়ার্ড রিসেট করুন অথবা কিছুক্ষণ পর চেষ্টা করুন।' : 'Too many failed attempts. Reset your password or try again shortly.');
+        setShowCredentialRecovery(true);
+      } else if (code === 'auth/operation-not-allowed') {
+        setErrorMessage(isBn ? 'ইমেইল/পাসওয়ার্ড লগইন সক্রিয় নেই। অনুগ্রহ করে Google দিয়ে সাইন ইন করুন।' : 'Email/password login is not enabled. Please continue with Google.');
       } else {
-        setErrorMessage(err.message || (isBn ? 'লগইন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' : 'Sign in failed. Please try again.'));
+        setErrorMessage(err?.message || (isBn ? 'লগইন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' : 'Sign in failed. Please try again.'));
       }
     } finally {
       setIsSubmitting(false);
@@ -184,24 +193,24 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
 
   const handleGoogleSignIn = async () => {
     try {
-      console.log('[AuthPortalModal:handleGoogleSignIn] Initiating Google Sign-In...');
       setErrorMessage('');
       setSuccessMessage('');
+      setShowCredentialRecovery(false);
       setIsSubmitting(true);
       await signInWithGoogle();
-      console.log('[AuthPortalModal:handleGoogleSignIn] Google sign-in finished successfully.');
       setSuccessMessage(isBn ? 'Google-এর মাধ্যমে সফলভাবে সাইন ইন করা হয়েছে!' : 'Signed in with Google successfully!');
       setTimeout(() => {
-        console.log('[AuthPortalModal:handleGoogleSignIn] Auto-closing modal.');
         onClose();
       }, 1000);
     } catch (err: any) {
-      console.error('[AuthPortalModal:handleGoogleSignIn] Google Sign-In failed:', {
-        code: err?.code,
-        message: err?.message,
-        timestamp: new Date().toISOString()
-      });
-      setErrorMessage(isBn ? 'Google Sign-In ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Google Sign-In failed. Please try again.');
+      console.warn('[AuthPortalModal:handleGoogleSignIn] Google Sign-In interrupted:', err?.code || err?.message);
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        setErrorMessage(isBn ? 'Google সাইন-ইন পপআপটি বন্ধ করা হয়েছে।' : 'Google sign-in popup was closed before completing.');
+      } else if (err?.code === 'auth/popup-blocked') {
+        setErrorMessage(isBn ? 'ব্রাউজার পপআপ ব্লক করেছে। অনুগ্রহ করে পপআপ অনুমতি দিন।' : 'Popup was blocked by your browser. Please allow popups and try again.');
+      } else {
+        setErrorMessage(isBn ? 'Google Sign-In ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Google Sign-In failed. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -211,18 +220,17 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
-    console.log('[AuthPortalModal:handlePasswordReset] Password reset requested for:', email.trim());
-    if (!email.trim() || !email.includes('@')) {
+    setShowCredentialRecovery(false);
+    if (!isValidEmailFormat(email)) {
       setErrorMessage(isBn ? 'সঠিক ইমেইল এড্রেস দিন' : 'Please enter a valid email address');
       return;
     }
     try {
       setIsSubmitting(true);
       await sendPasswordReset(email.trim());
-      console.log('[AuthPortalModal:handlePasswordReset] Password reset email sent.');
       setSuccessMessage(isBn ? 'পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে।' : 'Password reset link sent to your email.');
     } catch (err: any) {
-      console.error('[AuthPortalModal:handlePasswordReset] Password reset error:', err);
+      console.warn('[AuthPortalModal:handlePasswordReset] Password reset rejected:', err?.code || err?.message);
       setErrorMessage(
         err?.code === 'auth/user-not-found'
           ? (isBn ? 'এই ইমেইলে কোনো একাউন্ট পাওয়া যায়নি।' : 'No account found with this email.')
@@ -295,6 +303,8 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
                 ? (isBn ? 'অ্যাকাউন্ট স্ট্যাটাস' : 'Account Status')
                 : tab === 'login'
                 ? (isBn ? 'অ্যাকাউন্টে লগইন করুন' : 'Sign in to your account')
+                : tab === 'phone'
+                ? (isBn ? 'মোবাইল নম্বর দিয়ে লগইন' : 'Sign in with Phone OTP')
                 : tab === 'forgot'
                 ? (isBn ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset your password')
                 : (isBn ? 'নতুন অ্যাকাউন্ট তৈরি করুন' : 'Create your account')}
@@ -303,7 +313,9 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
               {firebaseUser
                 ? (isBn ? 'আপনি নিরাপদভাবে লগইন অবস্থায় আছেন' : 'You are currently signed in')
                 : tab === 'login'
-                ? (isBn ? 'ইমেইল বা Google দিয়ে প্রবেশ করুন' : 'Continue with email or Google')
+                ? (isBn ? 'ইমেইল, ফোন OTP বা Google দিয়ে প্রবেশ করুন' : 'Continue with email, Phone OTP, or Google')
+                : tab === 'phone'
+                ? (isBn ? '৬ সংখ্যার SMS OTP কোডের মাধ্যমে দ্রুত সাইন ইন করুন' : 'Verify your Bangladeshi mobile number via 6-digit SMS OTP')
                 : tab === 'forgot'
                 ? (isBn ? 'রিসেট লিংক পেতে ইমেইল দিন' : 'Enter your email to receive a reset link')
                 : (isBn ? 'শপিং ও কমিউনিটি ফিচার আনলক করতে নিবন্ধন করুন' : 'Register to unlock orders, wallet & messaging')}
@@ -312,102 +324,138 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
 
           {firebaseUser ? (
             <div className="space-y-4">
-              <div className="p-3.5 rounded-2xl bg-[var(--pm-accent-soft)] border border-[var(--pm-accent-border)] flex items-center gap-3.5">
-                <div className="relative shrink-0">
-                  <img
-                    src={currentUser.avatar || firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                    alt={currentUser.name}
-                    referrerPolicy="no-referrer"
-                    className="w-12 h-12 rounded-xl object-cover border-2 border-[var(--pm-card)] shadow-md"
+              {/* Signed-In Overview / Security & Linking Switcher */}
+              <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--pm-surface)] rounded-xl border border-[var(--pm-border)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountView('overview');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    accountView === 'overview'
+                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
+                      : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                  }`}
+                >
+                  {isBn ? 'অ্যাকাউন্ট তথ্য' : 'Overview'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountView('security');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className={`py-1.5 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    accountView === 'security'
+                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
+                      : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                  }`}
+                >
+                  {isBn ? 'সিকিউরিটি ও লিঙ্কিং' : 'Security & Linking'}
+                </button>
+              </div>
+
+              {errorMessage && (
+                <div className="p-2.5 text-xs font-semibold text-[var(--pm-danger)] bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span className="leading-snug">{errorMessage}</span>
+                </div>
+              )}
+              {successMessage && (
+                <div className="p-2.5 text-xs font-semibold text-[var(--pm-success)] bg-[var(--pm-success-soft)] border border-[var(--pm-success)]/30 rounded-xl flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="leading-snug">{successMessage}</span>
+                </div>
+              )}
+
+              {accountView === 'overview' ? (
+                <>
+                  <div className="p-3.5 rounded-2xl bg-[var(--pm-accent-soft)] border border-[var(--pm-accent-border)] flex items-center gap-3.5">
+                    <div className="relative shrink-0">
+                      <img
+                        src={currentUser.avatar || firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                        alt={currentUser.name}
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-xl object-cover border-2 border-[var(--pm-card)] shadow-md"
+                      />
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[var(--pm-success)] border-2 border-[var(--pm-card)] rounded-full" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm font-bold text-[var(--pm-text)] truncate">
+                        {currentUser.name || firebaseUser.displayName || 'PaikarMart User'}
+                      </h2>
+                      <p className="text-xs text-[var(--pm-muted)] truncate">
+                        {firebaseUser.email || firebaseUser.phoneNumber || currentUser.phone}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                      <div className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider mb-0.5">
+                        {isBn ? 'অ্যাক্সেস লেভেল' : 'Access Level'}
+                      </div>
+                      <div className="text-xs font-bold text-[var(--pm-accent)] uppercase">{currentUser.role || 'Consumer'}</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+                      <div className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider mb-0.5">
+                        {isBn ? 'সেশন' : 'Session'}
+                      </div>
+                      <div className="text-xs font-bold text-[var(--pm-success)] flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>{isBn ? 'ভেরিফায়েড' : 'Authenticated'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modular Email / Phone Verification Status Banner */}
+                  <VerifyEmailBanner
+                    onStatusChange={(msg, isErr) => {
+                      if (isErr) {
+                        setSuccessMessage('');
+                        setErrorMessage(msg);
+                      } else {
+                        setErrorMessage('');
+                        setSuccessMessage(msg);
+                      }
+                    }}
                   />
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[var(--pm-success)] border-2 border-[var(--pm-card)] rounded-full" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-sm font-bold text-[var(--pm-text)] truncate">
-                    {currentUser.name || firebaseUser.displayName}
-                  </h2>
-                  <p className="text-xs text-[var(--pm-muted)] truncate">{firebaseUser.email}</p>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                  <div className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider mb-0.5">
-                    {isBn ? 'অ্যাক্সেস লেভেল' : 'Access Level'}
+                  {/* Seller Account Access Card */}
+                  <div className="p-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-xs font-bold text-[var(--pm-text)]">
+                        {isBn ? 'সেলার অ্যাকাউন্ট অ্যাক্সেস' : 'Seller & Merchant Access'}
+                      </div>
+                      <p className="text-[11px] text-[var(--pm-muted)] truncate">
+                        {currentUser.isVendor 
+                          ? (isBn ? 'আপনি একজন ভেরিফাইড মার্চেন্ট/সেলার' : 'Active Merchant Storefront Verified') 
+                          : (isBn ? 'পাইকারিতে পণ্য বিক্রির জন্য সেলার KYC করুন' : 'Upgrade account to sell wholesale & B2B')}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-xl text-xs font-bold ${
+                      currentUser.isVendor ? 'bg-emerald-500/15 text-emerald-600' : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
+                    }`}>
+                      {currentUser.isVendor ? 'Active Seller' : 'Consumer'}
+                    </span>
                   </div>
-                  <div className="text-xs font-bold text-[var(--pm-accent)] uppercase">{currentUser.role || 'Consumer'}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                  <div className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider mb-0.5">
-                    {isBn ? 'স্ট্যাটাস' : 'Status'}
-                  </div>
-                  <div className="text-xs font-bold text-[var(--pm-success)] flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>{isBn ? 'ভেরিফায়েড' : 'Encrypted'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email Verification Banner */}
-              <div className="p-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[var(--pm-text)]">
-                    {isBn ? 'ইমেইল ভেরিফিকেশন স্ট্যাটাস' : 'Email Verification Status'}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                    firebaseUser.emailVerified ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'
-                  }`}>
-                    {firebaseUser.emailVerified ? (isBn ? 'ভেরিফাইড' : 'Verified') : (isBn ? 'অপেক্ষমাণ' : 'Pending Verification')}
-                  </span>
-                </div>
-                {!firebaseUser.emailVerified && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await sendEmailVerificationSignal();
-                          setSuccessMessage(isBn ? 'ভেরিফিকেশন লিংক পাঠানো হয়েছে।' : 'Verification email sent successfully.');
-                        } catch (err: any) {
-                          setErrorMessage(err?.message || 'Failed to send verification email.');
-                        }
-                      }}
-                      className="flex-1 py-2 px-3 bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] rounded-xl text-xs font-bold hover:bg-[var(--pm-accent-hover)] transition-colors cursor-pointer"
-                    >
-                      {isBn ? 'ভেরিফিকেশন ইমেইল পাঠান' : 'Send Verification Link'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await reloadUser();
-                        setSuccessMessage(isBn ? 'স্ট্যাটাস রিফ্রেশ হয়েছে।' : 'Status refreshed.');
-                      }}
-                      className="py-2 px-3 bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-text)] rounded-xl text-xs font-bold hover:border-[var(--pm-accent)] transition-colors cursor-pointer"
-                    >
-                      {isBn ? 'রিফ্রেশ' : 'Check Status'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Seller Account Access Card */}
-              <div className="p-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-between gap-3">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="text-xs font-bold text-[var(--pm-text)]">
-                    {isBn ? 'সেলার অ্যাকাউন্ট অ্যাক্সেস' : 'Seller & Merchant Access'}
-                  </div>
-                  <p className="text-[11px] text-[var(--pm-muted)] truncate">
-                    {currentUser.isVendor 
-                      ? (isBn ? 'আপনি একজন ভেরিফাইড মার্চেন্ট/সেলার' : 'Active Merchant Storefront Verified') 
-                      : (isBn ? 'পাইকারিতে পণ্য বিক্রির জন্য সেলার KYC করুন' : 'Upgrade account to sell wholesale & B2B')}
-                  </p>
-                </div>
-                <span className={`shrink-0 px-2.5 py-1 rounded-xl text-xs font-bold ${
-                  currentUser.isVendor ? 'bg-emerald-500/15 text-emerald-600' : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
-                }`}>
-                  {currentUser.isVendor ? 'Active Seller' : 'Consumer'}
-                </span>
-              </div>
+                </>
+              ) : (
+                <AccountSecurityPanel
+                  onStatusChange={(msg, isErr) => {
+                    if (isErr) {
+                      setSuccessMessage('');
+                      setErrorMessage(msg);
+                    } else {
+                      setErrorMessage('');
+                      setSuccessMessage(msg);
+                    }
+                  }}
+                />
+              )}
 
               <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-1">
                 <button
@@ -431,25 +479,37 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
             </div>
           ) : (
             <div className="space-y-3.5">
-              {/* Tab Switcher */}
-              <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--pm-surface)] rounded-xl border border-[var(--pm-border)]">
+              {/* 3-Segment Tab Switcher */}
+              <div className="grid grid-cols-3 gap-1 p-1 bg-[var(--pm-surface)] rounded-xl border border-[var(--pm-border)]">
                 <button
                   type="button"
                   disabled={isBusy}
                   onClick={() => switchTab('login')}
-                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all active-scale cursor-pointer disabled:opacity-60 ${
+                  className={`py-2 px-2 text-xs font-bold rounded-lg transition-all active-scale cursor-pointer disabled:opacity-60 ${
                     tab === 'login'
                       ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
                       : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
                   }`}
                 >
-                  {isBn ? 'লগইন' : 'Login'}
+                  {isBn ? 'ইমেইল' : 'Email'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => switchTab('phone')}
+                  className={`py-2 px-2 text-xs font-bold rounded-lg transition-all active-scale cursor-pointer disabled:opacity-60 ${
+                    tab === 'phone'
+                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
+                      : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                  }`}
+                >
+                  {isBn ? 'ফোন OTP' : 'Phone OTP'}
                 </button>
                 <button
                   type="button"
                   disabled={isBusy}
                   onClick={() => switchTab('register')}
-                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all active-scale cursor-pointer disabled:opacity-60 ${
+                  className={`py-2 px-2 text-xs font-bold rounded-lg transition-all active-scale cursor-pointer disabled:opacity-60 ${
                     tab === 'register'
                       ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
                       : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
@@ -461,9 +521,29 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
 
               {/* Error / Success Alert */}
               {errorMessage && (
-                <div className="p-2.5 text-xs font-semibold text-[var(--pm-danger)] bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 rounded-xl flex items-center gap-2 animate-shake">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span className="leading-snug">{errorMessage}</span>
+                <div role="alert" className="p-2.5 text-xs font-semibold text-[var(--pm-danger)] bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 rounded-xl space-y-2 animate-shake">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span className="leading-snug">{errorMessage}</span>
+                  </div>
+                  {showCredentialRecovery && tab === 'login' && (
+                    <div className="flex items-center gap-3 pl-6 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => switchTab('register')}
+                        className="underline hover:opacity-80 cursor-pointer"
+                      >
+                        {isBn ? 'নতুন একাউন্ট তৈরি করুন' : 'Create account'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => switchTab('forgot')}
+                        className="underline hover:opacity-80 cursor-pointer"
+                      >
+                        {isBn ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset password'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {successMessage && (
@@ -473,102 +553,150 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
                 </div>
               )}
 
-              {/* Form */}
-              <form onSubmit={tab === 'login' ? handleLogin : tab === 'forgot' ? handlePasswordReset : handleRegister} className="space-y-3">
-                {tab === 'register' && (
+              {/* Phone OTP Flow OR Email / Register / Forgot Form */}
+              {tab === 'phone' ? (
+                <PhoneOtpForm
+                  onSuccess={(msg) => {
+                    setErrorMessage('');
+                    setSuccessMessage(msg);
+                    setTimeout(() => {
+                      onClose();
+                    }, 1000);
+                  }}
+                  onError={(msg) => {
+                    setSuccessMessage('');
+                    setErrorMessage(msg);
+                  }}
+                />
+              ) : (
+                <form onSubmit={tab === 'login' ? handleLogin : tab === 'forgot' ? handlePasswordReset : handleRegister} className="space-y-3">
+                  {tab === 'register' && (
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-semibold text-[var(--pm-muted)] ml-0.5">
+                        {isBn ? 'পুরো নাম' : 'Full Name'}
+                      </label>
+                      <div className="relative group">
+                        <UserIcon className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder={isBn ? 'তানভীর আহমেদ' : 'Tanvir Ahmed'}
+                          className="w-full pl-9 pr-3.5 py-2.5 text-sm font-medium bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-xl text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 transition-all"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <label className="block text-[11px] font-semibold text-[var(--pm-muted)] ml-0.5">
-                      {isBn ? 'পুরো নাম' : 'Full Name'}
+                      {isBn ? 'ইমেইল এড্রেস' : 'Email Address'}
                     </label>
                     <div className="relative group">
-                      <UserIcon className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
+                      <Mail className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
                       <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={isBn ? 'তানভীর আহমেদ' : 'Tanvir Ahmed'}
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="user@paikarmart.com"
                         className="w-full pl-9 pr-3.5 py-2.5 text-sm font-medium bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-xl text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 transition-all"
                       />
                     </div>
                   </div>
-                )}
 
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[var(--pm-muted)] ml-0.5">
-                    {isBn ? 'ইমেইল এড্রেস' : 'Email Address'}
-                  </label>
-                  <div className="relative group">
-                    <Mail className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@paikarmart.com"
-                      className="w-full pl-9 pr-3.5 py-2.5 text-sm font-medium bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-xl text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 transition-all"
-                    />
-                  </div>
-                </div>
-
-                {tab !== 'forgot' && (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between px-0.5">
-                      <label className="block text-[11px] font-semibold text-[var(--pm-muted)]">
-                        {isBn ? 'পাসওয়ার্ড' : 'Password'}
-                      </label>
-                      {tab === 'login' && (
+                  {tab !== 'forgot' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between px-0.5">
+                        <label className="block text-[11px] font-semibold text-[var(--pm-muted)]">
+                          {isBn ? 'পাসওয়ার্ড' : 'Password'}
+                        </label>
+                        {tab === 'login' && (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => switchTab('forgot')}
+                            className="text-[11px] font-semibold text-[var(--pm-accent)] hover:underline cursor-pointer disabled:opacity-60"
+                          >
+                            {isBn ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative group">
+                        <Lock className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full pl-9 pr-10 py-2.5 text-sm font-medium bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-xl text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 transition-all"
+                        />
                         <button
                           type="button"
+                          onClick={() => setShowPassword(!showPassword)}
                           disabled={isBusy}
-                          onClick={() => switchTab('forgot')}
-                          className="text-[11px] font-semibold text-[var(--pm-accent)] hover:underline cursor-pointer disabled:opacity-60"
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-surface)] transition-colors cursor-pointer"
                         >
-                          {isBn ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
+                      </div>
+
+                      {passwordStrength && (
+                        <div className="flex items-center gap-2 pt-0.5 px-0.5">
+                          <div className="flex-1 grid grid-cols-3 gap-1">
+                            {[1, 2, 3].map((stepIdx) => {
+                              const active =
+                                (passwordStrength.level === 'weak' && stepIdx === 1) ||
+                                (passwordStrength.level === 'fair' && stepIdx <= 2) ||
+                                passwordStrength.level === 'strong';
+                              const barColor =
+                                passwordStrength.level === 'strong'
+                                  ? 'bg-emerald-500'
+                                  : passwordStrength.level === 'fair'
+                                  ? 'bg-amber-500'
+                                  : 'bg-rose-500';
+                              return (
+                                <div
+                                  key={stepIdx}
+                                  className={`h-1 rounded-full transition-colors ${active ? barColor : 'bg-[var(--pm-border)]'}`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <span className="text-[10px] font-semibold text-[var(--pm-muted)]">
+                            {passwordStrength.level === 'strong'
+                              ? (isBn ? 'শক্তিশালী' : 'Strong')
+                              : passwordStrength.level === 'fair'
+                              ? (isBn ? 'মাঝারি' : 'Fair')
+                              : (isBn ? 'দুর্বল' : 'Weak')}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <div className="relative group">
-                      <Lock className="w-4 h-4 text-[var(--pm-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[var(--pm-accent)] transition-colors" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full pl-9 pr-10 py-2.5 text-sm font-medium bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-xl text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/15 transition-all"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        disabled={isBusy}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-surface)] transition-colors cursor-pointer"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="w-full py-2.5 sm:py-3 px-4 text-sm font-bold text-[var(--pm-accent-fg)] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] rounded-xl shadow-md active-scale transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
-                >
-                  {isBusy ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <span>
-                        {tab === 'login'
-                          ? (isBn ? 'লগইন করুন' : 'Sign In')
-                          : tab === 'forgot'
-                          ? (isBn ? 'রিসেট লিংক পাঠান' : 'Send Reset Link')
-                          : (isBn ? 'একাউন্ট তৈরি করুন' : 'Create Account')}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
                   )}
-                </button>
-              </form>
+
+                  <button
+                    type="submit"
+                    disabled={isBusy}
+                    className="w-full py-2.5 sm:py-3 px-4 text-sm font-bold text-[var(--pm-accent-fg)] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] rounded-xl shadow-md active-scale transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                  >
+                    {isBusy ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <span>
+                          {tab === 'login'
+                            ? (isBn ? 'লগইন করুন' : 'Sign In')
+                            : tab === 'forgot'
+                            ? (isBn ? 'রিসেট লিংক পাঠান' : 'Send Reset Link')
+                            : (isBn ? 'একাউন্ট তৈরি করুন' : 'Create Account')}
+                        </span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
 
               {tab === 'forgot' && (
                 <button

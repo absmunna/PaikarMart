@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, ArrowDown } from 'lucide-react';
 import { 
   PortalTab, 
   User, 
@@ -53,18 +54,29 @@ import {
   type PortalFilterType
 } from '@/features/marketplace';
 import { fetchSocialFeedResult } from '@/features/social';
-import { WalletModal } from '@/portals/utilities/wallet';
-import { NotificationsModal } from '@/portals/utilities/notifications-center';
+import { WalletModal } from '@/portals/utilities/wallet/components/WalletModal';
+import { NotificationsModal } from '@/portals/utilities/notifications-center/components/NotificationsModal';
 import { MessagingCenterModal } from '@/features/messaging';
 import { SuperAdminControlModal } from '@/features/governance';
 import { MultiRoleOnboardingModal } from '@/features/vendors';
+import { PwaInstallBanner } from '@/features/pwa/PwaInstallBanner';
+import { VoiceSearchModal } from '@/features/ai-voice/VoiceSearchModal';
+import { RfqAndForecastingModal } from '@/components/shared/RfqAndForecastingModal';
+import {
+  clearUserNotificationsApi,
+  createUserNotificationApi,
+  fetchUserNotificationsApi,
+  markAllNotificationsReadApi,
+  markNotificationReadApi,
+} from '@/features/notifications/notificationApiClient';
 
 // Application Bootstrap, Routing, Contexts & Shared Hooks
 import { AppProviders } from '@/app/providers/AppProviders';
 import { PORTAL_TAB_ROUTES, resolveTabFromPath, ROUTE_PATHS } from '@/app/router/routeIds';
 import { AppRouteManifest } from '@/app/router/routeManifest';
 import { useTheme, useLanguage, useLocationSettings, useAuth } from '@/contexts';
-import { SettingsModal, SettingsSectionId } from '@/portals/utilities/settings-center';
+import type { SettingsSectionId } from '@/types';
+import { SettingsModal } from '@/portals/utilities/settings-center/components/SettingsModal';
 import { useGlobalOverlayScrollLock } from '@/shared/hooks/useBodyScrollLock';
 import {
   loadPersistedCart,
@@ -125,6 +137,8 @@ function AppInner() {
   const [isCloudGuideOpen, setIsCloudGuideOpen] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
+  const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -204,65 +218,105 @@ function AppInner() {
   const [commerceItems, setCommerceItems] = useState<CommerceItem[]>([]);
   const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(true);
   const [isFeedLoading, setIsFeedLoading] = useState<boolean>(true);
+  const [pullDistance, setPullDistance] = useState<number>(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
+  const pullStartYRef = useRef<number | null>(null);
+  const PULL_THRESHOLD = 72;
 
-  // Supabase is the authoritative product catalog source.
-  // Offline mock catalog is only used when Supabase is unconfigured.
-  useEffect(() => {
-    const controller = new AbortController();
+  const refreshPrimaryViewportData = useCallback(async (signal?: AbortSignal) => {
     setIsCatalogLoading(true);
-    fetchCatalogResult(controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        if (result.source === 'unconfigured') {
-          setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
-          return;
-        }
-        if (result.products.length === 0) {
+    setIsFeedLoading(true);
+    try {
+      const [catalogResult, feedResult] = await Promise.all([
+        fetchCatalogResult(signal),
+        fetchSocialFeedResult(signal),
+      ]);
+      if (signal?.aborted) return;
+
+      if (catalogResult.source === 'unconfigured') {
+        setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
+      } else {
+        if (catalogResult.products.length === 0) {
           try {
             localStorage.removeItem('nexsphere_commerce_v1');
           } catch {
             // Ignore storage access errors
           }
         }
-        setCommerceItems(result.products);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsCatalogLoading(false);
-        }
-      });
-    return () => controller.abort();
+        setCommerceItems(catalogResult.products);
+      }
+
+      if (feedResult.posts.length > 0) {
+        setPosts((prev) => {
+          const seenIds = new Set<string>();
+          const merged: SocialPost[] = [];
+          for (const post of [...feedResult.posts, ...prev]) {
+            if (!seenIds.has(post.id)) {
+              seenIds.add(post.id);
+              merged.push(post);
+            }
+          }
+          return merged;
+        });
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setIsCatalogLoading(false);
+        setIsFeedLoading(false);
+      }
+    }
   }, []);
 
-  // Fetch live community feed posts from Express/Supabase and merge with local posts
+  // Supabase is the authoritative product catalog & live feed source.
   useEffect(() => {
     const controller = new AbortController();
-    setIsFeedLoading(true);
-    fetchSocialFeedResult(controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        if (result.posts.length > 0) {
-          setPosts((prev) => {
-            const seenIds = new Set<string>();
-            const merged: SocialPost[] = [];
-            // Preserve locally created posts first, then live feed posts
-            for (const post of [...result.posts, ...prev]) {
-              if (!seenIds.has(post.id)) {
-                seenIds.add(post.id);
-                merged.push(post);
-              }
-            }
-            return merged;
-          });
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsFeedLoading(false);
-        }
-      });
+    void refreshPrimaryViewportData(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [refreshPrimaryViewportData]);
+
+  const triggerPullRefresh = useCallback(async () => {
+    if (isPullRefreshing) return;
+    setIsPullRefreshing(true);
+    setPullDistance(56);
+    try {
+      await Promise.all([
+        refreshPrimaryViewportData(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+    } finally {
+      setIsPullRefreshing(false);
+      setPullDistance(0);
+    }
+  }, [isPullRefreshing, refreshPrimaryViewportData]);
+
+  const handleViewportTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
+    if (window.scrollY <= 2 && !isPullRefreshing && e.touches.length === 1) {
+      pullStartYRef.current = e.touches[0].clientY;
+    } else {
+      pullStartYRef.current = null;
+    }
+  }, [isPullRefreshing]);
+
+  const handleViewportTouchMove = useCallback((e: React.TouchEvent<HTMLElement>) => {
+    if (pullStartYRef.current === null || isPullRefreshing) return;
+    const delta = e.touches[0].clientY - pullStartYRef.current;
+    if (delta > 0 && window.scrollY <= 2) {
+      const damped = Math.min(110, Math.round(delta * 0.5));
+      setPullDistance(damped);
+    } else if (delta <= 0) {
+      setPullDistance(0);
+    }
+  }, [isPullRefreshing]);
+
+  const handleViewportTouchEnd = useCallback(() => {
+    if (pullStartYRef.current === null) return;
+    pullStartYRef.current = null;
+    if (pullDistance >= PULL_THRESHOLD) {
+      void triggerPullRefresh();
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance, triggerPullRefresh]);
 
   const [cartItems, setCartItems] = useState<CartItem[]>(() => loadPersistedCart());
   
@@ -340,6 +394,19 @@ function AppInner() {
     initialSettingsSection,
   ]);
 
+  // Sync persistent notifications from backend PostgreSQL when authenticated
+  useEffect(() => {
+    if (!firebaseUser) return;
+    let active = true;
+    fetchUserNotificationsApi().then((serverNotifs) => {
+      if (!active || !serverNotifs || serverNotifs.length === 0) return;
+      setNotifications(serverNotifs);
+    });
+    return () => {
+      active = false;
+    };
+  }, [firebaseUser]);
+
   // Scope visible notifications: guests are limited to up to 3 public system notices
   const visibleNotifications = React.useMemo(() => {
     if (!isGuestUser) return notifications;
@@ -363,8 +430,9 @@ function AppInner() {
     if (isGuestUser && type !== 'system') {
       return;
     }
+    const optimisticId = `notif_${Date.now()}`;
     const newNotif: AppNotification = {
-      id: `notif_${Date.now()}`,
+      id: optimisticId,
       type,
       title,
       message,
@@ -374,25 +442,44 @@ function AppInner() {
       avatar
     };
     setNotifications(prev => [newNotif, ...prev]);
+
+    if (!isGuestUser) {
+      void createUserNotificationApi({ type, title, message, actionTab, avatar }).then((saved) => {
+        if (saved && saved.id) {
+          setNotifications((prev) =>
+            prev.map((item) => (item.id === optimisticId ? saved : item))
+          );
+        }
+      });
+    }
   };
 
   const handleMarkNotificationAsRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    if (!isGuestUser) {
+      void markNotificationReadApi(id);
+    }
   };
 
   const handleMarkAllNotificationsAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    if (!isGuestUser) {
+      void markAllNotificationsReadApi();
+    }
   };
 
   const handleClearAllNotifications = () => {
     setNotifications([]);
+    if (!isGuestUser) {
+      void clearUserNotificationsApi();
+    }
   };
 
   // Handlers for Social Feed
   const handleCreatePost = (
-    content: string, 
-    taggedProduct?: TaggedProduct, 
-    mediaUrl?: string, 
+    content: string,
+    taggedProduct?: TaggedProduct,
+    mediaUrl?: string,
     postType: PostType = 'regular',
     citizenCategory: CitizenPostCategory = 'general',
     aiSafetyVerified: boolean = true,
@@ -700,6 +787,8 @@ function AppInner() {
         onOpenAuthModal={handleOpenAuthModal}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
+        onOpenRfqModal={() => setIsRfqModalOpen(true)}
         commerceItems={commerceItems}
         posts={posts}
       />
@@ -732,8 +821,48 @@ function AppInner() {
             }}
           />
 
-          {/* Center Primary Feed / Portal Viewport */}
-          <main className="w-full max-w-2xl flex-1 space-y-6 pb-12">
+          {/* Center Primary Feed / Portal Viewport with Pull-to-Refresh */}
+          <main
+            onTouchStart={handleViewportTouchStart}
+            onTouchMove={handleViewportTouchMove}
+            onTouchEnd={handleViewportTouchEnd}
+            className="w-full max-w-2xl flex-1 space-y-6 pb-12 relative"
+          >
+            {/* Pull-to-Refresh Visual Indicator */}
+            <div
+              aria-live="polite"
+              style={{
+                height: pullDistance > 0 || isPullRefreshing ? `${Math.max(44, pullDistance)}px` : '0px',
+                opacity: pullDistance > 8 || isPullRefreshing ? 1 : 0,
+              }}
+              className="overflow-hidden transition-all duration-200 ease-out flex items-center justify-center"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-sm text-xs font-semibold text-[var(--pm-text)]">
+                {isPullRefreshing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 text-[var(--pm-accent)] animate-spin" />
+                    <span>{isBn ? 'নতুন ডেটা আপডেট হচ্ছে...' : 'Refreshing live feed & catalog...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown
+                      className={`w-3.5 h-3.5 text-[var(--pm-accent)] transition-transform duration-150 ${
+                        pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
+                      }`}
+                    />
+                    <span>
+                      {pullDistance >= PULL_THRESHOLD
+                        ? isBn
+                          ? 'রিফ্রেশ করতে ছেড়ে দিন'
+                          : 'Release to refresh'
+                        : isBn
+                        ? 'রিফ্রেশ করতে নিচে টানুন'
+                        : 'Pull down to refresh'}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
             
             {/* Master 3-Tier Category Bar available across core portals (never on Social Feed) */}
             {['explore', 'commerce', 'wholesale', 'services', 'rides', 'demand', 'nearby'].includes(currentTab) && !location.pathname.includes('/product/') && (
@@ -1017,6 +1146,22 @@ function AppInner() {
       <CompareTrayBar />
       <ProductComparisonModal onAddToCart={handleAddToCart} />
 
+      {/* PWA Device Installation Prompt & Offline Service Worker */}
+      <PwaInstallBanner />
+
+      {/* AI Voice Search & Assistant Modal */}
+      <VoiceSearchModal
+        isOpen={isVoiceSearchOpen}
+        onClose={() => setIsVoiceSearchOpen(false)}
+        onSearchApplied={(q) => setSearchQuery(q)}
+      />
+
+      {/* Option 4: AI Demand Forecasting & Bulk RFQ Modal */}
+      <RfqAndForecastingModal
+        isOpen={isRfqModalOpen}
+        onClose={() => setIsRfqModalOpen(false)}
+        currentUser={currentUser}
+      />
     </div>
       </ProductComparisonProvider>
     </WishlistProvider>

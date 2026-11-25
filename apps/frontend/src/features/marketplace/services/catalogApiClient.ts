@@ -5,6 +5,8 @@ import type {
   SellerListing,
 } from '@/types';
 
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 export type CatalogSource = 'supabase' | 'unconfigured' | 'schema_missing' | 'error';
 
 export interface CatalogProductsResult {
@@ -16,7 +18,7 @@ export interface CatalogProductsResult {
 
 export async function fetchCatalogResult(signal?: AbortSignal): Promise<CatalogProductsResult> {
   try {
-    const response = await fetch('/api/catalog/products', {
+    const response = await fetch(`${API_BASE}/api/catalog/products`, {
       headers: { Accept: 'application/json' },
       signal,
     });
@@ -53,7 +55,7 @@ export async function fetchCatalogProductById(
   signal?: AbortSignal
 ): Promise<{ product: CommerceItem | null; source: CatalogSource }> {
   try {
-    const response = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`, {
+    const response = await fetch(`${API_BASE}/api/catalog/products/${encodeURIComponent(id)}`, {
       headers: { Accept: 'application/json' },
       signal,
     });
@@ -74,7 +76,7 @@ export async function fetchMasterCatalogProducts(
   signal?: AbortSignal
 ): Promise<{ masterProducts: MasterProduct[]; source: CatalogSource }> {
   try {
-    const response = await fetch('/api/catalog/master-products', {
+    const response = await fetch(`${API_BASE}/api/catalog/master-products`, {
       headers: { Accept: 'application/json' },
       signal,
     });
@@ -96,7 +98,7 @@ export async function fetchSellerListingsForMaster(
   signal?: AbortSignal
 ): Promise<{ listings: SellerListing[]; source: CatalogSource }> {
   try {
-    const response = await fetch(`/api/catalog/listings/by-master/${encodeURIComponent(masterProductId)}`, {
+    const response = await fetch(`${API_BASE}/api/catalog/listings/by-master/${encodeURIComponent(masterProductId)}`, {
       headers: { Accept: 'application/json' },
       signal,
     });
@@ -117,7 +119,7 @@ export async function createSellerListingOffer(
   idToken: string,
   payload: Partial<SellerListing>
 ): Promise<{ ok: boolean; listing?: any; error?: string }> {
-  const response = await fetch('/api/catalog/listings', {
+  const response = await fetch(`${API_BASE}/api/catalog/listings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -137,7 +139,7 @@ export async function fetchCatalogSubmissions(
   signal?: AbortSignal
 ): Promise<{ submissions: MasterCatalogSubmission[]; source: CatalogSource }> {
   try {
-    const response = await fetch('/api/catalog/submissions', {
+    const response = await fetch(`${API_BASE}/api/catalog/submissions`, {
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${idToken}`,
@@ -161,7 +163,7 @@ export async function submitCatalogProposal(
   idToken: string,
   payload: Partial<MasterCatalogSubmission>
 ): Promise<{ ok: boolean; submission?: any; error?: string }> {
-  const response = await fetch('/api/catalog/submissions', {
+  const response = await fetch(`${API_BASE}/api/catalog/submissions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -181,7 +183,7 @@ export async function reviewCatalogProposal(
   submissionId: string,
   decision: 'approved' | 'rejected'
 ): Promise<{ ok: boolean; masterProduct?: MasterProduct | null; error?: string }> {
-  const response = await fetch(`/api/catalog/submissions/${encodeURIComponent(submissionId)}/review`, {
+  const response = await fetch(`${API_BASE}/api/catalog/submissions/${encodeURIComponent(submissionId)}/review`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -197,4 +199,62 @@ export async function reviewCatalogProposal(
     return { ok: false, error: data.error || 'Failed to review submission.' };
   }
   return { ok: true, masterProduct: data.masterProduct };
+}
+
+export async function fetchMasterProductByPmin(
+  pmin: string,
+  signal?: AbortSignal
+): Promise<{
+  masterProduct: MasterProduct | null;
+  listings: SellerListing[];
+  buyBoxWinner: SellerListing | null;
+  offerCount: number;
+  source: CatalogSource;
+}> {
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/catalog/master-products/by-pmin/${encodeURIComponent(pmin.trim().toUpperCase())}`,
+      { headers: { Accept: 'application/json' }, signal }
+    );
+    const payload = (await response.json().catch(() => ({}))) as {
+      masterProduct?: MasterProduct | null;
+      listings?: SellerListing[];
+      buyBoxWinner?: SellerListing | null;
+      offerCount?: number;
+      source?: CatalogSource;
+    };
+    return {
+      masterProduct: payload.masterProduct || null,
+      listings: Array.isArray(payload.listings) ? payload.listings : [],
+      buyBoxWinner: payload.buyBoxWinner || null,
+      offerCount: Number(payload.offerCount || 0),
+      source: payload.source || (response.ok ? 'supabase' : 'error'),
+    };
+  } catch {
+    return { masterProduct: null, listings: [], buyBoxWinner: null, offerCount: 0, source: 'error' };
+  }
+}
+
+export async function fetchSellerListingsByPmin(
+  pmin: string,
+  signal?: AbortSignal
+): Promise<{ listings: SellerListing[]; buyBoxWinner: SellerListing | null; source: CatalogSource }> {
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/catalog/listings/by-pmin/${encodeURIComponent(pmin.trim().toUpperCase())}`,
+      { headers: { Accept: 'application/json' }, signal }
+    );
+    const payload = (await response.json().catch(() => ({}))) as {
+      listings?: SellerListing[];
+      buyBoxWinner?: SellerListing | null;
+      source?: CatalogSource;
+    };
+    return {
+      listings: Array.isArray(payload.listings) ? payload.listings : [],
+      buyBoxWinner: payload.buyBoxWinner || null,
+      source: payload.source || (response.ok ? 'supabase' : 'error'),
+    };
+  } catch {
+    return { listings: [], buyBoxWinner: null, source: 'error' };
+  }
 }

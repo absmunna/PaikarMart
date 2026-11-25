@@ -12,6 +12,7 @@ import {
 } from '@/features/auth/services/authProfileApi';
 import { User, UserRole, KycStatus, TrustLevel } from '@/types';
 import { CURRENT_USER } from '@/data/mockData';
+import { safeMediaSrc } from '@/shared/utils';
 
 export interface SupabaseUserProfile {
   id: string;
@@ -191,7 +192,7 @@ export function useFirebaseSupabaseSync(
         name: profile.name,
         email: profile.email || stored.email,
         handle: profile.handle,
-        avatar: profile.avatar_url || stored.avatar,
+        avatar: safeMediaSrc(profile.avatar_url || stored.avatar, CURRENT_USER.avatar),
         role: profile.role,
         isVendor: isVendorUser,
         kycStatus: profile.kyc_status || stored.kycStatus,
@@ -311,6 +312,7 @@ export function useFirebaseSupabaseSync(
               handle: initialHandle,
               avatar: initialAvatar,
               location: 'Dhaka, Bangladesh',
+              phone: userToFetch.phoneNumber || undefined,
             });
             fetchError = null;
             console.log('[useFirebaseSupabaseSync:Fetch] Auto-provisioned Supabase profile:', rawProfile);

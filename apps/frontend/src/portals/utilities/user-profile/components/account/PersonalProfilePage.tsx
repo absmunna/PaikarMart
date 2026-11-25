@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { User, Camera, Mail, Phone, MapPin, AtSign, Check, Sparkles, GraduationCap, Briefcase, Award, ShieldCheck, Store, Video, Wrench } from 'lucide-react';
-import { User as UserType, PersonalDocumentType } from '@/types';
+import { User, Camera, Mail, Phone, MapPin, AtSign, Check, Sparkles, GraduationCap, Briefcase, Award, ShieldCheck, Store, Video, Wrench, Loader2 } from 'lucide-react';
+import { User as UserType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CURRENT_USER } from '@/data/mockData';
-import { syncAuthenticatedProfile, useAuth } from '@/features/auth';
+import { promoteToCreatorApi, promoteToSellerApi, syncAuthenticatedProfile, useAuth } from '@/features/auth';
 import { updateUserProfileToFirestore, updateProfile as updateFirebaseProfile } from '@/lib/firebase';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 import { PersonalVerificationModal } from '../PersonalVerificationModal';
 
 interface PersonalProfilePageProps {
@@ -22,25 +23,30 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
   const [handle, setHandle] = useState(currentUser.handle || '@alexrivera');
   const [email] = useState(currentUser.email || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
-  const [profession, setProfession] = useState(currentUser.profession || 'শিক্ষক ও কনটেন্ট ক্রিয়েটর');
-  const [education, setEducation] = useState(currentUser.education || 'ঢাকা বিশ্ববিদ্যালয়');
-  const [skillsText, setSkillsText] = useState((currentUser.skills || ['Teaching', 'Retail Shop', 'Video Classes']).join(', '));
   const [bio, setBio] = useState(currentUser.bio || 'Product enthusiast, wholesale sourcer, and passionate creator on PaikarMart.');
   const [location, setLocation] = useState(currentUser.location || 'Dhaka, Bangladesh');
+  const [profession, setProfession] = useState(currentUser.profession || '');
+  const [education, setEducation] = useState(currentUser.education || '');
+  const [skillsInput, setSkillsInput] = useState((currentUser.skills || []).join(', '));
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSellerSetup, setShowSellerSetup] = useState(false);
+  const [sellerShopName, setSellerShopName] = useState(currentUser.vendorProfile?.storeName || `${currentUser.name} Store`);
+  const [sellerShopType, setSellerShopType] = useState<'retail' | 'wholesale' | 'service'>('retail');
+  const [promotingRole, setPromotingRole] = useState<'seller' | 'creator' | null>(null);
+  const [roleFeedback, setRoleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   React.useEffect(() => {
     if (!isSaving) {
       setName(currentUser.name);
       setHandle(currentUser.handle || '@alexrivera');
       setPhone(currentUser.phone || '');
-      setProfession(currentUser.profession || 'শিক্ষক ও কনটেন্ট ক্রিয়েটর');
-      setEducation(currentUser.education || 'ঢাকা বিশ্ববিদ্যালয়');
-      setSkillsText((currentUser.skills || ['Teaching', 'Retail Shop', 'Video Classes']).join(', '));
       setLocation(currentUser.location || 'Dhaka, Bangladesh');
+      setProfession(currentUser.profession || '');
+      setEducation(currentUser.education || '');
+      setSkillsInput((currentUser.skills || []).join(', '));
     }
   }, [currentUser.id, currentUser.name, currentUser.handle, currentUser.phone, currentUser.location, currentUser.profession, currentUser.education, currentUser.skills, isSaving]);
 
@@ -48,7 +54,6 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
     e.preventDefault();
     setIsSaving(true);
     setSaveError(null);
-    const parsedSkills = skillsText.split(',').map(s => s.trim()).filter(Boolean);
     try {
       await syncAuthenticatedProfile({ name, handle, location, phone });
       if (firebaseUser) {
@@ -70,6 +75,11 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
       setIsSaving(false);
       return;
     }
+    const parsedSkills = skillsInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     onUpdateUser({
       ...currentUser,
       name,
@@ -77,10 +87,9 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
       location,
       phone,
       bio,
-      profession,
-      education,
+      profession: profession.trim() || undefined,
+      education: education.trim() || undefined,
       skills: parsedSkills,
-      activeCapabilities: ['shop', 'service', 'creator'],
     });
     setSavedSuccess(true);
     setIsSaving(false);
@@ -88,6 +97,119 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
   };
 
   const isBn = language === 'bn';
+
+  const activeCaps = Array.isArray((currentUser as any).activeCapabilities)
+    ? ((currentUser as any).activeCapabilities as string[])
+    : [];
+  const isPrivileged = currentUser.role === 'admin' || currentUser.role === 'super_admin';
+  const hasSellerAccess = Boolean(
+    currentUser.isVendor ||
+      currentUser.role === 'vendor' ||
+      isPrivileged ||
+      activeCaps.includes('vendor') ||
+      activeCaps.includes('seller')
+  );
+  const hasCreatorAccess = Boolean(
+    isPrivileged ||
+      activeCaps.includes('creator')
+  );
+
+  const handleActivateSeller = async () => {
+    if (!firebaseUser) {
+      setRoleFeedback({
+        type: 'error',
+        message: isBn ? 'সেলার অ্যাকাউন্ট চালু করতে আগে সাইন-ইন করুন।' : 'Please sign in first to activate a Seller account.',
+      });
+      return;
+    }
+    const cleanShopName = sellerShopName.trim();
+    if (cleanShopName.length < 2) {
+      setRoleFeedback({
+        type: 'error',
+        message: isBn ? 'সঠিক শপ বা সার্ভিসের নাম লিখুন।' : 'Please enter a valid shop or store name.',
+      });
+      return;
+    }
+    setPromotingRole('seller');
+    setRoleFeedback(null);
+    try {
+      const res = await promoteToSellerApi({
+        shopName: cleanShopName,
+        type: sellerShopType,
+        address: location,
+      });
+      const promotedCaps = Array.from(new Set([...activeCaps, ...(res.activeRoles || []), 'vendor']));
+      const nextVendorCategory = sellerShopType === 'service' ? 'services' : sellerShopType;
+      onUpdateUser({
+        ...currentUser,
+        role: isPrivileged ? currentUser.role : 'vendor',
+        isVendor: true,
+        vendorProfile: {
+          id: currentUser.vendorProfile?.id || `store_${currentUser.id}`,
+          storeName: cleanShopName,
+          legalEntityName: currentUser.vendorProfile?.legalEntityName || cleanShopName,
+          businessRegNumber: currentUser.vendorProfile?.businessRegNumber || '',
+          taxIdentificationNumber: currentUser.vendorProfile?.taxIdentificationNumber || '',
+          category: nextVendorCategory,
+          verified: currentUser.vendorProfile?.verified ?? false,
+          status: currentUser.vendorProfile?.status || 'active',
+          commissionTier: currentUser.vendorProfile?.commissionTier || 'Standard 8%',
+          rating: currentUser.vendorProfile?.rating ?? 5,
+          totalSales: currentUser.vendorProfile?.totalSales ?? 0,
+          location,
+          createdAt: currentUser.vendorProfile?.createdAt || new Date().toISOString(),
+        },
+        ...(promotedCaps.length ? { activeCapabilities: promotedCaps } : {}),
+      } as UserType);
+      await refetchProfile().catch(() => {});
+      setShowSellerSetup(false);
+      setRoleFeedback({
+        type: 'success',
+        message: isBn
+          ? `সেলার সুবিধা সক্রিয় হয়েছে! "${cleanShopName}" এখন সক্রিয়।`
+          : `Seller capability activated for "${cleanShopName}".`,
+      });
+    } catch (error) {
+      setRoleFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Unable to activate seller capability.',
+      });
+    } finally {
+      setPromotingRole(null);
+    }
+  };
+
+  const handleActivateCreator = async () => {
+    if (!firebaseUser) {
+      setRoleFeedback({
+        type: 'error',
+        message: isBn ? 'ক্রিয়েটর স্টুডিও চালু করতে আগে সাইন-ইন করুন।' : 'Please sign in first to activate Creator Studio.',
+      });
+      return;
+    }
+    setPromotingRole('creator');
+    setRoleFeedback(null);
+    try {
+      const res = await promoteToCreatorApi({ channelName: name });
+      const promotedCaps = Array.from(new Set([...activeCaps, ...(res.activeRoles || []), 'creator']));
+      onUpdateUser({
+        ...currentUser,
+        activeCapabilities: promotedCaps,
+      } as UserType);
+      await refetchProfile().catch(() => {});
+      setRoleFeedback({
+        type: 'success',
+        message: isBn ? 'ক্রিয়েটর স্টুডিও সফলভাবে সক্রিয় হয়েছে!' : 'Creator Studio capability activated!',
+      });
+    } catch (error) {
+      setRoleFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Unable to activate Creator Studio.',
+      });
+    } finally {
+      setPromotingRole(null);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -114,7 +236,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
       <div className="p-5 rounded-3xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex flex-col sm:flex-row items-center gap-5">
         <div className="relative group">
           <img
-            src={currentUser.avatar}
+            src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
             alt={currentUser.name}
             className="w-20 h-20 rounded-full object-cover ring-4 ring-[var(--pm-card)] shadow-md"
           />
@@ -200,17 +322,18 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
           </div>
         </div>
 
+        {/* Profession, Education & Skills (Public Unified Profile) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-[var(--pm-text)] flex items-center gap-1.5">
               <Briefcase className="w-3.5 h-3.5 text-blue-500" />
-              <span>{isBn ? 'পেশা ও পদবি (Profession)' : 'Profession / Career'}</span>
+              <span>{isBn ? 'পেশা / ব্যবসা' : 'Profession / Work'}</span>
             </label>
             <input
               type="text"
               value={profession}
               onChange={(e) => setProfession(e.target.value)}
-              placeholder={isBn ? 'যেমন: শিক্ষক, রিটেইল শপ ওনার' : 'e.g. Teacher & Retail Store Owner'}
+              placeholder={isBn ? 'যেমন: শিক্ষক, শপ ওনার, ফ্রিল্যান্সার' : 'e.g. Teacher, Shop Owner, Creator'}
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
             />
           </div>
@@ -218,13 +341,13 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-[var(--pm-text)] flex items-center gap-1.5">
               <GraduationCap className="w-3.5 h-3.5 text-emerald-500" />
-              <span>{isBn ? 'শিক্ষা ও প্রতিষ্ঠান (Education)' : 'Education & Institute'}</span>
+              <span>{isBn ? 'শিক্ষাগত যোগ্যতা' : 'Education'}</span>
             </label>
             <input
               type="text"
               value={education}
               onChange={(e) => setEducation(e.target.value)}
-              placeholder={isBn ? 'যেমন: ঢাকা বিশ্ববিদ্যালয়, গণিত বিভাগ' : 'e.g. University of Dhaka'}
+              placeholder={isBn ? 'যেমন: ঢাকা বিশ্ববিদ্যালয়' : 'e.g. University of Dhaka'}
               className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
             />
           </div>
@@ -233,56 +356,174 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-[var(--pm-text)] flex items-center gap-1.5">
             <Award className="w-3.5 h-3.5 text-amber-500" />
-            <span>{isBn ? 'দক্ষতা ও বিশেষ পারদর্শিতা (Skills - কমা দিয়ে লিখুন)' : 'Skills & Capabilities (comma-separated)'}</span>
+            <span>{isBn ? 'দক্ষতা (কমা দিয়ে লিখুন)' : 'Skills (comma separated)'}</span>
           </label>
           <input
             type="text"
-            value={skillsText}
-            onChange={(e) => setSkillsText(e.target.value)}
-            placeholder={isBn ? 'যেমন: গণিত পাঠদান, গার্মেন্টস রিটেলিং, ইউটিউব ক্লাস রেকর্ডিং' : 'e.g. Teaching, Retail Fashion, Video Editing'}
+            value={skillsInput}
+            onChange={(e) => setSkillsInput(e.target.value)}
+            placeholder="Retail Sourcing, Teaching, Digital Marketing"
             className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
           />
         </div>
 
-        {/* Dynamic Unlocked Hubs Matrix Card */}
+        {/* Dynamic Capabilities Showcase & Self-Service Role Promotion */}
         <div className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h4 className="text-xs font-black uppercase tracking-wider text-[var(--pm-text)] flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
               {isBn ? 'প্রোফাইলের তথ্যের ভিত্তিতে সক্রিয় সুবিধাসমূহ (Dynamic Access)' : 'Dynamically Unlocked Capabilities'}
             </h4>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--pm-success-soft)] text-[var(--pm-success)]">
+            <span className="text-[11px] font-bold text-[var(--pm-success)]">
               {isBn ? '১টি অ্যাকাউন্টে সব সুবিধা' : 'Single Unified Identity'}
             </span>
           </div>
-          <p className="text-[11px] text-[var(--pm-muted)]">
-            {isBn 
-              ? 'আপনার উল্লেখিত পেশা, শিক্ষা ও দক্ষতার কারণে আপনার একক অ্যাকাউন্টে নিচের হাবগুলোর অ্যাক্সেস সক্রিয় হয়েছে:'
-              : 'Based on your profession, skills and profile, your single account has access to:'}
-          </p>
+
+          {roleFeedback && (
+            <div
+              role={roleFeedback.type === 'error' ? 'alert' : 'status'}
+              className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                roleFeedback.type === 'error'
+                  ? 'bg-[var(--pm-danger-soft)] border-[var(--pm-danger)]/30 text-[var(--pm-danger)]'
+                  : 'bg-[var(--pm-success-soft)] border-[var(--pm-success)]/30 text-[var(--pm-success)]'
+              }`}
+            >
+              {roleFeedback.type === 'success' && <Check className="w-4 h-4 shrink-0" />}
+              <span>{roleFeedback.message}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-start gap-2.5">
-              <Store className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'শপ ও মার্কেটপ্লেস' : 'Shop & Commerce'}</p>
-                <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'রিটেইল/হোলসেল শপ পরিচালনা' : 'Manage your clothing store'}</p>
+            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <Store className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'শপ ও মার্কেটপ্লেস' : 'Shop & Commerce'}</p>
+                  <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'রিটেইল/হোলসেল শপ পরিচালনা' : 'Manage store & listings'}</p>
+                </div>
               </div>
+              {hasSellerAccess ? (
+                <span className="text-[11px] font-bold text-[var(--pm-success)] flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  {isBn ? 'সক্রিয়' : 'Active'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSellerSetup((prev) => !prev)}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-[11px] font-bold transition-colors cursor-pointer"
+                >
+                  {showSellerSetup
+                    ? (isBn ? 'বন্ধ করুন' : 'Close Setup')
+                    : (isBn ? 'সেলার চালু করুন' : 'Activate Seller')}
+                </button>
+              )}
             </div>
-            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-start gap-2.5">
-              <Wrench className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'সার্ভিস ও টিউশন হাব' : 'Services & Tutoring'}</p>
-                <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'ক্লাস ও সেবা প্রদান' : 'Tutoring & Consultations'}</p>
+
+            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <Wrench className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'সার্ভিস ও টিউশন হাব' : 'Services & Tutoring'}</p>
+                  <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'ক্লাস ও সেবা প্রদান' : 'Tutoring & Consultations'}</p>
+                </div>
               </div>
+              {hasSellerAccess ? (
+                <span className="text-[11px] font-bold text-[var(--pm-success)] flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  {isBn ? 'সক্রিয়' : 'Ready'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSellerShopType('service');
+                    setShowSellerSetup(true);
+                  }}
+                  className="w-full py-1.5 px-2.5 rounded-lg border border-[var(--pm-border-strong)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-[11px] font-bold transition-colors cursor-pointer"
+                >
+                  {isBn ? 'সার্ভিস প্রোফাইল চালু করুন' : 'Offer Services'}
+                </button>
+              )}
             </div>
-            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-start gap-2.5">
-              <Video className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'ক্রিয়েটর স্টুডিও' : 'Creator Studio'}</p>
-                <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'রেকর্ডেড ক্লাস ও ভিডিও' : 'YouTube & Course Content'}</p>
+
+            <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between gap-2.5">
+              <div className="flex items-start gap-2.5">
+                <Video className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-[var(--pm-text)]">{isBn ? 'ক্রিয়েটর স্টুডিও' : 'Creator Studio'}</p>
+                  <p className="text-[10px] text-[var(--pm-muted)]">{isBn ? 'রেকর্ডেড ক্লাস ও ভিডিও' : 'Video & Course Content'}</p>
+                </div>
               </div>
+              {hasCreatorAccess ? (
+                <span className="text-[11px] font-bold text-[var(--pm-success)] flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  {isBn ? 'সক্রিয়' : 'Active'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={promotingRole === 'creator'}
+                  onClick={handleActivateCreator}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {promotingRole === 'creator' && <Loader2 className="w-3 h-3 animate-spin" />}
+                  {isBn ? 'ক্রিয়েটর চালু করুন' : 'Activate Creator'}
+                </button>
+              )}
             </div>
           </div>
+
+          {showSellerSetup && !hasSellerAccess && (
+            <div className="p-3.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border-strong)] space-y-3 animate-fadeIn">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[var(--pm-text)]">
+                    {isBn ? 'শপ বা সার্ভিসের নাম' : 'Store / Service Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={sellerShopName}
+                    onChange={(e) => setSellerShopName(e.target.value)}
+                    placeholder={isBn ? 'যেমন: ঢাকা ট্রেডার্স' : 'e.g. Dhaka Fresh Mart'}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[var(--pm-text)]">
+                    {isBn ? 'ব্যবসার ধরন' : 'Account Type'}
+                  </label>
+                  <select
+                    value={sellerShopType}
+                    onChange={(e) => setSellerShopType(e.target.value as 'retail' | 'wholesale' | 'service')}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+                  >
+                    <option value="retail">{isBn ? 'রিটেইল শপ' : 'Retail Store'}</option>
+                    <option value="wholesale">{isBn ? 'হোলসেল ও B2B' : 'Wholesale & B2B'}</option>
+                    <option value="service">{isBn ? 'সার্ভিস ও টিউশন' : 'Services & Tutoring'}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSellerSetup(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer"
+                >
+                  {isBn ? 'বাতিল' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  disabled={promotingRole === 'seller'}
+                  onClick={handleActivateSeller}
+                  className="px-4 py-1.5 rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-60 text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {promotingRole === 'seller' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {isBn ? 'নিশ্চিত করুন ও চালু করুন' : 'Confirm & Activate Seller'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Citizen Verification Trigger Banner */}
