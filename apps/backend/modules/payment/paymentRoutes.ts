@@ -6,6 +6,14 @@ import { requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
 import { verifyWebhookSignature } from '../logistics/courierAdapters.js';
 import { applyVerifiedPaymentWebhook } from '../wallet/walletService.js';
 import { createUserNotification } from '../notifications/notificationService.js';
+import { logger } from '../../services/logger.js';
+import {
+  clearMemoryPaymentSessionsForTest,
+  createPaymentSession,
+  findPaymentSessionById,
+  findPaymentSessionByIdempotency,
+  updatePaymentSessionCompletion,
+} from './paymentRepository.js';
 import type {
   PaymentProviderAdapter,
   PaymentProviderId,
@@ -24,8 +32,6 @@ const providers: Record<PaymentProviderId, PaymentProviderAdapter> = {
   sslcommerz: new SslcommerzPaymentProvider(),
 };
 
-const paymentSessions = new Map<string, PaymentSessionRecord>();
-
 function normalizeProvider(raw: unknown): PaymentProviderId | null {
   const val = String(raw || '').trim().toLowerCase();
   if (val === 'bkash' || val === 'nagad' || val === 'sslcommerz') {
@@ -39,7 +45,7 @@ export function getPaymentProviderAdapter(id: PaymentProviderId): PaymentProvide
 }
 
 export function clearPaymentSessionsForTest(): void {
-  paymentSessions.clear();
+  clearMemoryPaymentSessionsForTest();
 }
 
 // Public safe provider directory (exposes only availability mode, never credentials)
@@ -89,7 +95,7 @@ paymentRouter.post('/callback/:provider', async (req: Request, res: Response) =>
   }
 
   const { sessionId, authUid, amount, referenceId, purpose } = req.body || {};
-  const session = sessionId ? paymentSessions.get(String(sessionId)) : undefined;
+  const session = sessionId ? await findPaymentSessionById(String(sessionId)) : null;
   const resolvedUid = String(authUid || session?.uid || '').trim();
   const resolvedAmount = Number(amount ?? session?.amount ?? 0);
   const resolvedRef = String(
@@ -106,12 +112,6 @@ paymentRouter.post('/callback/:provider', async (req: Request, res: Response) =>
       ? 'order_checkout'
       : 'wallet_deposit';
 
-  if (session) {
-    session.status = 'completed';
-    session.trxId = resolvedRef;
-    session.updatedAt = new Date().toISOString();
-  }
-
   if (resolvedPurpose === 'wallet_deposit') {
     try {
       const ledgerResult = await applyVerifiedPaymentWebhook({
@@ -123,6 +123,14 @@ paymentRouter.post('/callback/:provider', async (req: Request, res: Response) =>
         description: `${providers[providerId].displayName} Top-Up`,
         referenceId: resolvedRef,
       });
+
+      if (session) {
+        await updatePaymentSessionCompletion({
+          sessionId: session.id,
+          status: 'completed',
+          trxId: resolvedRef,
+        });
+      }
 
       void createUserNotification({
         authUid: resolvedUid,
@@ -137,9 +145,23 @@ paymentRouter.post('/callback/:provider', async (req: Request, res: Response) =>
       return;
     } catch (err: any) {
       const code = err?.message || 'CALLBACK_ERROR';
-      res.status(code === 'PROFILE_NOT_FOUND' ? 404 : 500).json({ error: code });
+      const status =
+        code === 'PROFILE_NOT_FOUND'
+          ? 404
+          : code === 'CONCURRENT_LEDGER_CONFLICT'
+          ? 409
+          : 500;
+      res.status(status).json({ error: code });
       return;
     }
+  }
+
+  if (session) {
+    await updatePaymentSessionCompletion({
+      sessionId: session.id,
+      status: 'completed',
+      trxId: resolvedRef,
+    });
   }
 
   res.json({
@@ -173,11 +195,10 @@ paymentRouter.post('/initiate', async (req: Request, res: Response) => {
     (req.header('x-idempotency-key') || req.body?.idempotencyKey || '').toString().trim() || undefined;
 
   if (idempotencyKey) {
-    for (const existing of paymentSessions.values()) {
-      if (existing.uid === uid && existing.idempotencyKey === idempotencyKey) {
-        res.json({ success: true, session: existing });
-        return;
-      }
+    const existing = await findPaymentSessionByIdempotency(uid, idempotencyKey);
+    if (existing) {
+      res.json({ success: true, session: existing });
+      return;
     }
   }
 
@@ -222,10 +243,10 @@ paymentRouter.post('/initiate', async (req: Request, res: Response) => {
       updatedAt: nowIso,
     };
 
-    paymentSessions.set(sessionId, record);
+    const persisted = await createPaymentSession(record);
     res.status(201).json({
       success: true,
-      session: record,
+      session: persisted,
       checkoutUrl: initResult.checkoutUrl,
       sandboxChallenge: initResult.sandboxChallenge,
     });
@@ -246,7 +267,7 @@ paymentRouter.post('/verify', async (req: Request, res: Response) => {
     return;
   }
 
-  const session = paymentSessions.get(sessionId);
+  const session = await findPaymentSessionById(sessionId);
   if (!session) {
     res.status(404).json({ error: 'Payment session not found.' });
     return;
@@ -277,12 +298,9 @@ paymentRouter.post('/verify', async (req: Request, res: Response) => {
       valId: typeof req.body?.valId === 'string' ? req.body.valId : undefined,
     });
 
-    session.status = 'completed';
-    session.trxId = verification.trxId;
-    session.updatedAt = new Date().toISOString();
-
     let walletCredit: Record<string, unknown> | undefined;
     if (session.purpose === 'wallet_deposit' && isPersistentFinanceEnabled()) {
+      // Fail-closed: ledger credit MUST succeed (or return idempotent duplicate) before marking session completed
       try {
         walletCredit = await applyVerifiedPaymentWebhook({
           idempotencyKey: session.idempotencyKey || verification.trxId,
@@ -293,10 +311,34 @@ paymentRouter.post('/verify', async (req: Request, res: Response) => {
           description: `${adapter.displayName} (${session.mode}) Deposit`,
           referenceId: verification.trxId,
         });
-      } catch {
-        // Wallet credit only applies when persistent profile exists; surface verified payment metadata cleanly
+      } catch (ledgerErr: any) {
+        const ledgerCode = ledgerErr?.message || 'LEDGER_WRITE_FAILED';
+        logger.error('Payment verified at gateway but wallet ledger update failed', {
+          module: 'payment',
+          action: 'verify',
+          uid,
+          referenceId: verification.trxId,
+          error: ledgerCode,
+        });
+        res.status(ledgerCode === 'CONCURRENT_LEDGER_CONFLICT' ? 409 : 500).json({
+          error: 'Gateway payment verified, but wallet ledger update failed. Retry verification cleanly with the same sessionId.',
+          code: ledgerCode,
+        });
+        return;
       }
     }
+
+    const updatedSession =
+      (await updatePaymentSessionCompletion({
+        sessionId: session.id,
+        status: 'completed',
+        trxId: verification.trxId,
+      })) || {
+        ...session,
+        status: 'completed' as const,
+        trxId: verification.trxId,
+        updatedAt: new Date().toISOString(),
+      };
 
     void createUserNotification({
       authUid: uid,
@@ -312,7 +354,7 @@ paymentRouter.post('/verify', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      session,
+      session: updatedSession,
       trxId: verification.trxId,
       message: verification.message,
       walletCredit,

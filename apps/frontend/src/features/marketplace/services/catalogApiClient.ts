@@ -1,11 +1,10 @@
+import { API_BASE, apiRequest, getFirebaseBearerToken } from '@/shared/services/apiClient';
 import type {
   CommerceItem,
   MasterCatalogSubmission,
   MasterProduct,
   SellerListing,
 } from '@/types';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export type CatalogSource = 'supabase' | 'unconfigured' | 'schema_missing' | 'error';
 
@@ -258,3 +257,44 @@ export async function fetchSellerListingsByPmin(
     return { listings: [], buyBoxWinner: null, source: 'error' };
   }
 }
+
+export interface CatalogVerificationResult {
+  confidenceScore?: number;
+  auditNotes?: string;
+  [key: string]: unknown;
+}
+
+export async function verifyCatalogProduct(payload: {
+  title: string;
+  brand: string;
+  category: string;
+  description: string;
+  price: number;
+}): Promise<CatalogVerificationResult> {
+  return await apiRequest<CatalogVerificationResult>('/api/catalog/verify-product', {
+    method: 'POST',
+    json: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function publishSellerListingAuthenticated(
+  payload: Partial<SellerListing>
+): Promise<{ ok: boolean; listing?: any; error?: string }> {
+  const token = await getFirebaseBearerToken();
+  if (!token) {
+    return { ok: false, error: 'Please sign in to publish a seller listing.' };
+  }
+  return await createSellerListingOffer(token, payload);
+}
+
+export async function submitCatalogProposalAuthenticated(
+  payload: Partial<MasterCatalogSubmission>
+): Promise<{ ok: boolean; submission?: any; error?: string }> {
+  const token = await getFirebaseBearerToken();
+  if (!token) {
+    return { ok: false, error: 'Please sign in to submit a catalog proposal.' };
+  }
+  return await submitCatalogProposal(token, payload);
+}
+

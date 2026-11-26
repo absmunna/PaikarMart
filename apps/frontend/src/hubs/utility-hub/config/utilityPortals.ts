@@ -4,6 +4,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'orders-hub',
     hubId: 'utility',
+    businessCategory: 'mobility',
     labelEn: 'Orders Hub',
     labelBn: 'অর্ডারস হাব',
     entryRoute: '/portal/orders',
@@ -19,6 +20,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'wallet',
     hubId: 'utility',
+    businessCategory: 'business',
     labelEn: 'Wallet & Escrow',
     labelBn: 'ওয়ালেট ও এসক্রো',
     entryRoute: '/portal/wallet',
@@ -34,6 +36,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'seller-central',
     hubId: 'utility',
+    businessCategory: 'business',
     labelEn: 'Seller Central',
     labelBn: 'সেলার সেন্ট্রাল',
     entryRoute: '/portal/seller',
@@ -49,6 +52,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'user-profile',
     hubId: 'utility',
+    businessCategory: 'community',
     labelEn: 'Profile & Cockpit',
     labelBn: 'প্রোফাইল ককপিট',
     entryRoute: '/portal/profile',
@@ -64,6 +68,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'notifications-center',
     hubId: 'utility',
+    businessCategory: 'community',
     labelEn: 'Notifications Center',
     labelBn: 'নোটিফিকেশন সেন্টার',
     entryRoute: '/portal/notifications',
@@ -79,6 +84,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'settings-center',
     hubId: 'utility',
+    businessCategory: 'community',
     labelEn: 'Settings Center',
     labelBn: 'সেটিংস সেন্টার',
     entryRoute: '/settings',
@@ -94,6 +100,7 @@ export const utilityPortals: HubPortalDefinition[] = [
   {
     id: 'guide',
     hubId: 'utility',
+    businessCategory: 'business',
     labelEn: 'User & Vendor Guide',
     labelBn: 'ব্যবহারকারী ও ভেন্ডর গাইড',
     entryRoute: '/portal/guide',

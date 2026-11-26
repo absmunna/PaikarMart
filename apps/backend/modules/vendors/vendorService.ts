@@ -10,9 +10,10 @@ import {
   type TrustLevel,
   type UserRole
 } from '../../../../packages/shared/src/index.js';
-import { getEscrowSummaryForUser } from '../wallet/walletService.js';
+import { getPersistentEscrowSummary } from '../wallet/walletService.js';
 import { invalidateAuthProfileCache } from '../../middleware/requireFirebaseAuth.js';
-import { resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
+import { isUuidString, resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
+import { isLiveDatabaseConfigured } from '../../config/env.js';
 
 export interface ServerVendorDocument {
   id: string;
@@ -520,23 +521,132 @@ export async function getKycApplicationsForUser(applicantAuthUid: string): Promi
   };
 }
 
-export function listKycQueue(requesterRole?: UserRole): {
+function mapDbStoreToVendorProfile(
+  row: Record<string, any>,
+  ownerProfile?: Record<string, any> | null,
+  privateDetail?: Record<string, any> | null,
+  activeRoles?: string[]
+): ServerVendorProfile {
+  const sellerTier = (row.seller_tier || 'retail_seller') as SellerTier;
+  const kycStatus = (row.kyc_status || (row.is_verified ? 'approved' : 'submitted')) as KycStatus;
+  const nidNumber = String(privateDetail?.nid_passport_number || 'NID-ON-FILE');
+  const businessRegNumber = String(row.business_reg_no || 'REG-ON-FILE');
+  const taxIdentificationNumber = String(row.tax_id || privateDetail?.tax_identification_no || 'TIN-ON-FILE');
+  const trustLevel = Number(
+    ownerProfile?.trust_level ||
+      computeTrustLevel({ nidNumber, businessRegNumber, taxIdentificationNumber, sellerTier })
+  ) as TrustLevel;
+
+  return {
+    id: String(row.id),
+    handle: String(row.handle || normalizeHandle(String(row.store_name || 'store'))),
+    applicantId: String(ownerProfile?.auth_uid || row.owner_id || ''),
+    storeName: String(row.store_name || 'Verified Merchant Store'),
+    legalEntityName: String(row.legal_entity_name || row.store_name || ''),
+    businessRegNumber,
+    taxIdentificationNumber,
+    nidNumber,
+    sellerTier,
+    kycStatus,
+    trustLevel,
+    category: String(row.category || 'retail'),
+    verified: Boolean(row.is_verified),
+    status: (row.status || 'pending') as ServerVendorProfile['status'],
+    commissionTier: (row.commission_tier || 'Standard 8%') as ServerVendorProfile['commissionTier'],
+    rating: Number(row.rating ?? 5.0),
+    totalSales: Number(row.total_sales ?? 0),
+    location: String(ownerProfile?.location || 'Dhaka, Bangladesh'),
+    isOpen: row.is_open !== false,
+    openingHoursLabel: String(row.opening_hours_label || '9:00 AM – 9:00 PM'),
+    coordinates:
+      row.lat != null && row.lng != null ? { lat: Number(row.lat), lng: Number(row.lng) } : undefined,
+    createdAt: String(row.created_at || new Date().toISOString()),
+    activeRoles: (Array.isArray(activeRoles) && activeRoles.length > 0
+      ? activeRoles
+      : ['retail_merchant']) as BusinessRole[],
+    documents: [],
+    payoutAccount: {
+      type: (privateDetail?.payout_bank_name || 'bKash Merchant') as ServerVendorProfile['payoutAccount']['type'],
+      accountName: String(row.legal_entity_name || row.store_name || ''),
+      accountNumber: String(privateDetail?.payout_account_no || '01700000000'),
+      routingNumber: privateDetail?.payout_routing_no ? String(privateDetail.payout_routing_no) : undefined,
+    },
+  };
+}
+
+export async function listKycQueue(requesterRole?: UserRole): Promise<{
   authorized: boolean;
   applications: KycApplicationRecord[];
-} {
+}> {
   if (!isGovernanceRole(requesterRole)) {
     return { authorized: false, applications: [] };
   }
+
+  if (supabaseAdmin) {
+    try {
+      const { data: storesRows, error } = await supabaseAdmin
+        .from('stores')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!error && Array.isArray(storesRows) && storesRows.length > 0) {
+        const ownerIds = Array.from(new Set(storesRows.map((s: any) => String(s.owner_id)).filter(Boolean)));
+        const [{ data: profileRows }, { data: privateRows }, { data: membershipRows }] = await Promise.all([
+          supabaseAdmin.from('profiles').select('id, auth_uid, name, email, trust_level, location').in('id', ownerIds),
+          supabaseAdmin.from('private_user_details').select('*').in('profile_id', ownerIds),
+          supabaseAdmin.from('vendor_memberships').select('store_id, profile_id, active_roles').in('profile_id', ownerIds),
+        ]);
+
+        const profileById = new Map((profileRows || []).map((p: any) => [String(p.id), p]));
+        const privateByProfile = new Map((privateRows || []).map((d: any) => [String(d.profile_id), d]));
+        const rolesByStore = new Map((membershipRows || []).map((m: any) => [String(m.store_id), m.active_roles]));
+
+        const dbApps: KycApplicationRecord[] = storesRows.map((row: any) => {
+          const prof = profileById.get(String(row.owner_id));
+          const priv = privateByProfile.get(String(row.owner_id));
+          const roles = (rolesByStore.get(String(row.id)) || ['retail_merchant']) as BusinessRole[];
+          return {
+            id: String(row.id),
+            applicantId: String(prof?.auth_uid || row.owner_id),
+            storeName: String(row.store_name),
+            legalEntityName: String(row.legal_entity_name || row.store_name),
+            sellerTier: (row.seller_tier || 'retail_seller') as SellerTier,
+            nidNumber: String(priv?.nid_passport_number || 'NID-ON-FILE'),
+            businessRegNumber: String(row.business_reg_no || 'REG-ON-FILE'),
+            taxIdentificationNumber: String(row.tax_id || priv?.tax_identification_no || 'TIN-ON-FILE'),
+            payoutProvider: String(priv?.payout_bank_name || 'bKash Merchant'),
+            payoutNumber: String(priv?.payout_account_no || '01700000000'),
+            activeRoles: roles,
+            documents: [],
+            status: (row.kyc_status || (row.is_verified ? 'approved' : 'under_review')) as KycStatus,
+            submittedAt: String(row.created_at || new Date().toISOString()),
+            vendorId: String(row.id),
+          };
+        });
+
+        // Merge any newly added in-memory entries whose applicantId isn't already represented by a DB row
+        const seenApplicants = new Set(dbApps.map((a) => `${a.applicantId}:${a.storeName}`));
+        const extraMem = kycApplicationQueue.filter(
+          (m) => !seenApplicants.has(`${m.applicantId}:${m.storeName}`)
+        );
+        return { authorized: true, applications: [...dbApps, ...extraMem] };
+      }
+    } catch {
+      // Fallback cleanly to memory queue below
+    }
+  }
+
   return { authorized: true, applications: kycApplicationQueue };
 }
 
-export function decideKycApplication(params: {
+export async function decideKycApplication(params: {
   applicationId: string;
   decision: 'approved' | 'rejected' | 'suspended';
   reviewerEmail: string;
   requesterRole?: UserRole;
   note?: string;
-}): { ok: boolean; statusCode: number; error?: string; application?: KycApplicationRecord } {
+}): Promise<{ ok: boolean; statusCode: number; error?: string; application?: KycApplicationRecord }> {
   if (!isGovernanceRole(params.requesterRole)) {
     return {
       ok: false,
@@ -545,7 +655,41 @@ export function decideKycApplication(params: {
     };
   }
 
-  const app = kycApplicationQueue.find((a) => a.id === params.applicationId);
+  let app = kycApplicationQueue.find((a) => a.id === params.applicationId || a.vendorId === params.applicationId);
+
+  if (!app && supabaseAdmin && isUuidString(params.applicationId)) {
+    const { data: storeRow } = await supabaseAdmin
+      .from('stores')
+      .select('*')
+      .eq('id', params.applicationId)
+      .maybeSingle();
+
+    if (storeRow) {
+      const { data: ownerProf } = await supabaseAdmin
+        .from('profiles')
+        .select('auth_uid, name')
+        .eq('id', storeRow.owner_id)
+        .maybeSingle();
+      app = {
+        id: String(storeRow.id),
+        applicantId: String(ownerProf?.auth_uid || storeRow.owner_id),
+        storeName: String(storeRow.store_name),
+        legalEntityName: String(storeRow.legal_entity_name || storeRow.store_name),
+        sellerTier: (storeRow.seller_tier || 'retail_seller') as SellerTier,
+        nidNumber: 'ON-FILE',
+        businessRegNumber: String(storeRow.business_reg_no || ''),
+        taxIdentificationNumber: String(storeRow.tax_id || ''),
+        payoutProvider: 'bKash Merchant',
+        payoutNumber: '',
+        activeRoles: ['retail_merchant'],
+        documents: [],
+        status: params.decision,
+        submittedAt: String(storeRow.created_at || new Date().toISOString()),
+        vendorId: String(storeRow.id),
+      };
+    }
+  }
+
   if (!app) {
     return { ok: false, statusCode: 404, error: 'KYC application record not found.' };
   }
@@ -745,23 +889,99 @@ function sanitizePublicStore(store: ServerVendorProfile): PublicStoreSummary {
   return publicFields;
 }
 
-export function isStoreOwnedByUser(storeId: string | undefined, uid: string | undefined): boolean {
+export async function isStoreOwnedByUser(storeId: string | undefined, uid: string | undefined): Promise<boolean> {
   if (!storeId || !uid) return false;
-  const store = vendorStoreRegistry.get(storeId);
-  return Boolean(store && store.applicantId === uid);
+  const memStore = vendorStoreRegistry.get(storeId);
+  if (memStore && memStore.applicantId === uid) return true;
+
+  if (supabaseAdmin) {
+    try {
+      const { data: storeRow } = await (isUuidString(storeId)
+        ? supabaseAdmin.from('stores').select('owner_id').eq('id', storeId).maybeSingle()
+        : supabaseAdmin.from('stores').select('owner_id').eq('handle', storeId).maybeSingle());
+      if (storeRow?.owner_id) {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('auth_uid')
+          .eq('id', storeRow.owner_id)
+          .maybeSingle();
+        if (prof?.auth_uid === uid) return true;
+      }
+    } catch {
+      // Fallback cleanly
+    }
+  }
+
+  return false;
 }
 
-export function getStoreOwnerId(storeId: string): string | null {
+export async function getStoreOwnerId(storeId: string): Promise<string | null> {
+  if (supabaseAdmin) {
+    try {
+      const { data: storeRow } = await (isUuidString(storeId)
+        ? supabaseAdmin.from('stores').select('owner_id').eq('id', storeId).maybeSingle()
+        : supabaseAdmin.from('stores').select('owner_id').eq('handle', storeId).maybeSingle());
+      if (storeRow?.owner_id) {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('auth_uid')
+          .eq('id', storeRow.owner_id)
+          .maybeSingle();
+        if (prof?.auth_uid) return String(prof.auth_uid);
+      }
+    } catch {
+      // Fallback below
+    }
+  }
   return vendorStoreRegistry.get(storeId)?.applicantId || null;
 }
 
-export function listPublicStores(): PublicStoreSummary[] {
+export async function listPublicStores(): Promise<PublicStoreSummary[]> {
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('stores')
+        .select('*')
+        .eq('is_verified', true)
+        .neq('status', 'suspended')
+        .order('total_sales', { ascending: false })
+        .limit(100);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((row: any) => sanitizePublicStore(mapDbStoreToVendorProfile(row)));
+      }
+    } catch {
+      // Fallback cleanly if table/network unavailable
+    }
+  }
+
+  if (isLiveDatabaseConfigured() && supabaseAdmin) {
+    // Allow seeded showcase only if DB has zero verified stores yet so empty storefronts still render
+    return Array.from(vendorStoreRegistry.values())
+      .filter((s) => s.status !== 'suspended' && s.verified)
+      .map(sanitizePublicStore);
+  }
+
   return Array.from(vendorStoreRegistry.values())
     .filter((s) => s.status !== 'suspended' && s.verified)
     .map(sanitizePublicStore);
 }
 
-export function getPublicStoreById(storeId: string): PublicStoreSummary | null {
+export async function getPublicStoreById(storeId: string): Promise<PublicStoreSummary | null> {
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await (isUuidString(storeId)
+        ? supabaseAdmin.from('stores').select('*').eq('id', storeId).maybeSingle()
+        : supabaseAdmin.from('stores').select('*').eq('handle', storeId).maybeSingle());
+
+      if (!error && data && data.status !== 'suspended' && data.is_verified) {
+        return sanitizePublicStore(mapDbStoreToVendorProfile(data));
+      }
+    } catch {
+      // Fallback to registry
+    }
+  }
+
   const store = vendorStoreRegistry.get(storeId);
   if (!store || store.status === 'suspended' || !store.verified) return null;
   return sanitizePublicStore(store);
@@ -771,8 +991,57 @@ export function getPublicStoreById(storeId: string): PublicStoreSummary | null {
  * Strictly Zero-PII Public Profile Projection lookup by @handle or storeId.
  * Strips nidNumber, taxIdentificationNumber, businessRegNumber, payoutAccount, and emails.
  */
-export function getPublicProfileByHandle(handleOrId: string): PublicProfileProjection | null {
+export async function getPublicProfileByHandle(handleOrId: string): Promise<PublicProfileProjection | null> {
   const normalized = normalizeHandle(handleOrId);
+
+  if (supabaseAdmin) {
+    try {
+      const cleanId = handleOrId.trim();
+      const { data: storeRow } = await (isUuidString(cleanId)
+        ? supabaseAdmin
+            .from('stores')
+            .select('*')
+            .or(`id.eq.${cleanId},handle.eq.${normalized}`)
+            .neq('status', 'suspended')
+            .maybeSingle()
+        : supabaseAdmin
+            .from('stores')
+            .select('*')
+            .ilike('handle', normalized)
+            .neq('status', 'suspended')
+            .maybeSingle());
+
+      if (storeRow) {
+        const { data: ownerProf } = await supabaseAdmin
+          .from('profiles')
+          .select('trust_level, location')
+          .eq('id', storeRow.owner_id)
+          .maybeSingle();
+
+        return {
+          handle: String(storeRow.handle || normalized),
+          storeId: String(storeRow.id),
+          displayName: String(storeRow.store_name),
+          location: String(ownerProf?.location || 'Dhaka, Bangladesh'),
+          verified: Boolean(storeRow.is_verified),
+          trustLevel: Number(ownerProf?.trust_level || 5) as TrustLevel,
+          sellerTier: (storeRow.seller_tier || 'retail_seller') as SellerTier,
+          category: String(storeRow.category || 'retail'),
+          rating: Number(storeRow.rating ?? 5.0),
+          activeRoles: ['retail_merchant'],
+          isOpen: storeRow.is_open !== false,
+          openingHoursLabel: String(storeRow.opening_hours_label || '9:00 AM – 9:00 PM'),
+          coordinates:
+            storeRow.lat != null && storeRow.lng != null
+              ? { lat: Number(storeRow.lat), lng: Number(storeRow.lng) }
+              : undefined,
+        };
+      }
+    } catch {
+      // Fallback cleanly to showcase registry
+    }
+  }
+
   const matched = Array.from(vendorStoreRegistry.values()).find(
     (s) =>
       s.status !== 'suspended' &&
@@ -801,9 +1070,23 @@ export function getPublicProfileByHandle(handleOrId: string): PublicProfileProje
   };
 }
 
-export function getVendorAnalytics(vendorId: string, userId = 'user_me') {
-  const store = vendorStoreRegistry.get(vendorId);
-  const escrowSummary = getEscrowSummaryForUser(userId);
+export async function getVendorAnalytics(vendorId: string, userId = 'user_me') {
+  let store: ServerVendorProfile | undefined = vendorStoreRegistry.get(vendorId);
+
+  if (supabaseAdmin) {
+    try {
+      const { data: storeRow } = await (isUuidString(vendorId)
+        ? supabaseAdmin.from('stores').select('*').eq('id', vendorId).maybeSingle()
+        : supabaseAdmin.from('stores').select('*').eq('handle', vendorId).maybeSingle());
+      if (storeRow) {
+        store = mapDbStoreToVendorProfile(storeRow);
+      }
+    } catch {
+      // Keep registry fallback
+    }
+  }
+
+  const escrowSummary = await getPersistentEscrowSummary(userId);
   const grossSalesBdt = (store?.totalSales || 0) + escrowSummary.summary.totalReleased;
   const escrowHeldBdt = escrowSummary.summary.totalHeld;
   const completedEscrows = escrowSummary.escrows.filter((e) => e.status === 'released').length;

@@ -6,7 +6,7 @@ export * from './components/PhoneOtpForm';
 export * from './components/VerifyEmailBanner';
 export * from './components/RoleGuard';
 export * from './components/AuthGuard';
-export { createSavedAddress, deleteSavedAddress, fetchAuthenticatedProfile, fetchAuthSecurityStatus, fetchSavedAddresses, promoteToCreatorApi, promoteToSellerApi, revokeAllAuthSessions, setDefaultSavedAddress, syncAuthenticatedProfile } from './services/authProfileApi';
+export { createSavedAddress, deleteSavedAddress, fetchAuthenticatedProfile, fetchAuthSecurityStatus, fetchSavedAddresses, promoteToCreatorApi, promoteToSellerApi, revokeAllAuthSessions, setDefaultSavedAddress, syncAuthenticatedProfile, updateFirebaseIdentityProfile, uploadComplianceVaultAsset, uploadProfileAvatarAsset } from './services/authProfileApi';
 export * from './services/userVerification';
 
 

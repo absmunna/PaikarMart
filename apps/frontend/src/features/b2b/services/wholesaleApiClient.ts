@@ -1,20 +1,8 @@
-import { auth } from '@/lib/firebase';
 import { B2BPaymentTerms, PurchaseOrderDraft, WholesaleSampleOrder } from '@/features/b2b/types/b2bTypes';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function getAuthHeaders(includeJson = false): Promise<Record<string, string>> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  const headers: Record<string, string> = {};
-  if (includeJson) headers['Content-Type'] = 'application/json';
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
+import { apiRequest } from '@/shared/services/apiClient';
 
 export async function fetchWholesaleRFQsApi(): Promise<PurchaseOrderDraft[]> {
-  const res = await fetch(`${API_BASE}/api/wholesale/rfqs`, { headers: await getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to load wholesale RFQs');
-  const data = await res.json();
+  const data = await apiRequest<{ rfqs?: PurchaseOrderDraft[] }>('/api/wholesale/rfqs');
   return data.rfqs || [];
 }
 
@@ -32,32 +20,26 @@ export async function submitWholesaleRFQApi(payload: {
   buyerCompany: string;
   email?: string;
 }): Promise<{ rfqId: string; poDraft: PurchaseOrderDraft }> {
-  const res = await fetch(`${API_BASE}/api/wholesale/rfq`, {
+  return await apiRequest('/api/wholesale/rfq', {
     method: 'POST',
-    headers: await getAuthHeaders(true),
-    body: JSON.stringify(payload)
+    json: true,
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to submit B2B RFQ');
-  return await res.json();
 }
 
 export async function updateWholesaleRFQStatusApi(
   id: string,
   payload: { status?: string; counterPrice?: number; comments?: string; escrowId?: string }
 ): Promise<{ poDraft: PurchaseOrderDraft }> {
-  const res = await fetch(`${API_BASE}/api/wholesale/rfq/${encodeURIComponent(id)}/respond`, {
+  return await apiRequest(`/api/wholesale/rfq/${encodeURIComponent(id)}/respond`, {
     method: 'POST',
-    headers: await getAuthHeaders(true),
-    body: JSON.stringify(payload)
+    json: true,
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to update RFQ status');
-  return await res.json();
 }
 
 export async function fetchWholesaleSamplesApi(): Promise<WholesaleSampleOrder[]> {
-  const res = await fetch(`${API_BASE}/api/wholesale/samples`, { headers: await getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to load sample orders');
-  const data = await res.json();
+  const data = await apiRequest<{ samples?: WholesaleSampleOrder[] }>('/api/wholesale/samples');
   return data.samples || [];
 }
 
@@ -70,11 +52,9 @@ export async function submitWholesaleSampleApi(payload: {
   shippingAddress: string;
   sampleFee?: number;
 }): Promise<{ sample: WholesaleSampleOrder }> {
-  const res = await fetch(`${API_BASE}/api/wholesale/sample`, {
+  return await apiRequest('/api/wholesale/sample', {
     method: 'POST',
-    headers: await getAuthHeaders(true),
-    body: JSON.stringify(payload)
+    json: true,
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to submit sample order');
-  return await res.json();
 }

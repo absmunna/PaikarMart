@@ -97,6 +97,7 @@ model Store {
 
 model MasterProduct {
   id              String          @id @default(uuid())
+  pmin            String?         @unique
   barcode         String?         @unique
   titleEn         String          @map("title_en")
   titleBn         String          @map("title_bn")
@@ -105,6 +106,8 @@ model MasterProduct {
   description     String?
   canonicalImages Json            @default("[]") @map("canonical_images")
   specifications  Json            @default("{}")
+  variantOptions  Json            @default("[]") @map("variant_options")
+  variantOffers   Json            @default("[]") @map("variant_offers")
   isVerified      Boolean         @default(false) @map("is_verified")
   createdAt       DateTime        @default(now()) @map("created_at")
 
@@ -119,12 +122,17 @@ model SellerListing {
   id               String          @id @default(uuid())
   masterProduct    MasterProduct   @relation(fields: [masterProductId], references: [id], onDelete: Restrict)
   masterProductId  String          @map("master_product_id")
+  pmin             String?
   store            Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   storeId          String          @map("store_id")
   seller           User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   sellerId         String          @map("seller_id")
   price            Decimal         @db.Decimal(10, 2)
   originalPrice    Decimal?        @db.Decimal(10, 2) @map("original_price")
+  shippingFee      Decimal         @default(60.00) @db.Decimal(10, 2) @map("shipping_fee")
+  condition        String          @default("new")
+  fulfillmentType  String          @default("merchant_fulfilled") @map("fulfillment_type")
+  isBuyBoxWinner   Boolean         @default(false) @map("is_buy_box_winner")
   stockQuantity    Int             @default(0) @map("stock_quantity")
   tradeMode        String          @default("retail") @map("trade_mode") // retail | wholesale
   minWholesaleQty  Int             @default(1) @map("min_wholesale_qty")
@@ -197,6 +205,7 @@ model ProductReview {
   sellerListingId    String?        @map("seller_listing_id")
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId             String         @map("user_id")
+  reviewerName       String?        @map("reviewer_name")
   rating             Int
   comment            String
   reviewPhotos       Json           @default("[]") @map("review_photos")
@@ -282,6 +291,8 @@ model Order {
   subtotal        Decimal           @db.Decimal(10, 2)
   deliveryFee     Decimal           @default(0.00) @db.Decimal(10, 2) @map("delivery_fee")
   tax             Decimal           @default(0.00) @db.Decimal(10, 2)
+  discount        Decimal           @default(0.00) @db.Decimal(10, 2)
+  promoCode       String?           @map("promo_code")
   total           Decimal           @db.Decimal(10, 2)
   status          String            @default("confirmed") // confirmed | preparing | in_transit | delivered | cancelled
   deliveryAddress String            @map("delivery_address")
@@ -289,7 +300,10 @@ model Order {
   items           Json
   buyerName       String?           @map("buyer_name")
   buyerPhone      String?           @map("buyer_phone")
+  storeId         String?           @map("store_id")
+  storeName       String?           @map("store_name")
   createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
 
   shipment        ShipmentWaybill?
   escrow          EscrowRecord?
@@ -348,16 +362,17 @@ model WalletTransaction {
 }
 
 model EscrowRecord {
-  id         String    @id @default(uuid())
-  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId    String    @unique @map("order_id")
-  buyer      User      @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  buyerId    String    @map("buyer_id")
-  vendorId   String    @map("vendor_id")
-  amountBdt  Decimal   @db.Decimal(12, 2) @map("amount_bdt")
-  status     String    @default("held") // held | released | refunded | disputed
-  releasedAt DateTime? @map("released_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id            String    @id @default(uuid())
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String    @unique @map("order_id")
+  buyer         User      @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerId       String    @map("buyer_id")
+  vendorId      String    @map("vendor_id")
+  amountBdt     Decimal   @db.Decimal(12, 2) @map("amount_bdt")
+  status        String    @default("held") // held | released | refunded | disputed
+  disputeReason String?   @map("dispute_reason")
+  releasedAt    DateTime? @map("released_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   @@map("escrow_records")
 }
@@ -429,3 +444,165 @@ model PrescriptionUpload {
   @@map("prescription_uploads")
 }
 
+model PaymentSession {
+  id               String   @id
+  uid              String
+  provider         String
+  purpose          String
+  amount           Decimal  @db.Decimal(12, 2)
+  currency         String   @default("BDT")
+  orderId          String?  @map("order_id")
+  customerPhone    String?  @map("customer_phone")
+  mode             String
+  gatewayReference String   @map("gateway_reference")
+  trxId            String?  @map("trx_id")
+  status           String   @default("initiated")
+  idempotencyKey   String?  @map("idempotency_key")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("payment_sessions")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  authUid   String   @map("auth_uid")
+  type      String   @default("system")
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  actionTab String?  @map("action_tab")
+  linkId    String?  @map("link_id")
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model SavedAddress {
+  id            String   @id @default(uuid())
+  profileId     String   @map("profile_id")
+  label         String
+  recipientName String   @map("recipient_name")
+  phone         String
+  streetAddress String   @map("street_address")
+  apartment     String?
+  city          String
+  postalCode    String?  @map("postal_code")
+  tag           String   @default("home")
+  isDefault     Boolean  @default(false) @map("is_default")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("saved_addresses")
+}
+
+model VendorMembership {
+  id          String   @id @default(uuid())
+  storeId     String   @map("store_id")
+  profileId   String   @map("profile_id")
+  activeRoles String[] @default(["retail_merchant"]) @map("active_roles")
+  status      String   @default("pending")
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([storeId, profileId])
+  @@map("vendor_memberships")
+}
+
+model IdentityVerification {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  documentType     String    @map("document_type")
+  documentNumber   String    @map("document_number")
+  documentFrontUrl String?   @map("document_front_url")
+  documentBackUrl  String?   @map("document_back_url")
+  status           String    @default("submitted")
+  rejectionReason  String?   @map("rejection_reason")
+  verifiedAt       DateTime? @map("verified_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("identity_verifications")
+}
+
+model FileAsset {
+  id           String   @id @default(uuid())
+  ownerUid     String   @map("owner_uid")
+  profileId    String?  @map("profile_id")
+  purpose      String   @default("images")
+  bucket       String
+  storagePath  String   @map("storage_path")
+  publicUrl    String?  @map("public_url")
+  mimeType     String   @map("mime_type")
+  sizeBytes    BigInt   @map("size_bytes")
+  originalName String?  @map("original_name")
+  isPrivate    Boolean  @default(false) @map("is_private")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("file_assets")
+}
+
+model Conversation {
+  id                String    @id
+  ownerUid          String    @map("owner_uid")
+  participantUid    String?   @map("participant_uid")
+  participantName   String    @map("participant_name")
+  participantAvatar String?   @map("participant_avatar")
+  participantRole   String    @default("vendor") @map("participant_role")
+  storeId           String?   @map("store_id")
+  productId         String?   @map("product_id")
+  productTitle      String?   @map("product_title")
+  lastMessage       String?   @map("last_message")
+  unreadCount       Int       @default(0) @map("unread_count")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  messages          Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String       @map("conversation_id")
+  senderUid      String       @map("sender_uid")
+  senderName     String       @map("sender_name")
+  text           String
+  attachments    Json         @default("[]")
+  isAiSuggested  Boolean      @default(false) @map("is_ai_suggested")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+model WholesaleSample {
+  id              String   @id
+  requesterUid    String   @map("requester_uid")
+  requesterName   String   @map("requester_name")
+  productId       String   @map("product_id")
+  productTitle    String   @map("product_title")
+  supplierName    String?  @map("supplier_name")
+  quantity        Int      @default(1)
+  shippingAddress String   @map("shipping_address")
+  notes           String?
+  status          String   @default("requested")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("wholesale_samples")
+}
+
+model FlaggedPost {
+  id              String    @id
+  authorUid       String    @map("author_uid")
+  contentExcerpt  String    @map("content_excerpt")
+  flaggedKeywords Json      @default("[]") @map("flagged_keywords")
+  status          String    @default("pending_human_review")
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("flagged_posts")
+}

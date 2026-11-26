@@ -58,12 +58,13 @@ vendorRouter.get('/kyc/my-status', requireFirebaseAuth, async (_req: Request, re
   });
 });
 
-vendorRouter.get('/stores', (_req: Request, res: Response) => {
-  res.json({ success: true, stores: listPublicStores() });
+vendorRouter.get('/stores', async (_req: Request, res: Response) => {
+  const stores = await listPublicStores();
+  res.json({ success: true, stores });
 });
 
-vendorRouter.get('/stores/:storeId', (req: Request, res: Response) => {
-  const store = getPublicStoreById(req.params.storeId);
+vendorRouter.get('/stores/:storeId', async (req: Request, res: Response) => {
+  const store = await getPublicStoreById(req.params.storeId);
   if (!store) {
     res.status(404).json({ error: 'Storefront not found.' });
     return;
@@ -72,8 +73,8 @@ vendorRouter.get('/stores/:storeId', (req: Request, res: Response) => {
 });
 
 // Zero-PII Unified Public @handle Profile Endpoint
-vendorRouter.get('/profile/:handle', (req: Request, res: Response) => {
-  const profile = getPublicProfileByHandle(req.params.handle);
+vendorRouter.get('/profile/:handle', async (req: Request, res: Response) => {
+  const profile = await getPublicProfileByHandle(req.params.handle);
   if (!profile) {
     res.status(404).json({ error: 'Public handle profile not found.' });
     return;
@@ -81,20 +82,24 @@ vendorRouter.get('/profile/:handle', (req: Request, res: Response) => {
   res.json({ success: true, profile });
 });
 
-vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
-  const userId = res.locals.auth.uid;
-  const ownerId = getStoreOwnerId(req.params.vendorId);
-  if (ownerId && ownerId !== userId && !isPrivilegedRole(res.locals.auth)) {
-    res.status(403).json({ error: 'Forbidden: Not authorized to view analytics for this store.' });
-    return;
+vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.auth.uid;
+    const ownerId = await getStoreOwnerId(req.params.vendorId);
+    if (ownerId && ownerId !== userId && !isPrivilegedRole(res.locals.auth)) {
+      res.status(403).json({ error: 'Forbidden: Not authorized to view analytics for this store.' });
+      return;
+    }
+    const analytics = await getVendorAnalytics(req.params.vendorId, userId);
+    res.json({ success: true, analytics });
+  } catch {
+    res.status(503).json({ error: 'Vendor analytics service temporarily unavailable.' });
   }
-  const analytics = getVendorAnalytics(req.params.vendorId, userId);
-  res.json({ success: true, analytics });
 });
 
-vendorRouter.get('/kyc/queue', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), (_req: Request, res: Response) => {
+vendorRouter.get('/kyc/queue', requireFirebaseAuth, requireRole(['moderator', 'admin', 'super_admin']), async (_req: Request, res: Response) => {
   const requesterRole = extractRequesterRole(res);
-  const queueResult = listKycQueue(requesterRole);
+  const queueResult = await listKycQueue(requesterRole);
   if (!queueResult.authorized) {
     res.status(403).json({
       error: 'Forbidden: Governance role (moderator, admin, or super_admin) required.'
@@ -112,7 +117,7 @@ vendorRouter.post('/kyc/:applicationId/decision', requireFirebaseAuth, requireRo
     return;
   }
 
-  const outcome = decideKycApplication({
+  const outcome = await decideKycApplication({
     applicationId: req.params.applicationId,
     decision,
     reviewerEmail: String(res.locals.auth.email || res.locals.auth.uid),

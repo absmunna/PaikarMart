@@ -4,6 +4,7 @@ export const communityPortals: HubPortalDefinition[] = [
   {
     id: 'social-feed',
     hubId: 'community',
+    businessCategory: 'community',
     labelEn: 'Social Feed',
     labelBn: 'সোশ্যাল ফিড',
     entryRoute: '/portal/social',
@@ -21,6 +22,7 @@ export const communityPortals: HubPortalDefinition[] = [
   {
     id: 'demand-board',
     hubId: 'community',
+    businessCategory: 'community',
     labelEn: 'Demand Board (RFQ)',
     labelBn: 'ডিমান্ড বোর্ড',
     entryRoute: '/portal/demand',
@@ -36,6 +38,7 @@ export const communityPortals: HubPortalDefinition[] = [
   {
     id: 'creator-studio',
     hubId: 'community',
+    businessCategory: 'community',
     labelEn: 'Creator Studio',
     labelBn: 'ক্রিয়েটর স্টুডিও',
     entryRoute: '/portal/creator',
@@ -52,6 +55,7 @@ export const communityPortals: HubPortalDefinition[] = [
   {
     id: 'messages',
     hubId: 'community',
+    businessCategory: 'community',
     labelEn: 'Messages & Quotes',
     labelBn: 'মেসেজ ও কোটেশন',
     entryRoute: '/portal/messages',

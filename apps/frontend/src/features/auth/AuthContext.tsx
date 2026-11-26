@@ -20,11 +20,17 @@ import {
   type ConfirmationResult,
   type FirebaseUser 
 } from '@/lib/firebase';
-import { User, UserRole } from '@/types';
-import { CURRENT_USER } from '@/data/mockData';
+import { User, UserRole, PaikarMartDelegate } from '@/types';
+import {
+  CURRENT_USER,
+  DEFAULT_PERSONAL_USER,
+  PAIKARMART_SUPER_ADMIN_PROFILE,
+  INITIAL_PAIKARMART_DELEGATES
+} from '@/data/mockData';
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
 import { safeMediaSrc } from '@/shared/utils';
 import { revokeAllAuthSessions, syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
+import { vendorApiClient } from '@/features/vendors/vendorApiClient';
 import {
   useFirebaseSupabaseSync,
   type SupabaseUserProfile
@@ -34,6 +40,14 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   currentUser: User;
   setCurrentUser: React.Dispatch<React.SetStateAction<User>>;
+  activeProfileMode: 'personal' | 'paikarmart';
+  hasPaikarMartAccess: boolean;
+  personalUser: User;
+  paikarMartProfile: User;
+  paikarMartDelegates: PaikarMartDelegate[];
+  switchProfileMode: (mode: 'personal' | 'paikarmart') => void;
+  grantPaikarMartAccess: (email: string, name?: string, role?: UserRole) => Promise<void>;
+  revokePaikarMartAccess: (email: string) => Promise<void>;
   supabaseProfile: SupabaseUserProfile | null;
   isSynced: boolean;
   syncError: Error | null;
@@ -79,6 +93,12 @@ const EXPECTED_AUTH_ERROR_CODES = new Set([
   'auth/code-expired',
 ]);
 
+const logAuthDebug = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 const logAuthFailure = (scope: string, err: unknown) => {
   const code = (err as { code?: string } | null)?.code;
   if (code && EXPECTED_AUTH_ERROR_CODES.has(code)) {
@@ -89,80 +109,203 @@ const logAuthFailure = (scope: string, err: unknown) => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User>(() => {
-    const storedUser = loadStoredData<User>('USER', CURRENT_USER);
+  const [activeProfileMode, setActiveProfileMode] = useState<'personal' | 'paikarmart'>(() => {
+    return loadStoredData<'personal' | 'paikarmart'>('ACTIVE_PROFILE_MODE', 'personal');
+  });
+
+  const [paikarMartDelegates, setPaikarMartDelegates] = useState<PaikarMartDelegate[]>(() => {
+    return loadStoredData<PaikarMartDelegate[]>('PAIKARMART_DELEGATES', INITIAL_PAIKARMART_DELEGATES);
+  });
+
+  const [personalUser, setPersonalUser] = useState<User>(() => {
+    const stored = loadStoredData<User>('USER_PERSONAL', DEFAULT_PERSONAL_USER);
     return {
-      ...storedUser,
-      avatar: safeMediaSrc(storedUser?.avatar, CURRENT_USER.avatar),
+      ...stored,
+      avatar: safeMediaSrc(stored?.avatar, DEFAULT_PERSONAL_USER.avatar),
     };
   });
+
+  const [paikarMartProfile, setPaikarMartProfile] = useState<User>(() => {
+    const stored = loadStoredData<User>('USER_PAIKARMART_ORG', PAIKARMART_SUPER_ADMIN_PROFILE);
+    return {
+      ...stored,
+      avatar: safeMediaSrc(stored?.avatar, PAIKARMART_SUPER_ADMIN_PROFILE.avatar),
+    };
+  });
+
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const storedMode = loadStoredData<'personal' | 'paikarmart'>('ACTIVE_PROFILE_MODE', 'personal');
+    if (storedMode === 'paikarmart') {
+      const storedOrg = loadStoredData<User>('USER_PAIKARMART_ORG', PAIKARMART_SUPER_ADMIN_PROFILE);
+      return {
+        ...storedOrg,
+        avatar: safeMediaSrc(storedOrg?.avatar, PAIKARMART_SUPER_ADMIN_PROFILE.avatar),
+      };
+    }
+    const storedPersonal = loadStoredData<User>('USER_PERSONAL', DEFAULT_PERSONAL_USER);
+    return {
+      ...storedPersonal,
+      avatar: safeMediaSrc(storedPersonal?.avatar, DEFAULT_PERSONAL_USER.avatar),
+    };
+  });
+
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [pendingPhoneNumber, setPendingPhoneNumber] = useState<string | null>(null);
   const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
   const isFirebaseReady = isFirebaseConfigured();
 
+  const SUPER_ADMIN_EMAILS = new Set([
+    'abs.munna1@gmail.com',
+    'superadmin@paikarmart.com',
+    'admin@paikarmart.com',
+    'root.admin@paikarmart.com'
+  ]);
+
+  const currentEmail = (auth.currentUser?.email || personalUser?.email || '').toLowerCase();
+  const hasPaikarMartAccess = Boolean(
+    !auth.currentUser || // In dev/preview or root owner mode
+    currentEmail === 'abs.munna1@gmail.com' ||
+    SUPER_ADMIN_EMAILS.has(currentEmail) ||
+    paikarMartDelegates.some((d) => d.email.toLowerCase() === currentEmail && d.status === 'active')
+  );
+
+  const switchProfileMode = useCallback((mode: 'personal' | 'paikarmart') => {
+    setActiveProfileMode(mode);
+    saveStoredData('ACTIVE_PROFILE_MODE', mode);
+    if (mode === 'paikarmart') {
+      logAuthDebug('[AuthContext:ProfileSwitch] Switched active profile to PaikarMart (Super Admin Organization)');
+      setCurrentUser(paikarMartProfile);
+      saveStoredData('USER', paikarMartProfile);
+    } else {
+      logAuthDebug('[AuthContext:ProfileSwitch] Switched active profile to Personal Account');
+      setCurrentUser(personalUser);
+      saveStoredData('USER', personalUser);
+    }
+  }, [paikarMartProfile, personalUser]);
+
+  const grantPaikarMartAccess = useCallback(async (email: string, name?: string, role: UserRole = 'admin') => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name?.trim() || cleanEmail.split('@')[0];
+    const newDelegate: PaikarMartDelegate = {
+      id: `del_${Date.now()}`,
+      email: cleanEmail,
+      name: cleanName,
+      role,
+      addedAt: new Date().toISOString().split('T')[0],
+      addedBy: auth.currentUser?.email || 'abs.munna1@gmail.com',
+      status: 'active'
+    };
+
+    setPaikarMartDelegates((prev) => {
+      const filtered = prev.filter((d) => d.email.toLowerCase() !== cleanEmail);
+      const updated = [newDelegate, ...filtered];
+      saveStoredData('PAIKARMART_DELEGATES', updated);
+      return updated;
+    });
+
+    try {
+      await vendorApiClient.updateGovernanceRole({ email: cleanEmail, role });
+    } catch (err) {
+      logAuthDebug('[AuthContext:grantPaikarMartAccess] Backend governance sync notice:', err);
+    }
+  }, []);
+
+  const revokePaikarMartAccess = useCallback(async (email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail === 'abs.munna1@gmail.com') {
+      throw new Error('Cannot revoke primary owner access from abs.munna1@gmail.com');
+    }
+    setPaikarMartDelegates((prev) => {
+      const updated = prev.filter((d) => d.email.toLowerCase() !== cleanEmail);
+      saveStoredData('PAIKARMART_DELEGATES', updated);
+      return updated;
+    });
+
+    try {
+      await vendorApiClient.updateGovernanceRole({ email: cleanEmail, role: 'consumer' });
+    } catch (err) {
+      logAuthDebug('[AuthContext:revokePaikarMartAccess] Backend governance revoke notice:', err);
+    }
+  }, []);
+
   const handleSyncSuccess = useCallback((profile: SupabaseUserProfile, user: FirebaseUser) => {
-    const stored = loadStoredData<User>('USER', CURRENT_USER);
-    const resolvedRole: UserRole = profile.role || stored.role || 'consumer';
     const isVendorUser = Boolean(
-      resolvedRole === 'vendor' ||
-      stored.isVendor ||
+      profile.role === 'vendor' ||
       (Array.isArray(profile.vendor_memberships) && profile.vendor_memberships.length > 0)
     );
 
-    const syncedUser: User = {
-      ...stored,
+    // Personal Account Identity (User's personal presence)
+    const syncedPersonal: User = {
       id: user.uid,
-      name: user.displayName || profile.name || stored.name || 'PaikarMart User',
-      email: user.email || profile.email || stored.email || '',
-      handle: profile.handle || (user.email ? `@${user.email.split('@')[0]}` : stored.handle || `@user_${user.uid.slice(0, 6)}`),
-      avatar: safeMediaSrc(user.photoURL || profile.avatar_url || stored.avatar, CURRENT_USER.avatar),
-      role: resolvedRole,
+      name: user.displayName || profile.name || (user.email ? user.email.split('@')[0] : 'Munna'),
+      email: user.email || profile.email || '',
+      handle: profile.handle || (user.email ? `@${user.email.split('@')[0]}` : `@user_${user.uid.slice(0, 6)}`),
+      avatar: safeMediaSrc(user.photoURL || profile.avatar_url, DEFAULT_PERSONAL_USER.avatar),
+      role: profile.role || 'consumer',
       isVendor: isVendorUser,
-      kycStatus: profile.kyc_status || stored.kycStatus || 'none',
-      trustLevel: profile.trust_level ?? stored.trustLevel,
-      vendorProfile: stored.vendorProfile,
-      balance: typeof profile.wallet_balance === 'number' ? profile.wallet_balance : (stored.balance ?? 0),
-      rewardPoints: typeof profile.reward_points === 'number' ? profile.reward_points : (stored.rewardPoints ?? 0),
-      location: profile.location || stored.location || 'Dhaka, Bangladesh',
-      phone: profile.phone || user.phoneNumber || stored.phone,
+      profileType: 'personal',
+      kycStatus: profile.kyc_status || 'none',
+      trustLevel: profile.trust_level ?? 1,
+      location: profile.location || 'Dhaka, Bangladesh',
+      phone: profile.phone || user.phoneNumber || undefined,
+      balance: typeof profile.wallet_balance === 'number' ? profile.wallet_balance : 0,
+      rewardPoints: typeof profile.reward_points === 'number' ? profile.reward_points : 0,
     };
 
-    console.log('[AuthContext:FirebaseSupabaseSync] Cross-platform identity synced:', {
-      id: syncedUser.id,
-      name: syncedUser.name,
-      role: syncedUser.role,
-      isVendor: syncedUser.isVendor,
-      balance: syncedUser.balance,
-    });
+    setPersonalUser(syncedPersonal);
+    saveStoredData('USER_PERSONAL', syncedPersonal);
 
-    setCurrentUser(syncedUser);
-    saveStoredData('USER', syncedUser);
-  }, []);
+    // If currently acting as PaikarMart Organization, keep active persona as PaikarMart
+    const currentMode = loadStoredData<'personal' | 'paikarmart'>('ACTIVE_PROFILE_MODE', 'personal');
+    if (currentMode === 'paikarmart') {
+      setCurrentUser(paikarMartProfile);
+      saveStoredData('USER', paikarMartProfile);
+    } else {
+      setCurrentUser(syncedPersonal);
+      saveStoredData('USER', syncedPersonal);
+    }
+
+    logAuthDebug('[AuthContext:SyncSuccess] Cross-platform identity synced for personal profile:', {
+      uid: user.uid,
+      email: user.email,
+      mode: currentMode
+    });
+  }, [paikarMartProfile]);
 
   const handleSyncError = useCallback((err: Error) => {
     console.warn('[AuthContext:FirebaseSupabaseSync] Supabase sync fallback active:', err.message);
     const activeFirebaseUser = auth.currentUser;
     if (!activeFirebaseUser) return;
 
-    const stored = loadStoredData<User>('USER', CURRENT_USER);
-    const fallbackHandle = activeFirebaseUser.email
-      ? `@${activeFirebaseUser.email.split('@')[0]}`
-      : stored.handle || `@user_${activeFirebaseUser.uid.slice(0, 6)}`;
-
-    const fallbackUser: User = {
-      ...stored,
+    const fallbackPersonal: User = {
       id: activeFirebaseUser.uid,
-      name: activeFirebaseUser.displayName || stored.name || 'PaikarMart User',
-      email: activeFirebaseUser.email || stored.email || '',
-      handle: fallbackHandle,
-      avatar: safeMediaSrc(activeFirebaseUser.photoURL || stored.avatar, CURRENT_USER.avatar),
-      phone: activeFirebaseUser.phoneNumber || stored.phone,
+      name: activeFirebaseUser.displayName || (activeFirebaseUser.email ? activeFirebaseUser.email.split('@')[0] : 'Munna'),
+      email: activeFirebaseUser.email || '',
+      handle: activeFirebaseUser.email ? `@${activeFirebaseUser.email.split('@')[0]}` : `@user_${activeFirebaseUser.uid.slice(0, 6)}`,
+      avatar: safeMediaSrc(activeFirebaseUser.photoURL, DEFAULT_PERSONAL_USER.avatar),
+      role: 'consumer',
+      isVendor: false,
+      profileType: 'personal',
+      kycStatus: 'none',
+      trustLevel: 1,
+      location: 'Dhaka, Bangladesh',
+      balance: 0,
+      rewardPoints: 0,
+      phone: activeFirebaseUser.phoneNumber || undefined,
     };
 
-    setCurrentUser(fallbackUser);
-    saveStoredData('USER', fallbackUser);
-  }, []);
+    setPersonalUser(fallbackPersonal);
+    saveStoredData('USER_PERSONAL', fallbackPersonal);
+
+    const currentMode = loadStoredData<'personal' | 'paikarmart'>('ACTIVE_PROFILE_MODE', 'personal');
+    if (currentMode === 'paikarmart') {
+      setCurrentUser(paikarMartProfile);
+      saveStoredData('USER', paikarMartProfile);
+    } else {
+      setCurrentUser(fallbackPersonal);
+      saveStoredData('USER', fallbackPersonal);
+    }
+  }, [paikarMartProfile]);
 
   const {
     firebaseUser,
@@ -187,10 +330,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
-      console.log('[AuthContext:GoogleSignIn] Initiating signInWithGoogle popup...');
+      logAuthDebug('[AuthContext:GoogleSignIn] Initiating signInWithGoogle popup...');
       setActionLoading(true);
       const user = await firebaseGoogleSignIn();
-      console.log('[AuthContext:GoogleSignIn] Firebase popup completed. User:', user ? { uid: user.uid, email: user.email } : null);
+      logAuthDebug('[AuthContext:GoogleSignIn] Firebase popup completed. User:', user ? { uid: user.uid } : null);
 
       if (user) {
         await refetchProfile();
@@ -205,14 +348,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUpWithEmail = async (email: string, pass: string, name: string, selectedRole: UserRole = 'consumer') => {
     try {
-      console.log('[AuthContext:Register] Starting email registration for:', { email, name, selectedRole });
+      logAuthDebug('[AuthContext:Register] Starting email registration for role:', selectedRole);
       setActionLoading(true);
       const creds = await createUserWithEmailAndPassword(auth, email, pass);
-      console.log('[AuthContext:Register] Firebase Auth User successfully created. UID:', creds.user.uid);
+      logAuthDebug('[AuthContext:Register] Firebase Auth User successfully created. UID:', creds.user.uid);
 
       if (creds.user) {
         await updateProfile(creds.user, { displayName: name });
-        console.log('[AuthContext:Register] Firebase displayName updated to:', name);
+        logAuthDebug('[AuthContext:Register] Firebase displayName updated.');
 
         const stored = loadStoredData<User>('USER', CURRENT_USER);
         const newUser: User = {
@@ -225,7 +368,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isVendor: selectedRole === 'vendor',
         };
 
-        console.log('[AuthContext:Register] Setting and persisting new user:', newUser);
+        logAuthDebug('[AuthContext:Register] Setting and persisting new user profile.');
         setCurrentUser(newUser);
         saveStoredData('USER', newUser);
 
@@ -259,10 +402,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithEmail = async (email: string, pass: string) => {
     try {
-      console.log('[AuthContext:Login] Attempting email sign-in for:', email);
+      logAuthDebug('[AuthContext:Login] Attempting email sign-in...');
       setActionLoading(true);
       const creds = await signInWithEmailAndPassword(auth, email, pass);
-      console.log('[AuthContext:Login] Firebase credentials validated. User UID:', creds.user.uid);
+      logAuthDebug('[AuthContext:Login] Firebase credentials validated. User UID:', creds.user.uid);
 
       if (creds.user) {
         await refetchProfile();
@@ -316,16 +459,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendEmailVerificationSignal = async () => {
     if (auth.currentUser) {
-      console.log('[AuthContext:EmailVerification] Sending verification email to:', auth.currentUser.email);
+      logAuthDebug('[AuthContext:EmailVerification] Sending verification email.');
       await sendEmailVerification(auth.currentUser);
     }
   };
 
   const reloadUser = async () => {
     if (auth.currentUser) {
-      console.log('[AuthContext:Reload] Reloading auth.currentUser...');
+      logAuthDebug('[AuthContext:Reload] Reloading auth.currentUser...');
       await auth.currentUser.reload();
-      console.log('[AuthContext:Reload] Reload complete. emailVerified:', auth.currentUser.emailVerified);
+      logAuthDebug('[AuthContext:Reload] Reload complete. emailVerified:', auth.currentUser.emailVerified);
       await refetchProfile();
     }
   };
@@ -413,7 +556,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      console.log('[AuthContext:SignOut] Signing out of Firebase...');
+      logAuthDebug('[AuthContext:SignOut] Signing out of Firebase...');
       setActionLoading(true);
       clearPhoneOtpSession();
       await signOutFirebase();
@@ -425,7 +568,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         vendorProfile: undefined,
         balance: 0,
       };
-      console.log('[AuthContext:SignOut] Resetting currentUser to guest state:', guestUser);
+      logAuthDebug('[AuthContext:SignOut] Resetting currentUser to guest state.');
       setCurrentUser(guestUser);
       saveStoredData('USER', guestUser);
     } catch (err) {
@@ -442,6 +585,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser,
         currentUser,
         setCurrentUser,
+        activeProfileMode,
+        hasPaikarMartAccess,
+        personalUser,
+        paikarMartProfile,
+        paikarMartDelegates,
+        switchProfileMode,
+        grantPaikarMartAccess,
+        revokePaikarMartAccess,
         supabaseProfile,
         isSynced,
         syncError,

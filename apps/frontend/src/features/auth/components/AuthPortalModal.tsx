@@ -243,11 +243,9 @@ export const AuthPortalModal: React.FC<AuthPortalModalProps> = ({
 
   const handleLogout = async () => {
     try {
-      console.log('[AuthPortalModal:handleLogout] Sign out clicked.');
       setErrorMessage('');
       setSuccessMessage('');
       await signOut();
-      console.log('[AuthPortalModal:handleLogout] Sign out finished.');
       setSuccessMessage(isBn ? 'সাইন আউট সম্পন্ন হয়েছে' : 'Signed out successfully');
     } catch (err) {
       console.error('[AuthPortalModal:handleLogout] Sign out error:', err);

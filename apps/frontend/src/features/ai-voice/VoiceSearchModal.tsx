@@ -120,34 +120,39 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
     setIsProcessing(true);
 
     try {
-      const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-      const res = await fetch(`${API_BASE}/api/ai/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'voice_search_parser',
-          message: `Extract the core search keyword, shopping intent, and category from this user voice query: "${clean}". Respond in valid JSON format: {"query": "extracted keyword", "category": "wholesale/retail/food/service", "intent": "search"}`
-        }),
-      });
+      const { API_BASE, getAuthHeaders } = await import('@/shared/services/apiClient');
+      const headers = await getAuthHeaders({ json: true });
+      if (headers.Authorization) {
+        const res = await fetch(`${API_BASE}/api/ai/chat`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            role: 'voice_search_parser',
+            message: `Extract the core search keyword, shopping intent, and category from this user voice query: "${clean}". Respond in valid JSON format: {"query": "extracted keyword", "category": "wholesale/retail/food/service", "intent": "search"}`
+          }),
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        const reply = data.reply || '{}';
-        const jsonMatch = reply.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          setAiIntentResult({
-            query: parsed.query || clean,
-            category: parsed.category,
-            intent: parsed.intent || 'search',
-          });
-          setIsProcessing(false);
-          return;
+        if (res.ok) {
+          const data = await res.json();
+          const reply = data.reply || '{}';
+          const jsonMatch = reply.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            setAiIntentResult({
+              query: parsed.query || clean,
+              category: parsed.category,
+              intent: parsed.intent || 'search',
+            });
+            setIsProcessing(false);
+            return;
+          }
         }
       }
-    } catch {}
+    } catch {
+      // Fallback safely to raw speech transcript
+    }
 
-    // Fallback if AI parser fails
+    // Fallback if AI parser fails or user is guest
     setAiIntentResult({
       query: clean,
       intent: 'search',

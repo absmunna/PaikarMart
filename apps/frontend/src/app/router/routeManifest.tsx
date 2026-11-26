@@ -588,6 +588,8 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             />
           }
         />
+
+        <Route path="*" element={<Navigate to={defaultRootRoute} replace />} />
       </Routes>
     </React.Suspense>
   );

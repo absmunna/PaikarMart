@@ -1,4 +1,4 @@
-import { auth } from '@/lib/firebase';
+import { API_BASE, getAuthHeaders } from '@/shared/services/apiClient';
 import { Order } from '@/types';
 import {
   CourierPartner,
@@ -17,24 +17,12 @@ import {
   WeatherTrafficMode
 } from '@/features/logistics/types/logisticsTypes';
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '';
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  return token
-    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-    : { 'Content-Type': 'application/json' };
-}
-
 async function safeFetchJson<T>(url: string, init?: RequestInit): Promise<T | null> {
   try {
-    const authHeaders = await getAuthHeaders();
+    const authHeaders = await getAuthHeaders({ json: true, extraHeaders: init?.headers });
     const res = await fetch(`${API_BASE}${url}`, {
       ...init,
-      headers: {
-        ...authHeaders,
-        ...(init?.headers || {})
-      }
+      headers: authHeaders,
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -130,7 +118,7 @@ export const logisticsOrderApiClient = {
     payload: PodVerificationPayload
   ): Promise<{ ok: boolean; shipment?: ShipmentRecord; escrowReleased?: boolean; error?: string }> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders({ json: true });
       const res = await fetch(`${API_BASE}/api/logistics/shipments/${encodeURIComponent(orderId)}/verify-pod`, {
         method: 'POST',
         headers,
@@ -147,6 +135,45 @@ export const logisticsOrderApiClient = {
       };
     } catch {
       return { ok: false, error: 'Network unavailable while verifying POD' };
+    }
+  },
+
+  async trackOrderOrWaybill(trackingOrOrderId: string): Promise<{ shipment: ShipmentRecord | null; order: any | null }> {
+    const clean = encodeURIComponent(trackingOrOrderId.trim());
+    const orderRes = await safeFetchJson<{ shipment?: ShipmentRecord; order?: any }>(`/api/orders/${clean}/track`);
+    if (orderRes?.shipment || orderRes?.order) {
+      return { shipment: orderRes.shipment || null, order: orderRes.order || null };
+    }
+
+    const shipmentRes = await safeFetchJson<{ shipment?: ShipmentRecord } | ShipmentRecord>(
+      `/api/logistics/shipments/${clean}`
+    );
+    if (shipmentRes) {
+      const shipment = (shipmentRes as { shipment?: ShipmentRecord }).shipment || (shipmentRes as ShipmentRecord);
+      return { shipment: shipment || null, order: null };
+    }
+
+    return { shipment: null, order: null };
+  },
+
+  async submitPodOtp(
+    orderId: string,
+    payload: { otp: string; recipientName: string }
+  ): Promise<{ success: boolean; shipment?: ShipmentRecord; error?: string }> {
+    try {
+      const headers = await getAuthHeaders({ json: true });
+      const res = await fetch(`${API_BASE}/api/logistics/shipments/${encodeURIComponent(orderId)}/pod`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        return { success: false, error: data?.error || 'POD verification failed.' };
+      }
+      return { success: true, shipment: data.shipment };
+    } catch {
+      return { success: false, error: 'Delivery verification failed.' };
     }
   },
 

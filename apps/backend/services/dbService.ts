@@ -115,16 +115,49 @@ export async function insertStoredPost(post: { authorId?: string; content: strin
   }
 }
 
-export async function getStoredOrders(fallbackOrders: any[]) {
+export function mapDbOrderRow(row: Record<string, any>, resolvedCustomerAuthUid?: string) {
+  const status = String(row.status || 'confirmed') as 'confirmed' | 'preparing' | 'in_transit' | 'delivered';
+  const stepMap: Record<string, number> = { confirmed: 1, preparing: 2, in_transit: 3, delivered: 4 };
+  return {
+    id: String(row.idempotency_key || row.id),
+    dbUuid: String(row.id),
+    idempotencyKey: row.idempotency_key ? String(row.idempotency_key) : undefined,
+    customerProfileId: String(row.customer_id),
+    customerId: resolvedCustomerAuthUid || String(row.customer_id),
+    subtotal: Number(row.subtotal ?? 0),
+    deliveryFee: Number(row.delivery_fee ?? 0),
+    tax: Number(row.tax ?? 0),
+    discount: Number(row.discount ?? 0),
+    promoCode: row.promo_code ? String(row.promo_code) : undefined,
+    total: Number(row.total ?? 0),
+    status,
+    trackingStep: stepMap[status] || 1,
+    deliveryAddress: String(row.delivery_address || 'Dhaka, Bangladesh'),
+    paymentMethod: String(row.payment_method || 'Mobile Wallet'),
+    estimatedArrival: '45 mins',
+    items: Array.isArray(row.items) ? row.items : [],
+    buyerName: row.buyer_name ? String(row.buyer_name) : undefined,
+    buyerPhone: row.buyer_phone ? String(row.buyer_phone) : undefined,
+    storeId: row.store_id ? String(row.store_id) : undefined,
+    storeName: row.store_name ? String(row.store_name) : undefined,
+    createdAt: String(row.created_at || new Date().toISOString()),
+    updatedAt: String(row.updated_at || row.created_at || new Date().toISOString()),
+  };
+}
+
+export async function getStoredOrders(fallbackOrders: any[], authUid?: string, isPrivileged = false) {
   const client = supabaseAdmin || supabase;
   if (client) {
     try {
-      const { data, error } = await client
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        return data;
+      let query = client.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+      if (!isPrivileged && authUid) {
+        const profileUuid = await resolveProfileUuidByAuthUid(authUid);
+        if (!profileUuid) return fallbackOrders;
+        query = query.eq('customer_id', profileUuid);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        return data.map((row) => mapDbOrderRow(row, !isPrivileged ? authUid : undefined));
       }
     } catch (e) {
       console.warn('Supabase orders fetch fallback to memory:', e);
@@ -133,18 +166,69 @@ export async function getStoredOrders(fallbackOrders: any[]) {
   return fallbackOrders;
 }
 
-export async function insertStoredOrder(order: any) {
+export async function findStoredOrderByIdOrKey(orderIdOrKey: string) {
+  const client = supabaseAdmin || supabase;
+  if (!client || !orderIdOrKey) return null;
+  const trimmed = orderIdOrKey.trim();
+  if (!trimmed) return null;
+  try {
+    const query = isUuidString(trimmed)
+      ? client.from('orders').select('*').or(`id.eq.${trimmed},idempotency_key.eq.${trimmed}`).maybeSingle()
+      : client.from('orders').select('*').eq('idempotency_key', trimmed).maybeSingle();
+    const { data, error } = await query;
+    if (!error && data) {
+      let customerAuthUid: string | undefined;
+      if (data.customer_id) {
+        const { data: prof } = await client
+          .from('profiles')
+          .select('auth_uid')
+          .eq('id', data.customer_id)
+          .maybeSingle();
+        if (prof?.auth_uid) customerAuthUid = String(prof.auth_uid);
+      }
+      return mapDbOrderRow(data, customerAuthUid);
+    }
+  } catch (e) {
+    console.warn('Supabase single order lookup notice:', e);
+  }
+  return null;
+}
+
+export async function updateStoredOrderStatus(orderIdOrKey: string, status: string, updatedAt: string): Promise<boolean> {
+  const client = supabaseAdmin;
+  if (!client || !orderIdOrKey) return false;
+  try {
+    const targetUuid = await resolveOrderUuidByOrderKey(orderIdOrKey);
+    if (!targetUuid) return false;
+    const { error } = await client
+      .from('orders')
+      .update({ status, updated_at: updatedAt })
+      .eq('id', targetUuid);
+    if (error) {
+      console.warn('Supabase order status update notice:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Supabase order status update error:', e);
+    return false;
+  }
+}
+
+export async function insertStoredOrder(order: any): Promise<boolean> {
   const client = supabaseAdmin || supabase;
   if (client) {
     try {
       const customerUuid = await resolveProfileUuidByAuthUid(order.customerId);
-      if (!customerUuid) return;
+      if (!customerUuid) return false;
       const { error } = await client.from('orders').insert({
         idempotency_key: order.idempotencyKey || order.id || null,
         customer_id: customerUuid,
         subtotal: order.subtotal || 0,
         delivery_fee: order.deliveryFee || 0,
         tax: order.tax || 0,
+        discount: order.discount || 0,
+        promo_code: order.promoCode || null,
         total: order.total || 0,
         status: order.status || 'confirmed',
         delivery_address: order.deliveryAddress || 'Standard Delivery',
@@ -152,14 +236,20 @@ export async function insertStoredOrder(order: any) {
         items: order.items || [],
         buyer_name: order.buyerName || null,
         buyer_phone: order.buyerPhone || null,
+        store_id: order.storeId || null,
+        store_name: order.storeName || null,
+        updated_at: order.updatedAt || new Date().toISOString(),
       });
       if (error) {
         console.warn('Supabase order insert notice:', error.message);
+        return false;
       }
+      return true;
     } catch (e) {
       console.warn('Supabase order insert fallback to memory:', e);
     }
   }
+  return false;
 }
 
 export async function upsertStoredShipmentWaybill(shipment: {

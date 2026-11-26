@@ -2,7 +2,18 @@ import express from 'express';
 import type { Request, Response } from 'express';
 
 import { isPrivilegedRole, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import { isLiveDatabaseConfigured } from '../../config/env.js';
 import { supabaseAdmin } from '../../services/dbService.js';
+import { getPersistentEscrowSummary } from '../wallet/walletService.js';
+import { isStoreOwnedByUser } from '../vendors/vendorService.js';
+import {
+  createRfqRecord,
+  createWholesaleSampleRecord,
+  findRfqById,
+  listRfqsForUser,
+  listWholesaleSamplesForUser,
+  updateRfqRecord
+} from '../rfq/rfqRepository.js';
 
 export const wholesaleRouter = express.Router();
 
@@ -379,15 +390,32 @@ wholesaleRouter.get('/products', async (req: Request, res: Response) => {
   res.json({ success: true, source, products: filtered });
 });
 
-wholesaleRouter.get('/rfqs', requireFirebaseAuth, (_req: Request, res: Response) => {
+function rowToPoDraft(row: any, fallback?: PurchaseOrderDraft): PurchaseOrderDraft | null {
+  const quotes = Array.isArray(row?.quotes) ? row.quotes : [];
+  const embedded = quotes.find((q: any) => q?.type === 'po_draft' && q?.poDraft)?.poDraft;
+  if (embedded) return embedded as PurchaseOrderDraft;
+  return fallback || null;
+}
+
+wholesaleRouter.get('/rfqs', requireFirebaseAuth, async (_req: Request, res: Response) => {
   const auth = res.locals.auth;
-  const rfqs = isPrivilegedRole(auth)
-    ? rfqStore
-    : rfqStore.filter((r) => !r.buyerUid || r.buyerUid === auth.uid);
-  res.json({ success: true, rfqs });
+  const dbRes = await listRfqsForUser(auth);
+  const byId = new Map<string, PurchaseOrderDraft>();
+
+  for (const r of dbRes.rfqs) {
+    const draft = rowToPoDraft(r);
+    if (draft) byId.set(draft.rfqId, draft);
+  }
+  for (const r of rfqStore) {
+    if (!byId.has(r.rfqId) && (isPrivilegedRole(auth) || !r.buyerUid || r.buyerUid === auth.uid)) {
+      byId.set(r.rfqId, r);
+    }
+  }
+
+  res.json({ success: true, rfqs: Array.from(byId.values()) });
 });
 
-wholesaleRouter.post('/rfq', requireFirebaseAuth, (req: Request, res: Response) => {
+wholesaleRouter.post('/rfq', requireFirebaseAuth, async (req: Request, res: Response) => {
   const {
     productId,
     productName,
@@ -479,6 +507,19 @@ wholesaleRouter.post('/rfq', requireFirebaseAuth, (req: Request, res: Response) 
   };
 
   rfqStore.unshift(poDraft);
+  await createRfqRecord({
+    id: rfqId,
+    buyerId: res.locals.auth.uid,
+    buyerName: poDraft.buyer.name,
+    itemTitle: poDraft.product.name,
+    quantity: requestedQty,
+    targetPricePerUnit: agreedUnitPrice,
+    specifications: poDraft.notes,
+    deliveryDeadline: poDraft.expiresAt.split('T')[0],
+    status: 'pending',
+    quotes: [{ type: 'po_draft', poDraft }],
+    created_at: poDraft.createdAt,
+  });
 
   res.status(201).json({
     success: true,
@@ -489,40 +530,94 @@ wholesaleRouter.post('/rfq', requireFirebaseAuth, (req: Request, res: Response) 
   });
 });
 
-wholesaleRouter.post('/rfq/:id/respond', requireFirebaseAuth, (req: Request, res: Response) => {
+wholesaleRouter.post('/rfq/:id/respond', requireFirebaseAuth, async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, counterPrice, comments, escrowId } = req.body;
 
-  const rfq = rfqStore.find((r) => r.rfqId === id || r.poNumber === id);
+  let rfq = rfqStore.find((r) => r.rfqId === id || r.poNumber === id);
+  const dbRfq = await findRfqById(id);
+  if (!rfq && dbRfq) {
+    rfq = rowToPoDraft(dbRfq) || undefined;
+    if (rfq) rfqStore.unshift(rfq);
+  }
+
   if (!rfq) {
     res.status(404).json({ error: 'RFQ বা পারচেজ অর্ডার পাওয়া যায়নি' });
     return;
   }
 
   const auth = res.locals.auth;
-  if (!isPrivilegedRole(auth) && auth.role !== 'vendor' && rfq.buyerUid && rfq.buyerUid !== auth.uid) {
+  const isPrivileged = isPrivilegedRole(auth);
+  const isBuyerOwner = Boolean(rfq.buyerUid && rfq.buyerUid === auth.uid);
+  const isOwningSupplier = await isStoreOwnedByUser(rfq.supplier.id, auth.uid);
+
+  if (!isPrivileged && !isBuyerOwner && !isOwningSupplier) {
     res.status(403).json({ error: 'Not authorized to update this RFQ.' });
     return;
   }
 
-  if (status) {
-    rfq.status = status;
+  if (counterPrice !== undefined && !isPrivileged && !isOwningSupplier) {
+    res.status(403).json({ error: 'Only the assigned supplier or platform governance can propose a counterPrice.' });
+    return;
   }
-  if (counterPrice && !Number.isNaN(Number(counterPrice))) {
+
+  if (escrowId) {
+    if (!isPrivileged && !isBuyerOwner) {
+      res.status(403).json({ error: 'Only the buyer or admin can attach an escrow lock to this RFQ.' });
+      return;
+    }
+    if (isLiveDatabaseConfigured()) {
+      const escrowSummary = await getPersistentEscrowSummary(rfq.buyerUid || auth.uid);
+      const matchedEscrow = escrowSummary.escrows.find(
+        (e) => e.id === String(escrowId) || e.orderId === String(escrowId) || e.poNumber === String(escrowId)
+      );
+      if (!matchedEscrow || matchedEscrow.status !== 'held') {
+        res.status(400).json({ error: 'Verified held escrow record not found for this escrowId.' });
+        return;
+      }
+    }
+    rfq.escrowId = String(escrowId);
+    rfq.status = 'escrow_locked';
+  }
+
+  if (status && ['draft_submitted', 'supplier_accepted', 'counter_offered', 'escrow_locked', 'declined'].includes(status)) {
+    if (['supplier_accepted', 'counter_offered', 'declined'].includes(status) && !isPrivileged && !isOwningSupplier) {
+      res.status(403).json({ error: 'Only the assigned supplier or admin can change supplier decision status.' });
+      return;
+    }
+    if (status !== 'escrow_locked') {
+      rfq.status = status;
+    }
+  }
+  if (counterPrice && !Number.isNaN(Number(counterPrice)) && Number(counterPrice) > 0) {
     rfq.financials.counterPrice = Number(counterPrice);
     rfq.financials.unitPrice = Number(counterPrice);
     rfq.financials.subtotal = Math.round(rfq.financials.unitPrice * rfq.financials.quantity);
     rfq.financials.estimatedAitVat = Math.round(rfq.financials.subtotal * 0.05);
     rfq.financials.grandTotal = rfq.financials.subtotal + rfq.financials.estimatedAitVat;
   }
-  if (escrowId) {
-    rfq.escrowId = escrowId;
-    rfq.status = 'escrow_locked';
-  }
   if (comments) {
-    rfq.supplierComments = comments;
+    rfq.supplierComments = String(comments).slice(0, 1000);
   }
   rfq.respondedAt = new Date().toISOString();
+
+  const dbStatus =
+    rfq.status === 'supplier_accepted' || rfq.status === 'escrow_locked'
+      ? 'accepted'
+      : rfq.status === 'counter_offered'
+      ? 'quoted'
+      : rfq.status === 'declined'
+      ? 'rejected'
+      : 'negotiating';
+
+  const existingQuotes = Array.isArray(dbRfq?.quotes)
+    ? dbRfq.quotes.filter((q: any) => q?.type !== 'po_draft')
+    : [];
+
+  await updateRfqRecord(rfq.rfqId, {
+    status: dbStatus,
+    quotes: [{ type: 'po_draft', poDraft: rfq }, ...existingQuotes],
+  });
 
   res.json({
     success: true,
@@ -531,15 +626,20 @@ wholesaleRouter.post('/rfq/:id/respond', requireFirebaseAuth, (req: Request, res
   });
 });
 
-wholesaleRouter.get('/samples', requireFirebaseAuth, (_req: Request, res: Response) => {
+wholesaleRouter.get('/samples', requireFirebaseAuth, async (_req: Request, res: Response) => {
   const auth = res.locals.auth;
+  const persisted = await listWholesaleSamplesForUser(auth);
+  if (persisted.length > 0) {
+    res.json({ success: true, samples: persisted });
+    return;
+  }
   const samples = isPrivilegedRole(auth)
     ? sampleStore
     : sampleStore.filter((s) => s.requesterUid === auth.uid);
   res.json({ success: true, samples });
 });
 
-wholesaleRouter.post('/sample', requireFirebaseAuth, (req: Request, res: Response) => {
+wholesaleRouter.post('/sample', requireFirebaseAuth, async (req: Request, res: Response) => {
   const {
     productId,
     productTitle,
@@ -571,6 +671,10 @@ wholesaleRouter.post('/sample', requireFirebaseAuth, (req: Request, res: Respons
   };
 
   sampleStore.unshift(newSample);
+  await createWholesaleSampleRecord({
+    ...newSample,
+    requesterUid: res.locals.auth.uid,
+  });
 
   res.status(201).json({
     success: true,

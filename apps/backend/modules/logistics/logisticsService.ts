@@ -9,10 +9,13 @@ import {
   WeatherTrafficMode
 } from './tariffConfig.js';
 import { calculateHaversineKm, GeoPoint } from './distanceEngine.js';
-import { getEscrowSummaryForUser, releaseEscrowRecord } from '../wallet/walletService.js';
+import { getPersistentEscrowSummary, releaseEscrowRecord, releasePersistentEscrow } from '../wallet/walletService.js';
+import { isPersistentFinanceEnabled } from '../../config/env.js';
 import {
   findStoredShipmentWaybill,
   listStoredShipmentWaybills,
+  resolveProfileUuidByAuthUid,
+  supabaseAdmin,
   upsertStoredShipmentWaybill
 } from '../../services/dbService.js';
 
@@ -587,7 +590,7 @@ export function appendShipmentCheckpoint(
  * 3-Step POD Verification: validates 4-digit server OTP, stores photo & signature proof,
  * advances shipment to DELIVERED, and releases any associated Escrow hold.
  */
-export function verifyShipmentPod(
+export async function verifyShipmentPod(
   orderId: string,
   payload: {
     otp: string;
@@ -595,9 +598,10 @@ export function verifyShipmentPod(
     photoDataUrl?: string;
     signatureDataUrl?: string;
     userId?: string;
+    isPrivileged?: boolean;
   }
-): { ok: boolean; error?: string; shipment?: ShipmentRecord; escrowReleased?: boolean } {
-  const shp = getOrCreateShipment(orderId);
+): Promise<{ ok: boolean; error?: string; shipment?: ShipmentRecord; escrowReleased?: boolean }> {
+  const shp = (await findShipmentPersistent(orderId)) || getOrCreateShipment(orderId);
   const cleanOtp = String(payload.otp || '').trim();
 
   if (cleanOtp !== shp.deliveryOtp) {
@@ -609,10 +613,19 @@ export function verifyShipmentPod(
 
   let escrowReleased = false;
   try {
-    const summary = getEscrowSummaryForUser(payload.userId || 'user_me');
+    const actorUid = payload.userId || 'user_me';
+    const summary = await getPersistentEscrowSummary(actorUid);
     const escrow = summary.escrows.find((e) => e.orderId === orderId || e.poNumber === orderId);
     if (escrow && escrow.status === 'held') {
-      releaseEscrowRecord(escrow.id);
+      if (summary.source === 'supabase' && isPersistentFinanceEnabled()) {
+        await releasePersistentEscrow({
+          escrowIdOrOrderKey: escrow.id,
+          actorAuthUid: actorUid,
+          isPrivileged: Boolean(payload.isPrivileged),
+        });
+      } else {
+        releaseEscrowRecord(escrow.id);
+      }
       escrowReleased = true;
     }
   } catch {
@@ -643,13 +656,13 @@ export function verifyShipmentPod(
   return { ok: true, shipment: updated, escrowReleased };
 }
 
-export function createReturnPickup(payload: {
+export async function createReturnPickup(payload: {
   orderId: string;
   userId?: string;
   reason: string;
   pickupAddress: string;
   courierPartner?: CourierPartner;
-}): ReturnPickupRecord {
+}): Promise<ReturnPickupRecord> {
   const partner: CourierPartner = payload.courierPartner || 'PaikarForce';
   const waybill = `RTN-${PARTNER_PREFIX[partner]}-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -673,11 +686,86 @@ export function createReturnPickup(payload: {
     record.pickupAddress
   );
 
+  if (supabaseAdmin && payload.userId) {
+    try {
+      const [profileUuid, waybillRow] = await Promise.all([
+        resolveProfileUuidByAuthUid(payload.userId),
+        findStoredShipmentWaybill(payload.orderId),
+      ]);
+      if (profileUuid && waybillRow?.id) {
+        const { data } = await supabaseAdmin
+          .from('return_pickups')
+          .insert({
+            shipment_id: waybillRow.id,
+            return_waybill: waybill,
+            user_id: profileUuid,
+            reason: record.reason,
+            pickup_address: record.pickupAddress,
+            courier_partner: partner,
+            status: 'PICKUP_SCHEDULED',
+          })
+          .select('id, created_at')
+          .maybeSingle();
+        if (data?.id) {
+          record.id = String(data.id);
+          if (data.created_at) record.createdAt = String(data.created_at);
+        }
+      }
+    } catch {
+      // Fallback gracefully when shipment_waybill or profile isn't persisted yet
+    }
+  }
+
   return record;
 }
 
-export function listReturnPickups(): ReturnPickupRecord[] {
-  return returnStore;
+export async function listReturnPickups(authUid?: string, isPrivileged = false): Promise<ReturnPickupRecord[]> {
+  if (supabaseAdmin && authUid) {
+    try {
+      let query = supabaseAdmin
+        .from('return_pickups')
+        .select('*, shipment:shipment_waybills(order_id, tracking_number)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!isPrivileged) {
+        const profileUuid = await resolveProfileUuidByAuthUid(authUid);
+        if (!profileUuid) {
+          return returnStore.filter((r) => r.userId === authUid);
+        }
+        query = query.eq('user_id', profileUuid);
+      }
+
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        const dbRecords: ReturnPickupRecord[] = data.map((row: any) => {
+          const shp = Array.isArray(row.shipment) ? row.shipment[0] : row.shipment;
+          return {
+            id: String(row.id),
+            returnWaybill: String(row.return_waybill),
+            orderId: String(shp?.order_id || row.shipment_id),
+            userId: authUid,
+            reason: String(row.reason || ''),
+            pickupAddress: String(row.pickup_address || ''),
+            courierPartner: (row.courier_partner || 'PaikarForce') as CourierPartner,
+            status: (row.status || 'PICKUP_SCHEDULED') as ReturnPickupRecord['status'],
+            createdAt: String(row.created_at || new Date().toISOString()),
+          };
+        });
+        const seen = new Set(dbRecords.map((r) => r.returnWaybill));
+        const memExtras = returnStore.filter(
+          (r) => !seen.has(r.returnWaybill) && (isPrivileged || r.userId === authUid)
+        );
+        return [...dbRecords, ...memExtras];
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return isPrivileged || !authUid
+    ? returnStore
+    : returnStore.filter((r) => r.userId === authUid);
 }
 
 export function getNearbyFleetVehicles(type?: string, includeOffline = false): FleetVehicle[] {

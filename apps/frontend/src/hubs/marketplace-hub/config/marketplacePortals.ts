@@ -4,6 +4,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'retail',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Retail Marketplace',
     labelBn: 'রিটেইল মার্কেট',
     entryRoute: '/hub/marketplace',
@@ -21,6 +22,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'wholesale',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Wholesale / B2B',
     labelBn: 'হোলসেল / B2B',
     entryRoute: '/hub/marketplace',
@@ -38,6 +40,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'grocery',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Grocery Market',
     labelBn: 'গ্রোসারি মার্কেট',
     entryRoute: '/hub/marketplace',
@@ -55,6 +58,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'pharmacy',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Pharmacy & Rx',
     labelBn: 'ফার্মেসি ও Rx',
     entryRoute: '/hub/marketplace',
@@ -72,6 +76,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'brand-shops',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Brand Shops',
     labelBn: 'ব্র্যান্ড শপ',
     entryRoute: '/hub/marketplace',
@@ -89,6 +94,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'digital',
     hubId: 'marketplace',
+    businessCategory: 'digital',
     labelEn: 'Digital Goods',
     labelBn: 'ডিজিটাল পণ্য',
     entryRoute: '/hub/marketplace',
@@ -106,6 +112,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'nearby-shops',
     hubId: 'marketplace',
+    businessCategory: 'commerce',
     labelEn: 'Nearby Radar Shops',
     labelBn: 'কাছের দোকান রাডার',
     entryRoute: '/portal/nearby?hub=marketplace',
@@ -122,6 +129,7 @@ export const marketplacePortals: HubPortalDefinition[] = [
   {
     id: 'demand-board',
     hubId: 'marketplace',
+    businessCategory: 'community',
     labelEn: 'Product Demands (RFQ)',
     labelBn: 'প্রোডাক্ট ডিমান্ড',
     entryRoute: '/portal/demand?hub=marketplace',

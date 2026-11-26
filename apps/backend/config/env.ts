@@ -1,5 +1,5 @@
 export const backendEnv = {
-  port: process.env.PORT || 5000,
+  port: Number(process.env.PORT || (process.env.NODE_ENV === 'production' ? 5000 : 3000)),
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   corsOriginsRaw: process.env.CORS_ORIGINS || process.env.APP_URL || '',

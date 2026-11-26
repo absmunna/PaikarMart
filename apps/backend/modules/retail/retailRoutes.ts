@@ -1,7 +1,17 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { supabase } from '../../services/dbService.js';
-import { isPrivilegedRole, optionalFirebaseAuth, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import {
+  isUuidString,
+  resolveProfileUuidByAuthUid,
+  supabase,
+  supabaseAdmin
+} from '../../services/dbService.js';
+import {
+  isPrivilegedRole,
+  optionalFirebaseAuth,
+  requireFirebaseAuth,
+  requireRole
+} from '../../middleware/requireFirebaseAuth.js';
 
 export const retailRouter = Router();
 
@@ -382,16 +392,17 @@ retailRouter.get('/products/:productId/engagement', async (req: Request, res: Re
   let reviews = serverReviews.filter((r) => r.productId === productId);
   let qna = serverQuestions.filter((q) => q.productId === productId);
 
-  if (supabase) {
+  const db = supabaseAdmin || supabase;
+  if (db) {
     try {
       const [{ data: dbReviews }, { data: dbQna }] = await Promise.all([
-        supabase
+        db
           .from('product_reviews')
           .select('*')
           .eq('product_id', productId)
           .order('created_at', { ascending: false })
           .limit(30),
-        supabase
+        db
           .from('product_questions')
           .select('*')
           .eq('product_id', productId)
@@ -459,14 +470,18 @@ retailRouter.post('/products/:productId/reviews', requireFirebaseAuth, async (re
     return;
   }
 
+  // Resolve profile UUID cleanly so PostgreSQL UUID FK checks succeed
+  const db = supabaseAdmin || supabase;
+  const profileUuid = db && userId !== 'usr_guest' ? await resolveProfileUuidByAuthUid(userId) : null;
+
   // Server checks if buyer actually has a recorded purchase for this item
   let isVerifiedPurchase = false;
-  if (supabase && userId !== 'usr_guest') {
+  if (db && profileUuid) {
     try {
-      const { data: userOrders } = await supabase
+      const { data: userOrders } = await db
         .from('orders')
         .select('id, items')
-        .eq('customer_id', userId)
+        .eq('customer_id', profileUuid)
         .limit(20);
       if (Array.isArray(userOrders)) {
         isVerifiedPurchase = userOrders.some(
@@ -491,15 +506,27 @@ retailRouter.post('/products/:productId/reviews', requireFirebaseAuth, async (re
     createdAt: new Date().toISOString(),
   };
 
-  if (supabase) {
+  if (db && profileUuid) {
     try {
-      await supabase.from('product_reviews').insert({
-        product_id: productId,
-        user_id: userId,
+      const insertPayload: Record<string, unknown> = {
+        user_id: profileUuid,
+        reviewer_name: userName,
         rating,
         comment,
         is_verified_purchase: isVerifiedPurchase,
-      });
+      };
+      if (isUuidString(productId)) {
+        insertPayload.product_id = productId;
+      }
+      const { data: insertedRev } = await db
+        .from('product_reviews')
+        .insert(insertPayload)
+        .select('id, created_at')
+        .maybeSingle();
+      if (insertedRev?.id) {
+        newReview.id = String(insertedRev.id);
+        if (insertedRev.created_at) newReview.createdAt = String(insertedRev.created_at);
+      }
     } catch (err) {
       console.warn('Supabase review insert fallback:', err);
     }
@@ -537,14 +564,23 @@ retailRouter.post('/products/:productId/qna', optionalFirebaseAuth, async (req: 
     createdAt: new Date().toISOString(),
   };
 
-  if (supabase) {
+  const db = supabaseAdmin || supabase;
+  if (db) {
     try {
-      await supabase.from('product_questions').insert({
-        product_id: productId,
-        author_id: authorId,
-        author_name: authorName,
-        question,
-      });
+      const { data: insertedQna } = await db
+        .from('product_questions')
+        .insert({
+          product_id: productId,
+          author_id: authorId,
+          author_name: authorName,
+          question,
+        })
+        .select('id, created_at')
+        .maybeSingle();
+      if (insertedQna?.id) {
+        newQuestion.id = String(insertedQna.id);
+        if (insertedQna.created_at) newQuestion.createdAt = String(insertedQna.created_at);
+      }
     } catch (err) {
       console.warn('Supabase QnA insert fallback:', err);
     }
@@ -554,29 +590,72 @@ retailRouter.post('/products/:productId/qna', optionalFirebaseAuth, async (req: 
   res.status(201).json({ success: true, question: newQuestion });
 });
 
-// POST /api/retail/products/:productId/qna/:questionId/answer - Seller answers a question
-retailRouter.post('/products/:productId/qna/:questionId/answer', requireFirebaseAuth, async (req: Request, res: Response) => {
-  const { productId, questionId } = req.params;
-  const answer = String(req.body?.answer || '').trim();
-  const answeredBy = String(req.body?.answeredBy || 'Verified Merchant').trim().slice(0, 80);
+// POST /api/retail/products/:productId/qna/:questionId/answer - Seller/Admin answers a question
+retailRouter.post(
+  '/products/:productId/qna/:questionId/answer',
+  requireFirebaseAuth,
+  requireRole(['vendor', 'moderator', 'admin', 'super_admin']),
+  async (req: Request, res: Response) => {
+    const { productId, questionId } = req.params;
+    const answer = String(req.body?.answer || '').trim();
+    const answeredBy = String(req.body?.answeredBy || 'Verified Merchant').trim().slice(0, 80);
 
-  if (answer.length < 3 || answer.length > 500) {
-    res.status(400).json({ success: false, error: 'Answer must be between 3 and 500 characters.' });
-    return;
+    if (answer.length < 3 || answer.length > 500) {
+      res.status(400).json({ success: false, error: 'Answer must be between 3 and 500 characters.' });
+      return;
+    }
+
+    const answeredAt = new Date().toISOString();
+    const db = supabaseAdmin || supabase;
+    if (db && isUuidString(questionId)) {
+      try {
+        const { data: updatedQna, error: updErr } = await db
+          .from('product_questions')
+          .update({
+            answer,
+            answered_by: answeredBy,
+            answered_at: answeredAt,
+          })
+          .eq('id', questionId)
+          .eq('product_id', productId)
+          .select('*')
+          .maybeSingle();
+
+        if (!updErr && updatedQna) {
+          res.json({
+            success: true,
+            question: {
+              id: updatedQna.id,
+              productId: updatedQna.product_id,
+              authorId: updatedQna.author_id,
+              authorName: updatedQna.author_name || 'Shopper',
+              question: updatedQna.question,
+              answer: updatedQna.answer,
+              answeredBy: updatedQna.answered_by,
+              answeredAt: updatedQna.answered_at,
+              createdAt: updatedQna.created_at,
+            },
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Supabase QnA answer update notice:', err);
+      }
+    }
+
+    const target = serverQuestions.find((q) => q.id === questionId && q.productId === productId);
+    if (!target) {
+      res.status(404).json({ success: false, error: 'Question not found.' });
+      return;
+    }
+
+    target.answer = answer;
+    target.answeredBy = answeredBy;
+    target.answeredAt = answeredAt;
+
+    res.json({ success: true, question: target });
   }
-
-  const target = serverQuestions.find((q) => q.id === questionId && q.productId === productId);
-  if (!target) {
-    res.status(404).json({ success: false, error: 'Question not found.' });
-    return;
-  }
-
-  target.answer = answer;
-  target.answeredBy = answeredBy;
-  target.answeredAt = new Date().toISOString();
-
-  res.json({ success: true, question: target });
-});
+);
 
 // POST /api/retail/prescriptions - Real Pharmacy Prescription & Grocery List Order Flow
 retailRouter.post('/prescriptions', optionalFirebaseAuth, async (req: Request, res: Response) => {
@@ -642,9 +721,10 @@ retailRouter.post('/prescriptions', optionalFirebaseAuth, async (req: Request, r
     createdAt: new Date().toISOString(),
   };
 
-  if (supabase) {
+  const db = supabaseAdmin || supabase;
+  if (db) {
     try {
-      await supabase.from('prescription_uploads').insert({
+      await db.from('prescription_uploads').insert({
         reference_code: record.id,
         order_id_ref: record.orderId,
         order_type: record.orderType,
@@ -670,11 +750,53 @@ retailRouter.post('/prescriptions', optionalFirebaseAuth, async (req: Request, r
 });
 
 // GET /api/retail/prescriptions - Protected owner-isolated prescription history
-retailRouter.get('/prescriptions', requireFirebaseAuth, (req: Request, res: Response) => {
+retailRouter.get('/prescriptions', requireFirebaseAuth, async (req: Request, res: Response) => {
   const auth = res.locals.auth;
-  const prescriptions = isPrivilegedRole(auth)
-    ? serverPrescriptions
+  const privileged = isPrivilegedRole(auth);
+  const db = supabaseAdmin || supabase;
+
+  let prescriptions = privileged
+    ? [...serverPrescriptions]
     : serverPrescriptions.filter((record) => record.customerId === auth.uid);
+
+  if (db) {
+    try {
+      let query = db
+        .from('prescription_uploads')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!privileged) {
+        query = query.eq('customer_id', auth.uid);
+      }
+
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbRecords: PrescriptionRecord[] = data.map((row: any) => ({
+          id: String(row.reference_code || row.id),
+          orderId: String(row.order_id_ref),
+          orderType: row.order_type === 'grocery_list' ? 'grocery_list' : 'pharmacy_rx',
+          customerId: String(row.customer_id),
+          customerName: 'PaikarMart Customer',
+          contactPhone: String(row.contact_phone),
+          deliveryAddress: String(row.delivery_address),
+          notes: String(row.notes || ''),
+          fileName: row.file_name || undefined,
+          mimeType: row.mime_type || undefined,
+          status: row.status || 'submitted',
+          createdAt: String(row.created_at),
+        }));
+        const existingIds = new Set(dbRecords.map((d) => d.id));
+        prescriptions = [
+          ...dbRecords,
+          ...prescriptions.filter((r) => !existingIds.has(r.id)),
+        ];
+      }
+    } catch (err) {
+      console.warn('Supabase prescription fetch fallback:', err);
+    }
+  }
 
   res.json({
     success: true,

@@ -2,28 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, ArrowDown } from 'lucide-react';
 import { 
   PortalTab, 
-  User, 
-  SocialPost, 
   CommerceItem, 
-  CartItem, 
   Order, 
   ServiceBooking, 
-  ReactionType, 
-  TaggedProduct, 
   VendorProfile,
-  PostType,
-  CitizenPostCategory,
-  AppNotification
 } from '@/types';
 import { 
-  CURRENT_USER, 
-  INITIAL_POSTS, 
   INITIAL_COMMERCE_ITEMS, 
-  INITIAL_STORIES,
-  INITIAL_NOTIFICATIONS,
   INITIAL_ORDERS
 } from '@/data/mockData';
-import { loadStoredData, saveStoredData } from '@/lib/supabase';
+import { clearStoredData, loadStoredData, saveStoredData } from '@/lib/supabase';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -51,9 +39,10 @@ import {
   ProductComparisonProvider,
   WishlistProvider,
   fetchCatalogResult,
+  useCartStore,
   type PortalFilterType
 } from '@/features/marketplace';
-import { fetchSocialFeedResult } from '@/features/social';
+import { fetchSocialFeedResult, useSocialFeedStore } from '@/features/social';
 import { WalletModal } from '@/portals/utilities/wallet/components/WalletModal';
 import { NotificationsModal } from '@/portals/utilities/notifications-center/components/NotificationsModal';
 import { MessagingCenterModal } from '@/features/messaging';
@@ -62,13 +51,7 @@ import { MultiRoleOnboardingModal } from '@/features/vendors';
 import { PwaInstallBanner } from '@/features/pwa/PwaInstallBanner';
 import { VoiceSearchModal } from '@/features/ai-voice/VoiceSearchModal';
 import { RfqAndForecastingModal } from '@/components/shared/RfqAndForecastingModal';
-import {
-  clearUserNotificationsApi,
-  createUserNotificationApi,
-  fetchUserNotificationsApi,
-  markAllNotificationsReadApi,
-  markNotificationReadApi,
-} from '@/features/notifications/notificationApiClient';
+import { useNotificationsStore } from '@/features/notifications/useNotificationsStore';
 
 // Application Bootstrap, Routing, Contexts & Shared Hooks
 import { AppProviders } from '@/app/providers/AppProviders';
@@ -79,12 +62,9 @@ import type { SettingsSectionId } from '@/types';
 import { SettingsModal } from '@/portals/utilities/settings-center/components/SettingsModal';
 import { useGlobalOverlayScrollLock } from '@/shared/hooks/useBodyScrollLock';
 import {
-  loadPersistedCart,
-  savePersistedCart,
   loadPersistedNavState,
   savePersistedNavState,
   resolveRestorableGuestPath,
-  useGuestCartTabSync,
   type PersistedNavigationState,
 } from '@/shared/hooks/useGuestSessionPersistence';
 import { useEngagementAnalytics } from '@/shared/hooks/useEngagementAnalytics';
@@ -145,7 +125,6 @@ function AppInner() {
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => initialNavRef.current!.searchQuery);
-  const [appliedPromoCode, setAppliedPromoCode] = useState(() => initialNavRef.current!.appliedPromoCode);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>(() => initialNavRef.current!.selectedSubCategory);
   const [activePortalFilter, setActivePortalFilter] = useState<PortalFilterType>(() => initialNavRef.current!.activePortalFilter);
   const [activeLogisticsSubPortal, setActiveLogisticsSubPortal] = useState<'ride' | 'courier' | 'cargo' | 'fleet'>(
@@ -158,6 +137,52 @@ function AppInner() {
 
   const { trackCartAdd, trackBuyNow, trackSearchQuery } = useEngagementAnalytics({
     userId: currentUser.id,
+  });
+
+  const {
+    cartItems,
+    cartCount,
+    appliedPromoCode,
+    setAppliedPromoCode,
+    handleAddToCart,
+    handleBuyNow,
+    handleUpdateCartQuantity,
+    handleRemoveCartItem,
+    handleClearCart,
+  } = useCartStore({
+    initialPromoCode: initialNavRef.current!.appliedPromoCode,
+    onTrackCartAdd: trackCartAdd,
+    onTrackBuyNow: trackBuyNow,
+    onOpenCart: () => setIsCartOpen(true),
+  });
+
+  const {
+    notifications,
+    visibleNotifications,
+    unreadNotificationsCount,
+    addNotification,
+    handleMarkNotificationAsRead,
+    handleMarkAllNotificationsAsRead,
+    handleClearAllNotifications,
+  } = useNotificationsStore(Boolean(firebaseUser));
+
+  const {
+    posts,
+    mergeServerPosts,
+    handleCreatePost,
+    handleReactToPost,
+    handleAddComment,
+  } = useSocialFeedStore({
+    currentUser,
+    onPostCreated: () => {
+      addNotification(
+        'social',
+        'Post Published 💬',
+        'Your update was shared with the PaikarMart community feed.',
+        'feed',
+        currentUser.avatar
+      );
+    },
   });
 
   useEffect(() => {
@@ -210,11 +235,7 @@ function AppInner() {
     return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
   }, []);
 
-  // Core Data States (hydrated from localStorage or mock defaults)
-  const [posts, setPosts] = useState<SocialPost[]>(() => 
-    loadStoredData('POSTS', INITIAL_POSTS)
-  );
-
+  // Catalog state hydrated from backend Supabase API
   const [commerceItems, setCommerceItems] = useState<CommerceItem[]>([]);
   const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(true);
   const [isFeedLoading, setIsFeedLoading] = useState<boolean>(true);
@@ -237,27 +258,13 @@ function AppInner() {
         setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
       } else {
         if (catalogResult.products.length === 0) {
-          try {
-            localStorage.removeItem('nexsphere_commerce_v1');
-          } catch {
-            // Ignore storage access errors
-          }
+          clearStoredData('COMMERCE');
         }
         setCommerceItems(catalogResult.products);
       }
 
       if (feedResult.posts.length > 0) {
-        setPosts((prev) => {
-          const seenIds = new Set<string>();
-          const merged: SocialPost[] = [];
-          for (const post of [...feedResult.posts, ...prev]) {
-            if (!seenIds.has(post.id)) {
-              seenIds.add(post.id);
-              merged.push(post);
-            }
-          }
-          return merged;
-        });
+        mergeServerPosts(feedResult.posts);
       }
     } finally {
       if (!signal?.aborted) {
@@ -265,7 +272,7 @@ function AppInner() {
         setIsFeedLoading(false);
       }
     }
-  }, []);
+  }, [mergeServerPosts]);
 
   // Supabase is the authoritative product catalog & live feed source.
   useEffect(() => {
@@ -318,8 +325,6 @@ function AppInner() {
     }
   }, [pullDistance, triggerPullRefresh]);
 
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => loadPersistedCart());
-  
   const [orders, setOrders] = useState<Order[]>(() => 
     loadStoredData('ORDERS', INITIAL_ORDERS)
   );
@@ -327,15 +332,6 @@ function AppInner() {
   const [bookings, setBookings] = useState<ServiceBooking[]>(() => 
     loadStoredData('BOOKINGS', [])
   );
-
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => 
-    loadStoredData('NOTIFICATIONS', INITIAL_NOTIFICATIONS)
-  );
-
-  // Sync to local storage
-  useEffect(() => {
-    saveStoredData('POSTS', posts);
-  }, [posts]);
 
   useEffect(() => {
     if (commerceItems.length > 0) {
@@ -354,18 +350,6 @@ function AppInner() {
   useEffect(() => {
     saveStoredData('USER', currentUser);
   }, [currentUser]);
-
-  useEffect(() => {
-    saveStoredData('NOTIFICATIONS', notifications);
-  }, [notifications]);
-
-  // Persist guest & session cart contents across page reloads
-  useEffect(() => {
-    savePersistedCart(cartItems);
-  }, [cartItems]);
-
-  // Sync cart changes across open browser tabs
-  useGuestCartTabSync(setCartItems);
 
   // Persist local navigation path, active portal filters, and search/promo state
   useEffect(() => {
@@ -393,238 +377,6 @@ function AppInner() {
     activeCommerceChildPortalId,
     initialSettingsSection,
   ]);
-
-  // Sync persistent notifications from backend PostgreSQL when authenticated
-  useEffect(() => {
-    if (!firebaseUser) return;
-    let active = true;
-    fetchUserNotificationsApi().then((serverNotifs) => {
-      if (!active || !serverNotifs || serverNotifs.length === 0) return;
-      setNotifications(serverNotifs);
-    });
-    return () => {
-      active = false;
-    };
-  }, [firebaseUser]);
-
-  // Scope visible notifications: guests are limited to up to 3 public system notices
-  const visibleNotifications = React.useMemo(() => {
-    if (!isGuestUser) return notifications;
-    return notifications.filter((n) => n.type === 'system').slice(0, 3);
-  }, [notifications, isGuestUser]);
-
-  const unreadNotificationsCount = React.useMemo(
-    () => visibleNotifications.filter((n) => !n.read).length,
-    [visibleNotifications]
-  );
-
-  // Notification Handlers & Helpers
-  const addNotification = (
-    type: AppNotification['type'],
-    title: string,
-    message: string,
-    actionTab?: PortalTab,
-    avatar?: string
-  ) => {
-    // Guests cannot receive or accumulate private order, booking, wallet, or social notifications
-    if (isGuestUser && type !== 'system') {
-      return;
-    }
-    const optimisticId = `notif_${Date.now()}`;
-    const newNotif: AppNotification = {
-      id: optimisticId,
-      type,
-      title,
-      message,
-      timestamp: 'Just now',
-      read: false,
-      actionTab,
-      avatar
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-
-    if (!isGuestUser) {
-      void createUserNotificationApi({ type, title, message, actionTab, avatar }).then((saved) => {
-        if (saved && saved.id) {
-          setNotifications((prev) =>
-            prev.map((item) => (item.id === optimisticId ? saved : item))
-          );
-        }
-      });
-    }
-  };
-
-  const handleMarkNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    if (!isGuestUser) {
-      void markNotificationReadApi(id);
-    }
-  };
-
-  const handleMarkAllNotificationsAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    if (!isGuestUser) {
-      void markAllNotificationsReadApi();
-    }
-  };
-
-  const handleClearAllNotifications = () => {
-    setNotifications([]);
-    if (!isGuestUser) {
-      void clearUserNotificationsApi();
-    }
-  };
-
-  // Handlers for Social Feed
-  const handleCreatePost = (
-    content: string,
-    taggedProduct?: TaggedProduct,
-    mediaUrl?: string,
-    postType: PostType = 'regular',
-    citizenCategory: CitizenPostCategory = 'general',
-    aiSafetyVerified: boolean = true,
-    aiRiskAssessment: 'safe' | 'low_risk' | 'high_risk_flagged' = 'safe'
-  ) => {
-    const newPost: SocialPost = {
-      id: `post_${Date.now()}`,
-      authorId: currentUser.id,
-      authorName: currentUser.name,
-      authorHandle: currentUser.handle,
-      authorAvatar: currentUser.avatar,
-      authorVerified: currentUser.isVendor || currentUser.personalVerification?.status === 'verified',
-      timestamp: 'Just now',
-      content,
-      mediaUrl,
-      postType,
-      citizenCategory,
-      aiSafetyVerified,
-      aiRiskAssessment,
-      taggedProduct,
-      reactionsCount: { like: 0, love: 0, care: 0 },
-      sharesCount: 0,
-      comments: []
-    };
-
-    setPosts([newPost, ...posts]);
-    addNotification(
-      'social',
-      'Post Published 💬',
-      'Your update was shared with the PaikarMart community feed.',
-      'feed',
-      currentUser.avatar
-    );
-  };
-
-  const handleReactToPost = (postId: string, reaction: ReactionType) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-
-      const currentRx = p.userReaction;
-      const isSame = currentRx === reaction;
-      const nextRx = isSame ? undefined : reaction;
-
-      const counts = { ...p.reactionsCount };
-      if (currentRx && counts[currentRx as keyof typeof counts] !== undefined) {
-        counts[currentRx as keyof typeof counts] = Math.max(0, counts[currentRx as keyof typeof counts] - 1);
-      }
-      if (nextRx && counts[nextRx as keyof typeof counts] !== undefined) {
-        counts[nextRx as keyof typeof counts] = counts[nextRx as keyof typeof counts] + 1;
-      }
-
-      return {
-        ...p,
-        userReaction: nextRx,
-        reactionsCount: counts
-      };
-    }));
-  };
-
-  const handleAddComment = (postId: string, commentText: string) => {
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-
-      const newComment = {
-        id: `c_${Date.now()}`,
-        authorName: currentUser.name,
-        authorAvatar: currentUser.avatar,
-        content: commentText,
-        timestamp: 'Just now',
-        likes: 0
-      };
-
-      return {
-        ...p,
-        comments: [...p.comments, newComment]
-      };
-    }));
-  };
-
-  // Cart & Commerce Handlers
-  const handleAddToCart = (
-    product: CommerceItem, 
-    quantity = 1, 
-    isWholesale = false, 
-    specialInstructions?: string
-  ) => {
-    trackCartAdd(product, quantity, isWholesale);
-    setCartItems(prev => {
-      const existing = prev.find(i => i.product.id === product.id && i.isWholesale === isWholesale);
-      if (existing) {
-        return prev.map(i => 
-          i.product.id === product.id && i.isWholesale === isWholesale
-            ? { ...i, quantity: i.quantity + quantity, specialInstructions: specialInstructions || i.specialInstructions }
-            : i
-        );
-      }
-      return [...prev, { product, quantity, isWholesale, specialInstructions }];
-    });
-  };
-
-  const handleBuyNow = (
-    product: CommerceItem,
-    quantity = 1,
-    isWholesale = false,
-    specialInstructions?: string
-  ) => {
-    trackBuyNow(product, quantity, isWholesale);
-    handleAddToCart(product, quantity, isWholesale, specialInstructions);
-    setIsCartOpen(true);
-  };
-
-  const handleUpdateCartQuantity = (productId: string, quantity: number) => {
-    setCartItems(prev => {
-      const item = prev.find(i => i.product.id === productId);
-      if (!item) return prev;
-
-      if (quantity <= 0) {
-        return prev.filter(i => i.product.id !== productId);
-      }
-
-      // Respect MOQ for wholesale
-      if (item.isWholesale) {
-        const moq = item.product.minWholesaleQty || 20;
-        if (quantity < moq) {
-          // If trying to go below MOQ via decrement, we remove it? 
-          // Or just snap to MOQ. Let's snap to MOQ for now, 
-          // and let the user use the trash icon to remove.
-          quantity = moq;
-        }
-      }
-
-      return prev.map(i => 
-        i.product.id === productId ? { ...i, quantity } : i
-      );
-    });
-  };
-
-  const handleRemoveCartItem = (productId: string) => {
-    setCartItems(prev => prev.filter(i => i.product.id !== productId));
-  };
-
-  const handleClearCart = () => {
-    setCartItems([]);
-    setAppliedPromoCode('');
-  };
 
   const handleOrderPlaced = (newOrder: Order) => {
     setOrders([newOrder, ...orders]);
@@ -705,14 +457,24 @@ function AppInner() {
     setCurrentTab('feed');
   };
 
-  // Balance deduction for Creator Hub tips/unlocks
+  // Wallet deductions must be verified by server escrow/gateway webhooks rather than optimistic client subtraction.
   const handleDeductBalance = (amount: number): boolean => {
-    void amount;
+    if (isGuestUser) {
+      addNotification(
+        'system',
+        'Sign in required',
+        `Please sign in to pay ৳${amount.toLocaleString()} via Wallet or Escrow.`,
+        'wallet'
+      );
+      handleOpenAuthModal('login');
+      return false;
+    }
+    setIsWalletOpen(true);
     addNotification(
       'system',
-      'Payments unavailable',
-      'Wallet payments are paused until the secure payment service is configured.',
-      'feed'
+      'Use Verified Wallet & Escrow',
+      `Instant wallet deductions require verified Escrow/Gateway checkout (৳${amount.toLocaleString()}).`,
+      'wallet'
     );
     return false;
   };
@@ -778,7 +540,7 @@ function AppInner() {
         onOpenSidebar={() => setIsSidebarOpen(true)}
         onOpenVendorModal={() => setIsVendorModalOpen(true)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
-        cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+        cartCount={cartCount}
         currentUser={currentUser}
         isDarkMode={isDark}
         onToggleDarkMode={toggleTheme}
@@ -811,7 +573,7 @@ function AppInner() {
             onOpenSettingsPortal={handleOpenSettingsPortal}
             onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
             onOpenCart={() => setIsCartOpen(true)}
-            cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+            cartCount={cartCount}
             unreadNotificationsCount={unreadNotificationsCount}
             onOpenLocationModal={() => setIsLocationModalOpen(true)}
             onOpenAuthModal={handleOpenAuthModal}
@@ -1016,7 +778,7 @@ function AppInner() {
         onSelectTab={setCurrentTab}
         onOpenHub={() => setCurrentTab('explore')}
         onOpenCart={() => setIsCartOpen(true)}
-        cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+        cartCount={cartCount}
         currentUser={currentUser}
       />
 
@@ -1071,7 +833,7 @@ function AppInner() {
         onOpenSettingsPortal={handleOpenSettingsPortal}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
         onOpenCart={() => setIsCartOpen(true)}
-        cartCount={cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+        cartCount={cartCount}
         unreadNotificationsCount={unreadNotificationsCount}
         onOpenLocationModal={() => setIsLocationModalOpen(true)}
         onOpenAuthModal={handleOpenAuthModal}

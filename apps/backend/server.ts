@@ -28,12 +28,14 @@ import { paymentRouter } from './modules/payment/paymentRoutes.js';
 import rfqRouter from './modules/rfq/rfqRoutes.js';
 import identityRouter from './modules/identity/identityRoutes.js';
 import storageRouter from './modules/storage/storageRoutes.js';
+import { socialRouter } from './modules/social/socialRoutes.js';
 import { requireFirebaseAuth, resolveFirebaseProjectId } from './middleware/requireFirebaseAuth.js';
 import { aiRateLimiter, authRateLimiter, generalRateLimiter } from './middleware/rateLimit.js';
 import { sanitizeApiInputs } from './middleware/sanitize.js';
 import { securityHeadersMiddleware } from './middleware/securityHeaders.js';
 import { auditMiddleware } from './middleware/audit.js';
-import { checkDatabaseConnection, getStoredFeedPosts, insertStoredPost, supabaseAdmin } from './services/dbService.js';
+import { checkDatabaseConnection, supabaseAdmin } from './services/dbService.js';
+import { logger } from './services/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,20 +148,8 @@ app.use('/api/v1/forecasting', rfqRouter);
 app.use('/api/v1/identity', identityRouter);
 app.use('/api/v1/verifications', identityRouter);
 app.use('/api/v1/storage', storageRouter);
-
-// In-memory fallback data store for offline or pre-configured dev environments
-let serverPosts = [
-  {
-    id: 'post_srv_1',
-    authorName: 'PaikarMart System',
-    authorAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=150&h=150&q=80',
-    timestamp: 'Just now',
-    content: 'Welcome to PaikarMart Social Commerce Super App! Powered by Vercel Frontend, Express API on Render, Supabase PostgreSQL, and Firebase Auth.',
-    reactionsCount: { like: 12, love: 5, care: 2 },
-    sharesCount: 1,
-    comments: []
-  }
-];
+app.use('/api/feed', socialRouter);
+app.use('/api/v1/feed', socialRouter);
 
 // REST API Endpoints
 const handleHealthCheck = async (_req: Request, res: Response) => {
@@ -185,36 +175,6 @@ const handleHealthCheck = async (_req: Request, res: Response) => {
 };
 
 app.get(['/api/health', '/api/v1/health'], handleHealthCheck);
-
-app.get(['/api/feed', '/api/v1/feed'], async (_req: Request, res: Response) => {
-  const posts = await getStoredFeedPosts(serverPosts);
-  res.json({ posts });
-});
-
-app.post(['/api/feed/post', '/api/v1/feed/post'], requireFirebaseAuth, async (req: Request, res: Response) => {
-  const content = String(req.body?.content || '').trim().slice(0, 2000);
-  if (!content && !req.body?.mediaUrl && !req.body?.taggedProduct) {
-    res.status(400).json({ error: 'Post content or media is required.' });
-    return;
-  }
-
-  const newPost = {
-    id: `post_${Date.now()}`,
-    authorId: res.locals.auth.uid,
-    authorName: String(req.body?.authorName || 'PaikarMart Member').slice(0, 100),
-    authorAvatar: typeof req.body?.authorAvatar === 'string' ? req.body.authorAvatar.slice(0, 512) : undefined,
-    content,
-    mediaUrl: typeof req.body?.mediaUrl === 'string' ? req.body.mediaUrl.slice(0, 512) : undefined,
-    timestamp: 'Just now',
-    reactionsCount: { like: 0, love: 0, care: 0 },
-    sharesCount: 0,
-    comments: [],
-  };
-
-  await insertStoredPost(newPost);
-  serverPosts.unshift(newPost);
-  res.status(201).json({ success: true, post: newPost });
-});
 
 // Gemini AI Master Catalog Verification Endpoint
 app.post(['/api/catalog/verify-product', '/api/v1/catalog/verify-product'], requireFirebaseAuth, async (req: Request, res: Response) => {
@@ -277,7 +237,11 @@ Respond ONLY in valid JSON format:
       return;
     }
   } catch (err) {
-    console.error('Gemini AI Verification fallback:', err);
+    logger.error('Gemini AI Verification fallback', {
+      module: 'catalog',
+      action: 'verify-product',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   // Fail-Safe security fallback: when AI audit is unavailable or network is restricted,
@@ -365,7 +329,7 @@ async function startServer() {
   }
 
   app.listen(PORT, () => {
-    console.log(`PaikarMart Super App Server running on port ${PORT}`);
+    logger.info('PaikarMart Super App Server started', { module: 'server', port: PORT });
   });
 }
 

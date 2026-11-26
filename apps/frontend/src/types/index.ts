@@ -204,6 +204,17 @@ export interface User {
   transactions?: WalletTransaction[];
   savedAddresses?: SavedAddress[];
   paymentMethods?: PaymentMethodItem[];
+  profileType?: 'personal' | 'organization' | 'business_page';
+}
+
+export interface PaikarMartDelegate {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  addedAt: string;
+  addedBy: string;
+  status: 'active' | 'invited';
 }
 
 export type ReactionType = 'like' | 'love' | 'care' | 'haha' | 'wow' | 'sad';

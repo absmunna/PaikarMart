@@ -1,4 +1,4 @@
-import { auth } from '@/lib/firebase';
+import { apiRequest } from '@/shared/services/apiClient';
 
 export interface RetailVoucher {
   code: string;
@@ -82,25 +82,11 @@ export interface PrescriptionRecord {
   createdAt: string;
 }
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || '';
-
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  const res = await fetch(`${API_BASE}${url}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
-    },
+  return await apiRequest<T>(url, {
     ...init,
+    json: true,
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const errMsg = data?.message || data?.error || `Request failed (${res.status})`;
-    throw new Error(errMsg);
-  }
-  return data as T;
 }
 
 export const retailApiClient = {

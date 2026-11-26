@@ -41,6 +41,7 @@ import {
   Home,
 } from 'lucide-react';
 import type { PortalTab } from '@/types';
+import type { BusinessCategoryId } from '@/hubs/shared/hubTypes';
 
 export type HubPillarId =
   | 'commerce-hub'
@@ -61,6 +62,7 @@ export interface PortalHubPillar {
 export interface SuperPortalEntry {
   id: string;
   hubId: HubPillarId;
+  businessCategory: BusinessCategoryId;
   nameEn: string;
   nameBn: string;
   realWorldModel: string;
@@ -115,6 +117,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'pk-shop',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'PK Verified Store',
     nameBn: 'পিকে স্টোর',
     realWorldModel: 'Verified Mall',
@@ -127,6 +130,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'marketplace',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'Marketplace Hub',
     nameBn: 'মার্কেটপ্লেস হাব',
     realWorldModel: 'Retail & Mixed Feed',
@@ -138,6 +142,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'wholesale-main',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'Wholesale Hub',
     nameBn: 'হোলসেল হাব',
     realWorldModel: 'Chawkbazar B2B',
@@ -149,6 +154,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'b2b',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'B2B Bulk Trade',
     nameBn: 'পাইকার ট্রেড',
     realWorldModel: 'Alibaba / MOQ',
@@ -159,6 +165,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'factory',
     hubId: 'commerce-hub',
+    businessCategory: 'business',
     nameEn: 'Factory Direct',
     nameBn: 'ফ্যাক্টরি ডাইরেক্ট',
     realWorldModel: 'Direct Mill',
@@ -170,6 +177,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'fashion',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'Fashion & Textile',
     nameBn: 'ফ্যাশন ও পোশাক',
     realWorldModel: 'Islampur / Garments',
@@ -181,6 +189,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'brand-shops',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'Brand Shops',
     nameBn: 'ব্র্যান্ড শপ',
     realWorldModel: 'Official Flagship',
@@ -192,6 +201,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'export',
     hubId: 'commerce-hub',
+    businessCategory: 'commerce',
     nameEn: 'Export & Import',
     nameBn: 'এক্সপোর্ট হাব',
     realWorldModel: 'Global Sourcing',
@@ -202,6 +212,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'digital',
     hubId: 'commerce-hub',
+    businessCategory: 'digital',
     nameEn: 'Digital Goods',
     nameBn: 'ডিজিটাল পণ্য',
     realWorldModel: 'Tech & Gadgets',
@@ -215,6 +226,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'nearby',
     hubId: 'services-logistics-hub',
+    businessCategory: 'commerce',
     nameEn: 'Nearby Radar Shops',
     nameBn: 'লোকাল শপ রাডার',
     realWorldModel: 'Live GPS Hyperlocal Radar',
@@ -227,6 +239,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'food',
     hubId: 'services-logistics-hub',
+    businessCategory: 'services',
     nameEn: 'Food Delivery',
     nameBn: 'ফুড ডেলিভারি',
     realWorldModel: 'Kitchens & Cafes',
@@ -238,6 +251,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'grocery',
     hubId: 'services-logistics-hub',
+    businessCategory: 'commerce',
     nameEn: 'Daily Grocery',
     nameBn: 'নিত্যপণ্য ও গ্রোসারি',
     realWorldModel: 'Chaldal / Bazar',
@@ -250,6 +264,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'pharmacy',
     hubId: 'services-logistics-hub',
+    businessCategory: 'commerce',
     nameEn: 'Pharmacy & Rx',
     nameBn: 'ফার্মেসি ও ওষুধ',
     realWorldModel: '24/7 Healthcare',
@@ -261,6 +276,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'services',
     hubId: 'services-logistics-hub',
+    businessCategory: 'services',
     nameEn: 'Services Hub',
     nameBn: 'সার্ভিসেস হাব',
     realWorldModel: 'Repairs & Providers',
@@ -272,6 +288,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'ride',
     hubId: 'services-logistics-hub',
+    businessCategory: 'mobility',
     nameEn: 'Instant Ride',
     nameBn: 'ইনস্ট্যান্ট রাইড',
     realWorldModel: 'Bike, Car & Ambulance',
@@ -283,6 +300,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'logistics',
     hubId: 'services-logistics-hub',
+    businessCategory: 'mobility',
     nameEn: 'Transit & Logistics',
     nameBn: 'ট্রানজিট ও লজিস্টিকস',
     realWorldModel: 'Courier & Waybills',
@@ -293,6 +311,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'transport',
     hubId: 'services-logistics-hub',
+    businessCategory: 'mobility',
     nameEn: 'Intercity Transit',
     nameBn: 'ইন্টারসিটি ট্রান্সপোর্ট',
     realWorldModel: 'Pickup & Vans',
@@ -303,6 +322,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'emergency',
     hubId: 'services-logistics-hub',
+    businessCategory: 'services',
     nameEn: 'Urgent Dispatch',
     nameBn: 'জরুরি সহায়তা',
     realWorldModel: 'Same-Day Express',
@@ -315,6 +335,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'feed',
     hubId: 'community-content-hub',
+    businessCategory: 'community',
     nameEn: 'Social Feed',
     nameBn: 'সোশ্যাল ফিড',
     realWorldModel: 'Community Stream',
@@ -326,6 +347,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'demand',
     hubId: 'community-content-hub',
+    businessCategory: 'community',
     nameEn: 'Demand Board (RFQ)',
     nameBn: 'ডিমান্ড বোর্ড',
     realWorldModel: 'Context-Aware Buyer Requests',
@@ -337,6 +359,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'reels',
     hubId: 'community-content-hub',
+    businessCategory: 'community',
     nameEn: 'Creator Shorts',
     nameBn: 'শর্টস ও রিলস',
     realWorldModel: 'Creator Studio',
@@ -347,6 +370,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'video',
     hubId: 'community-content-hub',
+    businessCategory: 'digital',
     nameEn: 'Video OTT Hub',
     nameBn: 'ভিডিও লাইব্রেরি',
     realWorldModel: 'Creator OTT',
@@ -357,6 +381,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'offer',
     hubId: 'community-content-hub',
+    businessCategory: 'commerce',
     nameEn: 'Voucher & Deals',
     nameBn: 'অফার ও ভাউচার',
     realWorldModel: 'Promo Discounts',
@@ -367,6 +392,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'live',
     hubId: 'community-content-hub',
+    businessCategory: 'community',
     nameEn: 'Live Commerce',
     nameBn: 'লাইভ শপিং',
     realWorldModel: 'Live Streams',
@@ -377,6 +403,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'messages',
     hubId: 'community-content-hub',
+    businessCategory: 'community',
     nameEn: 'Messages & Quotes',
     nameBn: 'মেসেজ ও কোটেশন',
     realWorldModel: 'Direct Seller Chat',
@@ -389,6 +416,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'finance',
     hubId: 'utility-pro-hub',
+    businessCategory: 'business',
     nameEn: 'Wallet & Escrow',
     nameBn: 'ওয়ালেট ও এসক্রো',
     realWorldModel: 'bKash / Escrow Pay',
@@ -400,6 +428,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'orders',
     hubId: 'utility-pro-hub',
+    businessCategory: 'mobility',
     nameEn: 'Orders Hub',
     nameBn: 'অর্ডারস হাব',
     realWorldModel: 'Waybill & Delivery OTP',
@@ -410,6 +439,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'workspace',
     hubId: 'utility-pro-hub',
+    businessCategory: 'business',
     nameEn: 'Seller Central',
     nameBn: 'সেলার সেন্ট্রাল',
     realWorldModel: 'Store Analytics & KYC',
@@ -420,6 +450,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'healthcare',
     hubId: 'utility-pro-hub',
+    businessCategory: 'services',
     nameEn: 'Healthcare & Care',
     nameBn: 'হেলথকেয়ার',
     realWorldModel: 'Medical Services',
@@ -430,6 +461,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'education',
     hubId: 'utility-pro-hub',
+    businessCategory: 'digital',
     nameEn: 'User & Vendor Guide',
     nameBn: 'ব্যবহারকারী ও ভেন্ডর গাইড',
     realWorldModel: 'Platform Handbook',
@@ -440,6 +472,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'dropship',
     hubId: 'utility-pro-hub',
+    businessCategory: 'business',
     nameEn: 'Dropship Supply',
     nameBn: 'ড্রপশিপিং হাব',
     realWorldModel: 'Reseller Network',
@@ -451,6 +484,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'jobs',
     hubId: 'utility-pro-hub',
+    businessCategory: 'services',
     nameEn: 'Technician & Gigs',
     nameBn: 'সার্ভিস ও গিগস',
     realWorldModel: 'Verified Pros',
@@ -461,6 +495,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'agriculture',
     hubId: 'utility-pro-hub',
+    businessCategory: 'commerce',
     nameEn: 'Agro & Harvest',
     nameBn: 'কৃষি ও মোকাম',
     realWorldModel: 'Farm Direct Bulk',
@@ -471,6 +506,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'hotel',
     hubId: 'utility-pro-hub',
+    businessCategory: 'services',
     nameEn: 'Travel & Stays',
     nameBn: 'ট্রাভেল ও স্টে',
     realWorldModel: 'Hotels & Venues',
@@ -481,6 +517,7 @@ export const SUPER_PORTALS: SuperPortalEntry[] = [
   {
     id: 'settings',
     hubId: 'utility-pro-hub',
+    businessCategory: 'business',
     nameEn: 'Settings Center',
     nameBn: 'সেটিংস সেন্টার',
     realWorldModel: 'Themes & GPS',

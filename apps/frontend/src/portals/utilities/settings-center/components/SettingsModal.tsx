@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   X, 
   Palette, 
@@ -11,11 +11,15 @@ import {
   Check, 
   Sparkles,
   ShieldCheck,
-  Cpu
+  Cpu,
+  Users,
+  UserPlus,
+  Shield
 } from 'lucide-react';
 import { useSettings, SettingsTab } from '@/contexts/SettingsContext';
 import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/features/auth';
 import { LocationPreferences } from '@/portals/utilities/settings-center/components/LocationPreferences';
 
 interface SettingsModalProps {
@@ -26,6 +30,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onOpenLocationModa
   const { isSettingsOpen, closeSettings, activeSettingsTab, setActiveSettingsTab } = useSettings();
   const { themeMode, setThemeMode } = useTheme();
   const { language, setLanguage, t } = useLanguage();
+  const isBn = language === 'bn';
+  const { 
+    hasPaikarMartAccess, 
+    paikarMartDelegates, 
+    grantPaikarMartAccess, 
+    revokePaikarMartAccess 
+  } = useAuth();
+
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
+  const [teamMsg, setTeamMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -40,10 +56,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onOpenLocationModa
 
   if (!isSettingsOpen) return null;
 
+  const handleInviteDelegate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
+      setTeamMsg({ type: 'error', text: isBn ? 'সঠিক ইমেইল ঠিকানা দিন।' : 'Please enter a valid email address.' });
+      return;
+    }
+    try {
+      const roleToGrant = inviteRole === 'admin' ? 'admin' : inviteRole === 'editor' ? 'moderator' : 'consumer';
+      await grantPaikarMartAccess(inviteEmail, inviteName, roleToGrant as any);
+      setTeamMsg({ type: 'success', text: isBn ? 'সফলভাবে টিম মেম্বার যুক্ত হয়েছে।' : `Successfully invited ${inviteEmail} as ${inviteRole.toUpperCase()}.` });
+      setInviteEmail('');
+      setInviteName('');
+      setTimeout(() => setTeamMsg(null), 4000);
+    } catch (err: any) {
+      setTeamMsg({ type: 'error', text: err?.message || 'Failed to grant access.' });
+    }
+  };
+
   const tabs: { id: SettingsTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'appearance', label: t.settings.tabs.appearance, icon: Palette },
     { id: 'language', label: t.settings.tabs.language, icon: Languages },
     { id: 'location', label: t.settings.tabs.location, icon: MapPin },
+    { id: 'team_access', label: isBn ? 'টিম অ্যাক্সেস' : 'Team Access', icon: Users },
     { id: 'about', label: t.settings.tabs.about, icon: Info },
   ];
 
@@ -327,7 +362,124 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onOpenLocationModa
             </div>
           )}
 
-          {/* TAB 4: ABOUT APP */}
+          {/* TAB 4: TEAM ACCESS (Facebook Pages style) */}
+          {activeSettingsTab === 'team_access' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--pm-text)]">
+                  {isBn ? 'পাইকারমার্ট টিম ও পেজ অ্যাক্সেস' : 'PaikarMart Team & Page Access'}
+                </h4>
+                <p className="text-xs text-[var(--pm-muted)]">
+                  {isBn 
+                    ? 'ফেসবুক পেজ ম্যানেজমেন্টের মতো আপনার অর্গানাইজেশন প্রোফাইল পরিচালনার জন্য অন্য ব্যবহারকারীদের অ্যাডমিন, এডিটর বা ভিউয়ার হিসেবে যুক্ত করুন।' 
+                    : 'Manage who has access to your PaikarMart organization profile and what they can control, mirroring Facebook Page roles.'}
+                </p>
+              </div>
+
+              {!hasPaikarMartAccess ? (
+                <div className="p-6 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-center space-y-2">
+                  <Shield className="w-8 h-8 text-amber-500 mx-auto" />
+                  <h5 className="text-xs font-bold text-[var(--pm-text)]">
+                    {isBn ? 'সুপার অ্যাডমিন অ্যাক্সেস প্রয়োজন' : 'Super Admin Access Required'}
+                  </h5>
+                  <p className="text-[11px] text-[var(--pm-muted)]">
+                    {isBn ? 'টিম মেম্বার পরিচালনা করতে আপনার অ্যাকাউন্টকে পাইকারমার্ট সুপার অ্যাডমিন মোডে থাকতে হবে।' : 'Switch to PaikarMart Super Admin mode to manage team roles and delegates.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {teamMsg && (
+                    <div className={`p-3 rounded-xl text-xs font-bold ${teamMsg.type === 'success' ? 'bg-[var(--pm-success-soft)] text-[var(--pm-success)]' : 'bg-[var(--pm-danger-soft)] text-[var(--pm-danger)]'}`}>
+                      {teamMsg.text}
+                    </div>
+                  )}
+
+                  {/* Invite Form */}
+                  <form onSubmit={handleInviteDelegate} className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-3">
+                    <h5 className="text-xs font-bold text-[var(--pm-text)] flex items-center gap-1.5">
+                      <UserPlus className="w-4 h-4 text-[var(--pm-accent)]" />
+                      <span>{isBn ? 'নতুন টিম মেম্বার বা পেজ রোল যুক্ত করুন' : 'Assign New Page Role / Invite Member'}</span>
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <input
+                        type="text"
+                        placeholder={isBn ? 'সদস্যের নাম (ঐচ্ছিক)' : 'Member Name'}
+                        value={inviteName}
+                        onChange={(e) => setInviteName(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs text-[var(--pm-text)] outline-none focus:border-[var(--pm-accent)]"
+                      />
+                      <input
+                        type="email"
+                        required
+                        placeholder="user@gmail.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs text-[var(--pm-text)] outline-none focus:border-[var(--pm-accent)]"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[var(--pm-muted)]">{isBn ? 'রোল:' : 'Role:'}</span>
+                        <select
+                          value={inviteRole}
+                          onChange={(e) => setInviteRole(e.target.value as any)}
+                          className="px-3 py-1.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-bold text-[var(--pm-text)] outline-none focus:border-[var(--pm-accent)]"
+                        >
+                          <option value="admin">{isBn ? 'অ্যাডমিন (Admin - Full Control)' : 'Admin (Full Control)'}</option>
+                          <option value="editor">{isBn ? 'এডিটর (Editor - Content & Products)' : 'Editor (Content & Products)'}</option>
+                          <option value="viewer">{isBn ? 'ভিউয়ার (Viewer - Read Only)' : 'Viewer (Read Only)'}</option>
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>{isBn ? 'ইনভাইট পাঠান' : 'Grant Access'}</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Delegates List */}
+                  <div className="space-y-2">
+                    <h5 className="text-xs font-bold text-[var(--pm-muted)] flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5" />
+                      <span>{isBn ? `অ্যাক্সেসপ্রাপ্ত টিম মেম্বার (${paikarMartDelegates.length})` : `Existing Team Members (${paikarMartDelegates.length})`}</span>
+                    </h5>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {paikarMartDelegates.map((del) => (
+                        <div key={del.id} className="p-3 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-[var(--pm-text)] truncate">{del.name}</p>
+                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] uppercase">
+                                {del.role}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-[var(--pm-muted)] font-mono truncate">
+                              {del.email} · Added by {del.addedBy} on {del.addedAt}
+                            </p>
+                          </div>
+                          {del.email !== 'abs.munna1@gmail.com' && (
+                            <button
+                              type="button"
+                              onClick={() => void revokePaikarMartAccess(del.email)}
+                              className="px-2.5 py-1 rounded-lg bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] text-[11px] font-bold shrink-0 hover:opacity-80 cursor-pointer"
+                              title="Revoke access"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: ABOUT APP */}
           {activeSettingsTab === 'about' && (
             <div className="space-y-4 animate-fadeIn">
               <div className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-3">

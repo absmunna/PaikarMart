@@ -640,8 +640,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
         <AccountConversionPopup
           isOpen={showConversion}
           onClose={() => setShowConversion(false)}
-          onConvert={(pwd) => {
-            console.log('Account converted successfully for:', guestData?.email || guestData?.phone);
+          onConvert={() => {
             setGuestData(null);
           }}
           guestEmail={guestData?.email}

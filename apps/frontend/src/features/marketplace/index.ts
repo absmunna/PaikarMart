@@ -14,6 +14,7 @@ export * from './components/ProductEngagementSection';
 export * from './components/ProductComparisonModal';
 export * from './hooks/useProductComparison';
 export * from './hooks/useWishlist';
+export * from './hooks/useCartStore';
 export * from './services/retailApiClient';
 export * from './services/catalogApiClient';
 export * from './services/masterCatalogFallback';

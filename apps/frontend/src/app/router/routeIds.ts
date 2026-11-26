@@ -1,35 +1,7 @@
 import type { PortalTab } from '@/types';
+import { ROUTE_PATHS } from '@/shared/constants/routes';
 
-export const ROUTE_PATHS = {
-  ROOT: '/',
-  SOCIAL: '/portal/social',
-  EXPLORE: '/portal/explore',
-  MARKETPLACE_HUB: '/hub/marketplace',
-  MARKETPLACE_LEGACY: '/portal/marketplace',
-  PRODUCT_DETAILS: '/hub/marketplace/product/:id',
-  PRODUCT_DETAILS_LEGACY: '/portal/marketplace/product/:id',
-  WHOLESALE: '/portal/wholesale',
-  SERVICES_HUB: '/hub/services',
-  SERVICES_LEGACY: '/portal/services',
-  TRANSIT: '/portal/transit',
-  CREATOR: '/portal/creator',
-  COMMUNITY_HUB: '/hub/community',
-  UTILITY_HUB: '/hub/utility',
-  SELLER: '/portal/seller',
-  SELLER_INVENTORY: '/portal/seller/inventory',
-  PUBLIC_HANDLE: '/u/:handle',
-  PUBLIC_STORE: '/store/:storeId',
-  PROFILE: '/portal/profile',
-  NOTIFICATIONS: '/portal/notifications',
-  ORDERS: '/portal/orders',
-  WALLET: '/portal/wallet',
-  MESSAGES: '/portal/messages',
-  GUIDE: '/portal/guide',
-  DEMAND: '/portal/demand',
-  NEARBY: '/portal/nearby',
-  WISHLIST: '/portal/wishlist',
-  SETTINGS: '/settings',
-} as const;
+export { ROUTE_PATHS };
 
 export const PORTAL_TAB_ROUTES: Record<PortalTab, string> = {
   feed: ROUTE_PATHS.SOCIAL,

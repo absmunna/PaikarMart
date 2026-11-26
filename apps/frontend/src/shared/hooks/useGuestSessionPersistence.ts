@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { CartItem, SettingsSectionId } from '@/types';
 import type { PortalFilterType } from '@/features/marketplace';
-import { ROUTE_PATHS } from '@/app/router/routeIds';
+import { PUBLIC_RESTORABLE_PREFIXES, ROUTE_PATHS } from '@/shared/constants/routes';
 
 export const GUEST_CART_STORAGE_KEY = 'paikarmart_guest_cart_v1';
 export const GUEST_NAV_STORAGE_KEY = 'paikarmart_guest_nav_v1';
@@ -43,24 +43,7 @@ const VALID_SETTINGS_SECTIONS: ReadonlySet<SettingsSectionId> = new Set([
   'vendor_hours',
 ]);
 
-const PUBLIC_RESTORABLE_PREFIXES = [
-  ROUTE_PATHS.SOCIAL,
-  ROUTE_PATHS.EXPLORE,
-  ROUTE_PATHS.MARKETPLACE_HUB,
-  '/hub/marketplace/product/',
-  ROUTE_PATHS.WHOLESALE,
-  ROUTE_PATHS.SERVICES_HUB,
-  ROUTE_PATHS.TRANSIT,
-  ROUTE_PATHS.CREATOR,
-  ROUTE_PATHS.COMMUNITY_HUB,
-  ROUTE_PATHS.UTILITY_HUB,
-  ROUTE_PATHS.DEMAND,
-  ROUTE_PATHS.NEARBY,
-  ROUTE_PATHS.WISHLIST,
-  ROUTE_PATHS.GUIDE,
-  '/u/',
-  '/store/',
-];
+// PUBLIC_RESTORABLE_PREFIXES imported from @/shared/constants/routes
 
 export interface PersistedNavigationState {
   lastPath: string;

@@ -3,8 +3,7 @@ import { User, Camera, Mail, Phone, MapPin, AtSign, Check, Sparkles, GraduationC
 import { User as UserType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CURRENT_USER } from '@/data/mockData';
-import { promoteToCreatorApi, promoteToSellerApi, syncAuthenticatedProfile, useAuth } from '@/features/auth';
-import { updateUserProfileToFirestore, updateProfile as updateFirebaseProfile } from '@/lib/firebase';
+import { promoteToCreatorApi, promoteToSellerApi, syncAuthenticatedProfile, updateFirebaseIdentityProfile, useAuth } from '@/features/auth';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 import { PersonalVerificationModal } from '../PersonalVerificationModal';
 
@@ -18,7 +17,14 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
   onUpdateUser = () => {},
 }) => {
   const { language } = useLanguage();
-  const { firebaseUser, refetchProfile } = useAuth();
+  const { 
+    firebaseUser, 
+    refetchProfile, 
+    activeProfileMode, 
+    hasPaikarMartAccess, 
+    switchProfileMode, 
+    personalUser 
+  } = useAuth();
   const [name, setName] = useState(currentUser.name);
   const [handle, setHandle] = useState(currentUser.handle || '@alexrivera');
   const [email] = useState(currentUser.email || '');
@@ -57,17 +63,13 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
     try {
       await syncAuthenticatedProfile({ name, handle, location, phone });
       if (firebaseUser) {
-        await updateFirebaseProfile(firebaseUser, { displayName: name }).catch(() => {});
-        await updateUserProfileToFirestore({
-          id: firebaseUser.uid,
-          email: firebaseUser.email || email,
+        await updateFirebaseIdentityProfile({
           name,
           handle,
           role: currentUser.role,
           avatar: currentUser.avatar,
           location,
-          emailVerified: firebaseUser.emailVerified,
-        }).catch((err) => console.warn('Firestore user profile sync warning:', err));
+        });
         await refetchProfile().catch(() => {});
       }
     } catch (error) {
@@ -223,6 +225,42 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             : 'Manage your public name, username handle, contact email, and bio'}
         </p>
       </div>
+
+      {/* Facebook Page-style Context Switching Banner */}
+      {hasPaikarMartAccess && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-600/10 via-indigo-600/15 to-blue-600/10 border border-purple-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white font-black flex items-center justify-center shrink-0 shadow-md">
+              🏢
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-black text-[var(--pm-text)]">
+                  {isBn ? 'পাইকারমার্ট সুপার অ্যাডমিন অর্গানাইজেশন প্রোফাইল' : 'PaikarMart Organization & Super Admin Profile'}
+                </p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300">
+                  {activeProfileMode === 'paikarmart' ? (isBn ? 'সক্রিয় মোড' : 'Active Mode') : (isBn ? 'অ্যাডমিন অ্যাক্সেস উপলব্ধ' : 'Access Available')}
+                </span>
+              </div>
+              <p className="text-[11px] text-[var(--pm-muted)] mt-0.5">
+                {isBn 
+                  ? 'ফেসবুক পেজ সুইচিং সিস্টেমের মতো আপনার ব্যক্তিগত অ্যাকাউন্ট থেকে পাইকারমার্ট সুপার অ্যাডমিন মোডে সুইচ করুন।'
+                  : 'Just like Facebook Page switching, seamlessly toggle between your personal profile and the PaikarMart organization profile.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const nextMode = activeProfileMode === 'personal' ? 'paikarmart' : 'personal';
+              switchProfileMode(nextMode);
+            }}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shrink-0 transition-all cursor-pointer shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+          >
+            <span>{activeProfileMode === 'paikarmart' ? `👤 Switch to ${personalUser.name.split(' ')[0]} (Personal)` : '🏢 Switch to PaikarMart (Admin)'}</span>
+          </button>
+        </div>
+      )}
 
       {savedSuccess && (
         <div className="p-3.5 rounded-2xl bg-[var(--pm-success-soft)] border border-[var(--pm-success)]/30 text-[var(--pm-success)] text-xs font-bold flex items-center gap-2 animate-fadeIn">
