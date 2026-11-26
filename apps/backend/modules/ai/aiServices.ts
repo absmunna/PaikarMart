@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { ai } from './geminiClient.js';
+import { logger } from '../../services/logger.js';
 
 export interface ChatHistoryMessage {
   role: 'user' | 'model';
@@ -85,7 +86,11 @@ export async function generateChatbotResponse(
       if (response.text) return response.text;
     }
   } catch (err) {
-    console.error('Gemini Chat API call error, using fallback:', err);
+    logger.error('Gemini Chat API call error, using fallback', {
+      module: 'ai',
+      action: 'chat',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   // Smart fallback response based on role & query
@@ -198,7 +203,11 @@ ${transcript || '(No messages yet — user is initiating a new inquiry)'}`;
       };
     }
   } catch (err) {
-    console.error('Gemini Messaging Co-Pilot error, using fallback:', err);
+    logger.error('Gemini Messaging Co-Pilot error, using fallback', {
+      module: 'ai',
+      action: 'copilot',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   // Intelligent contextual fallback when offline or API key absent
@@ -292,7 +301,11 @@ export async function runSearchGrounding(prompt: string) {
       }
     }
   } catch (err) {
-    console.error('Gemini Search Grounding call error, using fallback:', err);
+    logger.error('Gemini Search Grounding call error, using fallback', {
+      module: 'ai',
+      action: 'search-grounding',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   return {
@@ -345,7 +358,11 @@ export async function runMapsGrounding(prompt: string, userLatLng?: { latitude: 
       }
     }
   } catch (err) {
-    console.error('Gemini Maps Grounding call error, using fallback:', err);
+    logger.error('Gemini Maps Grounding call error, using fallback', {
+      module: 'ai',
+      action: 'maps-grounding',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   return {
@@ -387,7 +404,11 @@ export async function transcribeAudio(base64Audio: string, mimeType: string = 'a
       }
     }
   } catch (err) {
-    console.error('Gemini Audio Transcription call error, using fallback:', err);
+    logger.error('Gemini Audio Transcription call error, using fallback', {
+      module: 'ai',
+      action: 'transcribe',
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   return {

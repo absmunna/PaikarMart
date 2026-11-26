@@ -19,32 +19,40 @@ function financeUnavailable(_req: Request, res: Response) {
 }
 
 escrowRouter.get('/summary', async (_req: Request, res: Response) => {
-  const userId = String(res.locals.auth.uid);
-  const data = await getPersistentEscrowSummary(userId);
-  res.json({ success: true, ...data });
+  try {
+    const userId = String(res.locals.auth.uid);
+    const data = await getPersistentEscrowSummary(userId);
+    res.json({ success: true, ...data });
+  } catch {
+    res.status(503).json({ error: 'Escrow summary service temporarily unavailable.' });
+  }
 });
 
 escrowRouter.get('/order/:orderId', async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const userId = String(res.locals.auth.uid);
-  const data = await getPersistentEscrowSummary(userId);
-  const escrow = data.escrows.find((e) => e.orderId === orderId || e.poNumber === orderId);
+  try {
+    const { orderId } = req.params;
+    const userId = String(res.locals.auth.uid);
+    const data = await getPersistentEscrowSummary(userId);
+    const escrow = data.escrows.find((e) => e.orderId === orderId || e.poNumber === orderId);
 
-  if (!escrow) {
-    res.status(404).json({ error: 'এই অর্ডারের কোনো এসক্রো রেকর্ড পাওয়া যায়নি।' });
-    return;
+    if (!escrow) {
+      res.status(404).json({ error: 'এই অর্ডারের কোনো এসক্রো রেকর্ড পাওয়া যায়নি।' });
+      return;
+    }
+
+    const now = Date.now();
+    const releaseTime = new Date(escrow.releaseAt).getTime();
+    const inspectionDaysRemaining = Math.max(0, Math.ceil((releaseTime - now) / (1000 * 60 * 60 * 24)));
+
+    res.json({
+      success: true,
+      escrow,
+      inspectionDaysRemaining,
+      canDispute: escrow.status === 'held'
+    });
+  } catch {
+    res.status(503).json({ error: 'Escrow service temporarily unavailable.' });
   }
-
-  const now = Date.now();
-  const releaseTime = new Date(escrow.releaseAt).getTime();
-  const inspectionDaysRemaining = Math.max(0, Math.ceil((releaseTime - now) / (1000 * 60 * 60 * 24)));
-
-  res.json({
-    success: true,
-    escrow,
-    inspectionDaysRemaining,
-    canDispute: escrow.status === 'held'
-  });
 });
 
 escrowRouter.post('/hold', async (req: Request, res: Response) => {

@@ -1,88 +1,74 @@
-# PaikarMart Architecture Audit
+# ARCHITECTURE AUDIT REPORT (PHASE 0 & PHASE 1)
 
-**Audit date:** 2026-11-26  
-**Repository:** `absmunna/PaikarMart`  
-**Audited revision:** `657cda65bb6c7577a1faa6633fad46bd9de2353e`  
-**Branch at audit start:** `main`  
-**Scope:** Read-only repository and architecture comparison. No source code, database, deployment, or Git branch changes were made for this audit.
+**Audit Date:** 2026-11-26  
+**Repository:** `https://github.com/absmunna/PaikarMart`  
+**Remote Default Branch & HEAD SHA:** `main` @ `657cda65bb6c7577a1faa6633fad46bd9de2353e`  
+**Audit Scope:** Full read-only root-to-leaf inspection (Frontend, Backend, Shared Packages, Database Schemas, Auth/RBAC, Wallet/Payments/Orders, Security, Deployment, Env Contracts).
 
-## Executive summary
+---
 
-The repository already has a recognizable feature-first monorepo structure: frontend hubs and categorized portals, backend domain routers, shared contracts, Firebase/Supabase integrations, and root deployment configuration. A full rewrite or broad directory move is not justified. Preserve current paths while stabilizing critical runtime boundaries, then migrate one domain at a time.
+## 0. Baseline Environment & Verification Snapshot
 
-The highest-priority gaps are delivery OTP disclosure, non-atomic financial writes and payment-success handling, and order persistence/pricing fallbacks. The production publishing workflow also contains a destructive copy sequence. These risks should be addressed before structural refactoring or production financial use.
+| Check | Command | Outcome | Notes |
+|---|---|---|---|
+| Remote Git State | `git ls-remote https://github.com/absmunna/PaikarMart.git` | `main` @ `657cda65...` | Local `/app/applet` lacks `.git` directory |
+| Frontend Typecheck | `npm run lint` (`tsc --noEmit --project apps/frontend/tsconfig.json`) | **PASSED** (0 errors) | Strict TS enabled |
+| Backend Typecheck | `npx tsc -p apps/backend/tsconfig.json --noEmit` | **PASSED** (0 errors) | `strict: false`; excludes `apps/backend/tests/` |
+| Security Test Suite | `npm run test:security` (`tsx --test apps/backend/tests/*.security.test.ts`) | **PASSED** (23/23 tests) | `auth`, `payment`, `order`, `wallet` tests pass |
 
-## Audit baseline and limits
+---
 
-- At audit start the worktree had **63 pre-existing dirty entries**: 57 modified files and 6 untracked entries. They include prior UI, profile, feed, and administrative-area work. Treat all as user work; do not reset, stash, overwrite, or delete them without approval.
-- The repository was on `main`; no branch was created because this request is audit-and-plan only.
-- The architecture specification exists at [`documents/ARCHITECTURE_AND_MODULARITY.md`](../../documents/ARCHITECTURE_AND_MODULARITY.md), not at the requested `docs/architecture/PAIKARMART_MODULAR_ARCHITECTURE.md` path. The current report uses the existing specification as the comparison baseline and does not create a second competing architecture source.
-- Findings are based on checked-in/current-worktree source and configuration. No live Firebase, Supabase, payment provider, courier, or hosting environment was accessed. No secret values were read.
-- Build commands were not run because they write generated output. Test limitations are recorded under Verification.
+## 1. Critical & Prioritized Findings (P0–P3)
 
-## Severity-ranked findings
+### P0 — Critical Security, Financial & Data Integrity Risks
 
-### P0 — Release-blocking security and financial-integrity risks
+| ID | Area / File(s) | Exact Issue | Impact | Canonical Fix |
+|---|---|---|---|---|
+| **P0-1** | `apps/backend/modules/payment/paymentRoutes.ts` | `paymentSessions` uses an in-memory `Map`. `/verify` and `/callback` fail across restarts/multiple instances; `/verify` silently catches `applyVerifiedPaymentWebhook` errors and still marks session paid. | Lost deposits/checkouts, split-brain payment verification, silent financial ledger desync. | Add `payment_sessions` PostgreSQL table (`supabase/migrations/`); persist state transitions & fail closed if ledger webhook fails. |
+| **P0-2** | `apps/backend/modules/wallet/walletService.ts` | `releasePersistentEscrow` updates `vendorProf.wallet_balance` **without** optimistic lock (`.eq('wallet_balance', ...)`) or SQL transaction; wallet/escrow functions silently fall back to `walletStore`/`escrowStore` Maps on DB error/missing profile. | Double-spend / lost concurrent balance updates; fake wallet state when DB errors occur. | Implement PostgreSQL atomic RPCs (`credit_wallet_atomic`, `debit_wallet_atomic`, `release_escrow_atomic`) with `FOR UPDATE` locking + idempotency key; never fall back to fake balances in production. |
+| **P0-3** | `apps/backend/modules/orders/orderRoutes.ts` | `GET /:id` and `/:id/track` still query `serverOrders` array; `PATCH/PUT /:id/status` mutates memory only (never Supabase `orders`); `calculateAuthoritativeOrderTotals` accepts client-submitted price/subtotal if item IDs are non-UUIDs; `insertStoredOrder` silently no-ops if profile UUID missing. | Order status lost on restart; client price tampering possible with crafted non-UUID SKU IDs; orders silently unpersisted. | Persist all order reads/status updates to Supabase `orders` + `order_items`; strictly require authoritative catalog/listing SKU price in production; fail order creation if profile resolution fails. |
+| **P0-4** | `apps/backend/modules/retail/retailRoutes.ts` | 1) `POST /products/:id/reviews` queries `orders.eq('customer_id', userId)` and inserts `user_id: userId` using Firebase **string UID** against UUID FK columns, AND uses anon `supabase` client instead of `supabaseAdmin`. Reads `row.reviewer_name` which is missing from `supabase/schema.sql`.<br>2) `POST /products/:id/qna/:qid/answer` lacks merchant/admin role guard (any consumer can answer) and updates memory only.<br>3) `GET /prescriptions` reads in-memory `serverPrescriptions` only. | Review inserts fail on PostgreSQL UUID type mismatch & RLS; unauthorized users can spoof merchant Q&A answers; prescriptions disappear on restart. | Resolve UUID via `resolveProfileUuidByAuthUid`; add `reviewer_name` / `profiles` join; use `supabaseAdmin`; enforce `requireRole(['vendor', 'moderator', 'admin', 'super_admin'])` on Q&A answers; persist Q&A and prescriptions to Supabase. |
+| **P0-5** | `apps/backend/modules/wholesale/wholesaleRoutes.ts` & `rfqRoutes.ts` | `wholesaleRoutes.ts` keeps `rfqStore` and `sampleStore` in-memory only, allows any `'vendor'` to mutate `counterPrice` on any RFQ, and accepts client `escrowId` blindly for `'escrow_locked'`. `rfqRoutes.ts` persists `POST /` only (`POST /:id/quote` mutates memory only, lacks vendor role guard, and `GET /` leaks RFQs in fallback mode). | B2B quotes lost on restart, cross-vendor quote tampering, spoofed escrow locks, unauthorized RFQ data exposure. | Consolidate RFQ persistence onto Supabase (`paikarmart_rfqs` / `wholesale_rfqs`), enforce buyer/vendor ownership & verified `escrow_records` check, persist quotes & samples. |
+| **P0-6** | `apps/backend/modules/vendors/vendorService.ts` | `listKycQueue`, `decideKycApplication`, `listPublicStores`, `getPublicStoreById`, `getPublicProfileByHandle`, `getStoreOwnerId`, and `getVendorAnalytics` read from **in-memory seeded** `vendorStoreRegistry` and `kycApplicationQueue` instead of Supabase `stores` and `escrow_records`. | Newly registered stores/KYC approvals vanish on restart or return fake seed analytics. | Make `stores` + `profiles` + `vendor_memberships` + `escrow_records` in Supabase the primary repository for all vendor/KYC/store queries. |
+| **P0-7** | `apps/backend/modules/logistics/logisticsService.ts` & `messaging/messagingRoutes.ts` | `logisticsService.ts` keeps dispatches & `return_pickups` (despite table existing in SQL!) in memory and releases POD escrow via memory `escrowStore`. `messagingRoutes.ts` stores all `conversations` & `messageThreads` in memory and exposes seed threads when `!conv.ownerId`. | Lost logistics dispatches/returns, non-persistent POD escrow releases, lost chat history & seed leakage. | Wire `return_pickups`, dispatches, and messaging (`conversations`/`messages`) to Supabase + call persistent escrow release service. |
+| **P0-8** | `apps/backend/modules/ai/aiRoutes.ts` | `flaggedPostsQueue` is in-memory only; `/chat`, `/search-grounding`, `/maps-grounding`, `/transcribe` lack `requireFirebaseAuth` middleware. | Unauthenticated external Gemini API quota exhaustion & lost moderation queue items. | Require `requireFirebaseAuth` (or strict signed session + rate limits) on AI generation endpoints and persist moderation flags in DB/Firestore. |
+| **P0-9** | `apps/backend/config/env.ts` vs `apps/frontend/vite.config.ts` | `env.ts` defaults `PORT` to `5000` while `apps/backend/server.ts` mounts Vite middleware directly (expected on port `3000` in AI Studio iframe). `vite.config.ts` proxies `/api` to `localhost:5000` if Vite runs standalone. | Dev server fails port-3000 iframe expectations when `PORT` env var is unset. | Default dev `PORT` cleanly to `3000` in `server.ts`/`env.ts` when `NODE_ENV !== 'production'` (or align `PORT` & standalone proxy cleanly). |
 
-| ID | Finding and evidence | Required direction |
-|---|---|---|
-| A-01 | **Delivery OTP is exposed by shipment reads and failed verification responses.** `GET /shipments/:orderId` has no authentication middleware and serializes the full shipment record, including `deliveryOtp` ([`logisticsRoutes.ts`](../../apps/backend/modules/logistics/logisticsRoutes.ts#L131), [`logisticsService.ts`](../../apps/backend/modules/logistics/logisticsService.ts#L590)). The OTP mismatch response also includes the expected code. The verification handler does not establish that the caller is the order recipient or assigned courier before processing the POD. | Return a zero-PII public tracking projection only; never include OTP in responses or errors; load the persisted shipment; authorize the recipient/assigned courier; add tests for anonymous and unrelated authenticated callers. |
-| A-02 | **Ledger and escrow mutations span separate database requests rather than one atomic transaction.** Wallet credit updates `profiles.wallet_balance` before inserting `wallet_transactions` ([`walletService.ts`](../../apps/backend/modules/wallet/walletService.ts#L614)); escrow hold debits a profile, inserts an escrow record, then inserts a ledger row ([same file](../../apps/backend/modules/wallet/walletService.ts#L798)); release changes escrow state, credits the vendor, then writes a transaction ([same file](../../apps/backend/modules/wallet/walletService.ts#L904)). Partial failures can leave a balance, escrow status, and ledger inconsistent. | Move each financial operation into a database transaction/RPC with durable idempotency and audit rows. Add failure-injection and concurrency tests before enabling live finance. |
-| A-03 | **Payment verification can return success when wallet credit failed.** `/verify` marks the in-memory session completed, catches a failed persistent wallet credit without surfacing it, then continues to a success response ([`paymentRoutes.ts`](../../apps/backend/modules/payment/paymentRoutes.ts#L280)). | Persist verified gateway state and ledger result atomically or durably queue/retry it. Do not report a credited/successful wallet deposit until the ledger write is confirmed; expose a retryable/pending state. |
+---
 
-### P1 — Major functional, deployment, or architecture risks
+### P1 — Major Functional & Architectural Issues
 
-| ID | Finding and evidence | Required direction |
-|---|---|---|
-| A-04 | **Order creation can fall back to caller-supplied prices and process-local state.** `calculateAuthoritativeOrderTotals` falls back to item prices if a listing is unavailable or the database lookup fails; `POST /api/orders` uses `optionalFirebaseAuth`; order records are also stored in `serverOrders`, while `insertStoredOrder` logs/ignores persistence errors ([`orderRoutes.ts`](../../apps/backend/modules/orders/orderRoutes.ts#L138), [`orderRoutes.ts`](../../apps/backend/modules/orders/orderRoutes.ts#L206), [`dbService.ts`](../../apps/backend/services/dbService.ts#L115)). `GET /:id`, status updates, and idempotency lookups use the process-local array. | Require authoritative active listings for paid orders; define a separately authenticated guest-token contract if guest checkout is retained. Persist order creation, status, idempotency, and shipment linkage before returning success. Never use client price as a production fallback. |
-| A-05 | **Payment-session state is process-local.** `paymentSessions` is a `Map` used by initiation, verification, and callbacks ([`paymentRoutes.ts`](../../apps/backend/modules/payment/paymentRoutes.ts#L27)). A restart or multiple backend instances can lose or fail to find a session. | Add a durable payment-session repository/table with unique idempotency keys and explicit pending/verified/failed transitions; preserve the existing `/api` and `/api/v1` contracts. |
-| A-06 | **Production asset publishing removes its source before copying it.** The workflow builds the frontend, then runs `rm -rf apps/frontend/dist` immediately before copying `apps/frontend/dist` to a temporary directory ([`publish-prod.yml`](../../.github/workflows/publish-prod.yml#L40)). This sequence cannot publish the just-built output as written. | Correct the workflow using a staging directory and validate it in a non-production branch. Do not change the production branch during the audit. |
-| A-07 | **The SQL schema and Prisma schema are not 1:1, and no versioned Supabase migration directory exists.** `supabase/schema.sql` defines tables absent from the Prisma schema (including saved addresses, vendor memberships, identity verification/documents, notifications, analytics, file assets, and RFQs); the saved-address/store area columns also have no Prisma counterpart. The architecture and database documents claim a synchronized mirror. | Treat existing SQL/data as authoritative until a table/column/RLS diff is reviewed. Add versioned, backward-compatible migrations and then reconcile Prisma; do not regenerate or apply a schema wholesale. |
-| A-08 | **Escrow release is not tied to verified POD.** The authenticated release route calls `releasePersistentEscrow` based on buyer/privileged authorization, while the separate POD flow uses an in-memory release helper. The API boundary does not require the persisted shipment’s verified OTP/POD before releasing escrow ([`escrowRoutes.ts`](../../apps/backend/modules/escrow/escrowRoutes.ts#L92), [`logisticsService.ts`](../../apps/backend/modules/logistics/logisticsService.ts#L610)). | Define one authoritative order → shipment POD → escrow release transition and enforce it server-side in the same durable transaction. Keep a documented buyer-confirmation exception only if product requirements explicitly approve it. |
+| ID | Area / File(s) | Exact Issue | Impact | Fix Plan |
+|---|---|---|---|---|
+| **P1-1** | `apps/frontend/src/App.tsx` (1178 lines) | Monolithic shell manages global `posts`, `commerceItems`, `orders`, `bookings`, `notifications`, `cartItems`, `localStorage` persistence (`nexsphere_*` keys via `lib/supabase.ts`), `INITIAL_*` mock hydration, and has a hardcoded stub `handleDeductBalance` returning `false` ("Wallet payments are paused"). | Tight coupling, difficult testing, stale legacy keys, disabled wallet checkout flow in shell. | Extract `useCartStore`, `useOrdersStore`, `useSocialFeedStore`, `useCatalogFeed` into `features/`; wire wallet payments to persistent `/api/wallet` & `/api/payment` flow. |
+| **P1-2** | `packages/database/prisma/schema.prisma` vs `supabase/schema.sql` | Prisma schema is severely out of sync with `supabase/schema.sql` (missing `pmin`, `shipping_fee`, `condition`, `fulfillment_type`, `is_buy_box_winner`, `analytics`, `notifications`, `file_assets`, `paikarmart_rfqs`, `identity_verifications`, `saved_addresses`, `vendor_memberships`, `product_reviews.reviewer_name`). | Any tooling or future code relying on `@paikarmart/database` breaks or produces wrong types. | Sync `prisma/schema.prisma` 1:1 with `supabase/schema.sql` + new migrations (`payment_sessions`, `conversations`, `messages`, `product_questions`). |
+| **P1-3** | `apps/frontend/src/features/auth/hooks/useFirebaseSupabaseSync.ts` & `shared/hooks/useEngagementAnalytics.ts` | Client directly runs `supabase.from('profiles')` and `supabase.from('analytics').insert(...)` using anon client without a Supabase Auth JWT (`auth.uid()` is null under Firebase-first auth). | Blocked by Supabase RLS policies (`USING (auth.uid() = ...)`), causing silent failures or console warnings. | Route profile sync & analytics ingestion strictly through authenticated Express endpoints (`/api/auth/profile`, `/api/analytics/event`). |
+| **P1-4** | `apps/frontend/src/shared/hooks/useGuestSessionPersistence.ts` | `shared/` hook imports `ROUTE_PATHS` from `@/app/router/routeIds`. | Upward dependency violation (`shared/` -> `app/`). | Pass redirect paths via parameter or define public route constants in `shared/`. |
+| **P1-5** | `apps/frontend/src/portals/utilities/*` | Direct imports of `@/lib/firebase` (`PersonalProfilePage`, `ProfilePortal`, `DocumentsVault`) and raw `fetch('/api/catalog/verify-product')` in `QuickAttachCatalogModal.tsx`. | Portals bypass feature service abstraction & shared `apiClient`. | Move upload/verification calls into `features/identity/services`, `features/inventory/services`, and `features/storage`. |
+| **P1-6** | `.env.example` vs `firebase-applet-config.json` | `.env.example` lists `VITE_FIREBASE_FIRESTORE_DATABASE_ID="(default)"`, whereas provisioned `firebase-applet-config.json` uses `"ai-studio-appstudio-ea26a4d9-6605-42cb-a89e-647d68ab2dab"`. | Fresh deploys copying `.env.example` target wrong Firestore DB unless overridden. | Align `.env.example` comments/default guidance cleanly with `firebase-applet-config.json`. |
+| **P1-7** | Local Workspace Git & Windows Scripts | Workspace lacks `.git`; `/run_phase1_migrations.ps1`, `/scripts/sync-to-web.ps1`, `/scripts/sync-web.ps1` hardcode local Windows paths (`e:\PaikarMart`). | No local commit/rollback tracking; dead Windows scripts in repo root. | Re-attach/verify git branch `refactor/modular-architecture` from `main` before structural moves; quarantine or document legacy PS1 scripts in `scripts/`. |
+| **P1-8** | `apps/backend/server.ts` & `*Routes.ts` | Social feed (`serverPosts`, `GET/POST /api/feed`) lives directly inside `server.ts`; routes mix HTTP parsing, validation, business logic, and raw Supabase queries. | Monolithic server bootstrap and inconsistent validation/error handling. | Extract `modules/social/` from `server.ts`; gradually split route modules into `routes -> controller -> service -> repository -> schemas`. |
 
-### P2 — Maintainability, reproducibility, or documentation drift
+---
 
-| ID | Finding and evidence | Required direction |
-|---|---|---|
-| A-09 | **The requested architecture-document path is absent, while an equivalent guide is maintained under `documents/`.** This creates an unclear canonical location, not a missing architecture baseline. | Select one canonical path after approval. Keep the existing guide authoritative or move it once with links updated; do not maintain two independent architecture specs. |
-| A-10 | **The repository is a single-root npm install, not a configured package workspace.** Root `package.json` has no `workspaces`; both `package-lock.json` and `bun.lock` exist; app/package directories have no package manifests. `packages/database/index.ts` imports `@prisma/client`, but that dependency is absent from the root manifest/installed tree. | Keep current root installation/deployment intact during refactoring. Decide on a package manager and workspace linking separately; do not add internal package imports until dependencies and deployment builds are validated. |
-| A-11 | **Design-system directories are currently facades over implementation directories.** `design-system/components/index.ts` re-exports `components/shared/*`; `design-system/layouts/index.ts` re-exports `components/layout/*`; `contexts/AppProviders.tsx` re-exports `app/providers/AppProviders.tsx`. These are compatibility surfaces, not proven duplicate implementations. | Preserve these facades. If implementations move later, retain re-exports until all static and dynamic consumers are checked. |
-| A-12 | **Deployment configuration is inconsistent with the documented Firebase Hosting topology.** Actual [`firebase.json`](../../firebase.json) configures Firestore and Storage rules but has no `hosting` target, while the deployment document describes Firebase Hosting of `apps/frontend/dist`. | Confirm whether Firebase Hosting remains a supported target. If yes, add its configuration in a separate reviewed change and validate its SPA rewrite/rules deployment. |
-| A-13 | **Backend route ownership is only partly modularized.** `server.ts` mounts domain routers and compatibility aliases, but also owns feed persistence handlers and catalog AI verification directly ([`server.ts`](../../apps/backend/server.ts#L189)). Several modules call across domains (orders → retail/vendor/logistics; payment/escrow/logistics → wallet). | Preserve routes and aliases; extract inline handlers into domain modules and define service/repository contracts one module at a time. Avoid a broad controller rewrite. |
-| A-14 | **Automated verification is incomplete and the local environment blocked some checks.** Root `lint` checks only frontend TypeScript; CI builds only the frontend. The backend has four security test files but no backend test/typecheck gate in the workflow. Backend type-check currently cannot resolve `express-rate-limit` because it is not installed locally, despite being declared in the manifest. | Restore dependencies in an approved validation run, then add backend type-check/tests to CI. Do not interpret sandbox-blocked HTTP tests as application pass/fail. |
+### P2 — Duplication & Maintainability Issues
 
-## Architecture comparison
+| ID | Duplicated / Overlapping Area | Canonical Owner | Duplicate / Legacy Artifact | Action |
+|---|---|---|---|---|
+| **P2-1** | Route Guards | `features/auth/components/{AuthGuard,RoleGuard}.tsx` | `app/guards/{AuthGuard,RoleGuard}.tsx` (already thin 1-line re-exports) | Keep as re-export facade OR keep canonical in `features/auth` — zero duplicate logic today, preserve facade. |
+| **P2-2** | Providers Barrel | `app/providers/AppProviders.tsx` | `contexts/AppProviders.tsx` | Deprecate `contexts/AppProviders.tsx` after verifying imports. |
+| **P2-3** | UI Layout & Shared Primitives | `design-system/{layouts,components}/index.ts` | Direct imports from `@/components/layout/*` and `@/components/shared/*` | Route all feature/portal imports through `@/design-system/*` (keep physical files or gradually colocate safely). |
+| **P2-4** | B2B RFQ Endpoints | `/api/wholesale/rfq` (`wholesaleRoutes.ts`) | `/api/rfq` (`rfqRoutes.ts`) | Unify persistence repository (`rfqRepository`) while keeping BOTH route prefixes mounted for backward compatibility! |
+| **P2-5** | Asset Upload Endpoints | `/api/storage/upload/*` (`storageRoutes.ts`) | `/api/auth/upload-asset` (`authRoutes.ts`) | Delegate `/api/auth/upload-asset` internally to `storageService` so upload validation & bucket logic exist once. |
+| **P2-6** | Frontend API Fetch Boilerplate | Proposed `shared/services/apiClient.ts` | Repeated `API_BASE` + `authHeaders()` in 10+ `*ApiClient.ts` files | Consolidate auth header injection & error handling into `apiClient.ts`. |
+| **P2-7** | Portal Metadata & Hub Categorization | `hubs/shared/portalRegistry.ts` | `data/portalsData.ts` (parallel 4-pillar config) | Align `portalsData.ts` with `portalRegistry.ts` + 6 business category metadata. |
+| **P2-8** | Seed/Demo Data & LocalStorage Keys | Backend `catalog`/`social` APIs | `data/mockData.ts` + `masterCatalogFallback.ts` + `nexsphere_*` keys in `lib/supabase.ts` | Restrict `mockData.ts` to explicit demo/offline seed mode; stop hydrating authenticated user profiles with fake `CURRENT_USER` balance/data. |
 
-### Areas aligned with the specification
+---
 
-- Frontend is organized into `app`, `design-system`, `features`, `hubs`, `portals`, `shared`, `types`, `lib`, and `data`.
-- Portal directories already follow commerce, services, logistics, community, and utilities groupings.
-- Router declarations are centralized in `app/router/routeManifest.tsx`; compatibility paths are explicit.
-- Seller routes use `RoleGuard`; account, wallet, order, message, profile, settings, and notification routes use `AuthGuard`.
-- Backend has a centralized server entrypoint, typed environment configuration, middleware, domain routers, and database service.
-- Firebase default-deny rules and owner-scoped storage rules are present. Supabase policies and backend Firebase authentication are present.
-- No `@/portals` or `@/app` imports were found under `features`; no `@/features` imports were found under `design-system`. Backend references to frontend paths are static asset-path resolution only, not source imports.
-- Versioned `/api/v1/*` aliases are mounted alongside the existing `/api/*` routers and must be preserved.
+### P3 — Optional Improvements
 
-### Areas that need clarification or incremental alignment
-
-- Route and architecture documentation are not at the paths specified by the master prompt; the existing architecture document remains the nearest source of truth.
-- `packages/shared` is a shared source directory, but package-manager workspace linking is not configured.
-- The Prisma file is not a faithful mirror of the current SQL schema; no migration history was found.
-- Financial and order flows retain in-memory paths and are not uniformly database-authoritative.
-- UI folders have a real implementation/facade split; duplicate-looking files are not sufficient evidence for deletion.
-
-## Verification performed
-
-| Check | Result |
-|---|---|
-| Frontend TypeScript (`npm run lint`) | Passed. |
-| Frontend area tests (5 tests in current untracked worktree test file) | Passed. |
-| Backend TypeScript (`npx tsc --noEmit --project apps/backend/tsconfig.json`) | Blocked: `express-rate-limit` is declared but absent from the local installed dependency tree. No dependency installation was performed. |
-| Backend security suite (`npm run test:security`) | 8 passed, 15 could not complete their HTTP assertions. Loopback requests were denied with `EACCES` by the active sandbox; an initial run also hit sandbox proxy `502`. These results do not establish application behavior. |
-| Build | Not run during this audit because it writes generated assets/bundles. |
-| Live database / deployment / provider verification | Not run; no live services were accessed. |
-
-## Audit conclusion
-
-Do not begin file relocation or deletion yet. First approve the migration plan, establish a clean baseline without discarding the 63 pre-existing dirty entries, and address the P0 financial/POD issues. See [`MIGRATION_PLAN.md`](./MIGRATION_PLAN.md), [`MODULE_DEPENDENCY_MAP.md`](./MODULE_DEPENDENCY_MAP.md), and [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md).
+1. Enable `"strict": true` in `apps/backend/tsconfig.json` and include `apps/backend/tests/` in `tsc --noEmit`.
+2. Add structured JSON request/finance logger (`apps/backend/services/logger.ts`) replacing ad-hoc `console.log`/`console.error`.
+3. Modularize 1515-line `TopNavbar.tsx` and 1006-line `walletService.ts` into smaller focused sub-components/modules (header search, mobile adaptive bar, location selector; wallet ledger vs escrow vs PK Coins).
+4. Add unit/integration tests for Payment verify/callback idempotency, Retail Q&A/reviews authorization, Vendor DB persistence, and RFQ ACLs.

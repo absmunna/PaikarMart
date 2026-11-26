@@ -1,6 +1,12 @@
 import { Router, Response } from 'express';
-import { requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
-import { supabaseAdmin } from '../../config/supabaseAdmin.js';
+import { requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
+import {
+  createRfqRecord,
+  findRfqById,
+  listRfqsForUser,
+  updateRfqRecord
+} from './rfqRepository.js';
+import { logger } from '../../services/logger.js';
 
 const router = Router();
 
@@ -15,48 +21,22 @@ async function generateGeminiText(prompt: string) {
       });
       return res.text || '';
     } catch (e) {
-      console.error('Gemini text gen error:', e);
+      logger.error('Gemini text gen error', {
+        module: 'rfq',
+        error: e instanceof Error ? e.message : String(e)
+      });
     }
   }
   return '';
 }
 
-// In-memory fallback if Supabase table is not yet migrated
-const memoryRfqs: any[] = [
-  {
-    id: 'rfq_demo_101',
-    buyerId: 'user_demo_1',
-    buyerName: 'Rahim Enterprise',
-    itemTitle: 'Cotton T-Shirts Bulk (Export Quality)',
-    quantity: 5000,
-    targetPricePerUnit: 120, // BDT
-    specifications: '100% Combed Cotton, GSM 180, Assorted Sizes (M, L, XL)',
-    deliveryDeadline: '2026-12-15',
-    status: 'negotiating', // pending, negotiating, quoted, accepted, rejected
-    quotes: [
-      { vendorId: 'v_1', vendorName: 'Dhaka Textiles Ltd', quotedPricePerUnit: 125, notes: 'Includes free courier delivery in Dhaka region.' }
-    ],
-    createdAt: new Date().toISOString()
-  }
-];
-
-// GET /api/rfq - list RFQs for buyer or vendor
+// GET /api/rfq - list RFQs scoped to authenticated buyer, verified vendor, or governance role
 router.get('/', requireFirebaseAuth, async (_req: any, res: Response) => {
   try {
-    if (!supabaseAdmin) {
-      return res.json({ success: true, rfqs: memoryRfqs, source: 'fallback' });
-    }
-    const { data, error } = await supabaseAdmin
-      .from('paikarmart_rfqs')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error || !data || data.length === 0) {
-      return res.json({ success: true, rfqs: memoryRfqs, source: 'fallback' });
-    }
-    return res.json({ success: true, rfqs: data, source: 'supabase' });
+    const result = await listRfqsForUser(res.locals.auth);
+    return res.json({ success: true, rfqs: result.rfqs, source: result.source });
   } catch {
-    return res.json({ success: true, rfqs: memoryRfqs, source: 'fallback_error' });
+    return res.status(500).json({ error: 'Unable to fetch RFQs.' });
   }
 });
 
@@ -76,7 +56,7 @@ router.post('/', requireFirebaseAuth, async (req: any, res: Response) => {
     }
 
     const parsedTargetPrice = Number(targetPricePerUnit || 0);
-    const newRfq = {
+    const newRfq = await createRfqRecord({
       id: `rfq_${Date.now()}`,
       buyerId: authUser.uid,
       buyerName: authUser.email || 'Wholesale Buyer',
@@ -88,17 +68,7 @@ router.post('/', requireFirebaseAuth, async (req: any, res: Response) => {
       status: 'pending',
       quotes: [],
       created_at: new Date().toISOString()
-    };
-
-    memoryRfqs.unshift(newRfq);
-
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin.from('paikarmart_rfqs').insert([newRfq]);
-      } catch {
-        // ignore table missing error in free tier
-      }
-    }
+    });
 
     return res.json({ success: true, rfq: newRfq });
   } catch (err: any) {
@@ -106,42 +76,46 @@ router.post('/', requireFirebaseAuth, async (req: any, res: Response) => {
   }
 });
 
-// POST /api/rfq/:id/quote - vendor adds quote
-router.post('/:id/quote', requireFirebaseAuth, async (req: any, res: Response) => {
-  try {
-    const authUser = res.locals.auth;
-    if (!authUser?.uid) {
-      return res.status(401).json({ error: 'Authentication required.' });
+// POST /api/rfq/:id/quote - verified vendor or governance role adds quote persistently
+router.post(
+  '/:id/quote',
+  requireFirebaseAuth,
+  requireRole(['vendor', 'moderator', 'admin', 'super_admin']),
+  async (req: any, res: Response) => {
+    try {
+      const authUser = res.locals.auth;
+      const { id } = req.params;
+      const { quotedPricePerUnit, notes } = req.body || {};
+      const parsedPrice = Number(quotedPricePerUnit);
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ error: 'Valid quoted price per unit is required.' });
+      }
+
+      const target = await findRfqById(String(id));
+      if (!target) {
+        return res.status(404).json({ error: 'RFQ not found' });
+      }
+
+      const newQuote = {
+        vendorId: authUser.uid,
+        vendorName: authUser.email || 'Verified Wholesaler',
+        quotedPricePerUnit: parsedPrice,
+        notes: String(notes || '').trim().slice(0, 500),
+        createdAt: new Date().toISOString()
+      };
+
+      const existingQuotes = Array.isArray(target.quotes) ? target.quotes : [];
+      const updated = await updateRfqRecord(String(id), {
+        quotes: [...existingQuotes, newQuote],
+        status: 'quoted',
+      });
+
+      return res.json({ success: true, rfq: updated || { ...target, quotes: [...existingQuotes, newQuote], status: 'quoted' } });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
-
-    const { id } = req.params;
-    const { quotedPricePerUnit, notes } = req.body || {};
-    const parsedPrice = Number(quotedPricePerUnit);
-    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      return res.status(400).json({ error: 'Valid quoted price per unit is required.' });
-    }
-
-    const target = memoryRfqs.find(r => r.id === id);
-    if (!target) {
-      return res.status(404).json({ error: 'RFQ not found' });
-    }
-
-    const newQuote = {
-      vendorId: authUser.uid,
-      vendorName: authUser.email || 'Verified Wholesaler',
-      quotedPricePerUnit: parsedPrice,
-      notes: String(notes || '').trim().slice(0, 500),
-      createdAt: new Date().toISOString()
-    };
-
-    target.quotes.push(newQuote);
-    target.status = 'quoted';
-
-    return res.json({ success: true, rfq: target });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
   }
-});
+);
 
 // GET /api/forecasting/predict (and /api/rfq/forecasting/predict) - AI Inventory Demand Forecasting
 router.get(['/predict', '/forecasting/predict'], requireFirebaseAuth, async (_req: any, res: Response) => {

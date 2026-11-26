@@ -4,10 +4,18 @@ import {
   getFirebaseAdminAuth,
   invalidateAuthProfileCache,
   requireFirebaseAuth,
-  requireRole
+  requireRole,
+  SUPER_ADMIN_EMAILS
 } from '../../middleware/requireFirebaseAuth.js';
 import { getRecentAuditEvents } from '../../middleware/audit.js';
 import { supabaseAdmin } from '../../services/dbService.js';
+import {
+  createSignedAssetUrl,
+  ensureStorageBucket,
+  PRIVATE_ASSETS_BUCKET,
+  sanitizeStorageFilename,
+  uploadPublicImageBuffer
+} from '../../services/storageService.js';
 
 export const authRouter = Router();
 
@@ -119,12 +127,25 @@ authRouter.get('/profile', requireFirebaseAuth, async (_req: Request, res: Respo
     .eq('auth_uid', uid)
     .maybeSingle();
 
+  const isSuperAdminEmail = Boolean(
+    (res.locals.auth.email && SUPER_ADMIN_EMAILS.has(String(res.locals.auth.email).toLowerCase())) ||
+    res.locals.auth.role === 'super_admin'
+  );
+
   if (!joined.error) {
     const data = joined.data as Record<string, any> | null;
-    if (data && !data.kyc_status && Array.isArray(data.vendor_memberships)) {
-      const storeKyc = data.vendor_memberships.find((m: any) => m?.stores?.kyc_status)?.stores?.kyc_status;
-      if (storeKyc) {
-        data.kyc_status = storeKyc;
+    if (data) {
+      if (isSuperAdminEmail) {
+        data.role = 'super_admin';
+        data.active_roles = Array.from(new Set(['super_admin', 'admin', 'moderator', 'vendor', 'consumer', ...(data.active_roles || [])]));
+        if (!data.name || data.name === 'PaikarMart User') data.name = 'PaikarMart';
+        if (!data.handle) data.handle = '@paikarmart';
+      }
+      if (!data.kyc_status && Array.isArray(data.vendor_memberships)) {
+        const storeKyc = data.vendor_memberships.find((m: any) => m?.stores?.kyc_status)?.stores?.kyc_status;
+        if (storeKyc) {
+          data.kyc_status = storeKyc;
+        }
       }
     }
     res.json({ success: true, profile: data || null });
@@ -143,7 +164,15 @@ authRouter.get('/profile', requireFirebaseAuth, async (_req: Request, res: Respo
     return;
   }
 
-  res.json({ success: true, profile: plain.data || null });
+  const plainData = plain.data as Record<string, any> | null;
+  if (plainData && isSuperAdminEmail) {
+    plainData.role = 'super_admin';
+    plainData.active_roles = Array.from(new Set(['super_admin', 'admin', 'moderator', 'vendor', 'consumer', ...(plainData.active_roles || [])]));
+    if (!plainData.name || plainData.name === 'PaikarMart User') plainData.name = 'PaikarMart';
+    if (!plainData.handle) plainData.handle = '@paikarmart';
+  }
+
+  res.json({ success: true, profile: plainData || null });
 });
 
 authRouter.put('/profile', requireFirebaseAuth, async (req: Request, res: Response) => {
@@ -152,19 +181,25 @@ authRouter.put('/profile', requireFirebaseAuth, async (req: Request, res: Respon
   const tokenEmail = String(res.locals.auth.email || '').trim().slice(0, 160);
   const bodyEmail = String(req.body?.email || '').trim().slice(0, 160);
   const email = tokenEmail || bodyEmail;
-  const name = String(req.body?.name || 'PaikarMart User').trim().slice(0, 100) || 'PaikarMart User';
-  const defaultHandleSeed = email.includes('@') ? email.split('@')[0] : `user_${uid.slice(0, 8)}`;
+  const isSuperAdminEmail = Boolean(
+    (email && SUPER_ADMIN_EMAILS.has(email.toLowerCase())) ||
+    res.locals.auth.role === 'super_admin'
+  );
+  const name = isSuperAdminEmail && (!req.body?.name || req.body?.name === 'PaikarMart User')
+    ? 'PaikarMart'
+    : String(req.body?.name || (isSuperAdminEmail ? 'PaikarMart' : 'PaikarMart User')).trim().slice(0, 100);
+  const defaultHandleSeed = isSuperAdminEmail ? 'paikarmart' : (email.includes('@') ? email.split('@')[0] : `user_${uid.slice(0, 8)}`);
   const rawHandle = String(req.body?.handle || defaultHandleSeed)
     .toLowerCase()
     .replace(/^@+/, '')
     .replace(/[^a-z0-9_]/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 64);
-  const handle = rawHandle.length >= 2 ? `@${rawHandle.slice(0, 63)}` : `@user_${uid.slice(0, 8)}`;
+  const handle = rawHandle.length >= 2 ? `@${rawHandle.slice(0, 63)}` : (isSuperAdminEmail ? '@paikarmart' : `@user_${uid.slice(0, 8)}`);
   const avatarUrl = String(req.body?.avatar || '').trim().slice(0, 512) || null;
   const location = String(req.body?.location || 'Dhaka, Bangladesh').trim().slice(0, 120);
   const phone = normalizePhoneInput(res.locals.auth.phoneNumber || req.body?.phone);
-  const isVerifiedClaim = Boolean(res.locals.auth.emailVerified || res.locals.auth.phoneNumber);
+  const isVerifiedClaim = isSuperAdminEmail || Boolean(res.locals.auth.emailVerified || res.locals.auth.phoneNumber);
 
   const existing = await supabaseAdmin!
     .from('profiles')
@@ -187,6 +222,7 @@ authRouter.put('/profile', requireFirebaseAuth, async (req: Request, res: Respon
         handle,
         avatar_url: avatarUrl,
         location,
+        ...(isSuperAdminEmail ? { role: 'super_admin', active_roles: Array.from(new Set(['super_admin', 'admin', 'moderator', 'vendor', 'consumer', ...(existing.data.active_roles || [])])) } : {}),
         ...(phone ? { phone } : {}),
         ...(isVerifiedClaim && !existing.data.is_verified ? { is_verified: true } : {}),
         updated_at: new Date().toISOString(),
@@ -197,13 +233,13 @@ authRouter.put('/profile', requireFirebaseAuth, async (req: Request, res: Respon
         name,
         handle,
         avatar_url: avatarUrl,
-        role: 'consumer',
-        active_roles: ['consumer'],
+        role: isSuperAdminEmail ? 'super_admin' : 'consumer',
+        active_roles: isSuperAdminEmail ? ['super_admin', 'admin', 'moderator', 'vendor', 'consumer'] : ['consumer'],
         location,
         phone,
-        trust_level: 1,
+        trust_level: isSuperAdminEmail ? 5 : 1,
         wallet_balance: 0,
-        reward_points: 0,
+        reward_points: isSuperAdminEmail ? 25000 : 0,
         is_verified: isVerifiedClaim,
       };
 
@@ -288,20 +324,6 @@ authRouter.patch('/addresses/:id/default', requireFirebaseAuth, async (req: Requ
 const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DOCUMENT_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 
-async function ensureSupabaseBucket(bucketId: string, isPublic: boolean, maxBytes: number, allowedMimeTypes: string[]): Promise<boolean> {
-  if (!supabaseAdmin) return false;
-  const { data: existing, error: getError } = await supabaseAdmin.storage.getBucket(bucketId);
-  if (existing && !getError) return true;
-
-  const { error: createError } = await supabaseAdmin.storage.createBucket(bucketId, {
-    public: isPublic,
-    fileSizeLimit: maxBytes,
-    allowedMimeTypes,
-  });
-  if (!createError) return true;
-  return String(createError.message || '').toLowerCase().includes('already exists');
-}
-
 authRouter.post('/upload-asset', requireFirebaseAuth, async (req: Request, res: Response) => {
   if (!supabaseAdmin) {
     res.status(503).json({
@@ -344,18 +366,38 @@ authRouter.post('/upload-asset', requireFirebaseAuth, async (req: Request, res: 
   }
 
   const rawFileName = String(req.body?.fileName || (contentType === 'application/pdf' ? 'document.pdf' : 'image.jpg'));
-  const safeName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-64) || 'asset.bin';
-  const bucketId = folder === 'avatars' ? 'paikarmart-avatars' : 'paikarmart-kyc-docs';
-  const isPublic = folder === 'avatars';
-  const objectPath = `users/${uid}/${folder}/${Date.now()}-${safeName}`;
 
-  const bucketReady = await ensureSupabaseBucket(bucketId, isPublic, maxBytes, Array.from(allowedMimes));
+  if (folder === 'avatars') {
+    try {
+      const uploaded = await uploadPublicImageBuffer({
+        buffer: fileBuffer,
+        mimeType: contentType,
+        originalName: rawFileName,
+        ownerUid: uid,
+        purpose: 'avatars',
+      });
+      res.status(201).json({
+        success: true,
+        storageProvider: 'supabase',
+        url: uploaded.publicUrl,
+        path: uploaded.storagePath,
+      });
+      return;
+    } catch {
+      res.status(502).json({ error: 'Failed to store uploaded file.', code: 'STORAGE_UPLOAD_FAILED' });
+      return;
+    }
+  }
+
+  const safeName = sanitizeStorageFilename(rawFileName);
+  const objectPath = `users/${uid}/documents/${Date.now()}-${safeName}`;
+  const bucketReady = await ensureStorageBucket(PRIVATE_ASSETS_BUCKET, false, maxBytes, Array.from(allowedMimes));
   if (!bucketReady) {
     res.status(503).json({ error: 'Storage bucket initialization failed.', code: 'STORAGE_BUCKET_ERROR' });
     return;
   }
 
-  const uploadResult = await supabaseAdmin.storage.from(bucketId).upload(objectPath, fileBuffer, {
+  const uploadResult = await supabaseAdmin.storage.from(PRIVATE_ASSETS_BUCKET).upload(objectPath, fileBuffer, {
     contentType,
     upsert: false,
   });
@@ -365,30 +407,17 @@ authRouter.post('/upload-asset', requireFirebaseAuth, async (req: Request, res: 
     return;
   }
 
-  if (isPublic) {
-    const publicData = supabaseAdmin.storage.from(bucketId).getPublicUrl(objectPath);
+  try {
+    const signed = await createSignedAssetUrl(PRIVATE_ASSETS_BUCKET, objectPath, 60 * 60);
     res.status(201).json({
       success: true,
       storageProvider: 'supabase',
-      url: publicData.data.publicUrl,
+      url: signed.signedUrl,
       path: objectPath,
     });
-    return;
-  }
-
-  // KYC documents stay in a private bucket and use a 30-day signed HTTPS URL
-  const signed = await supabaseAdmin.storage.from(bucketId).createSignedUrl(objectPath, 60 * 60 * 24 * 30);
-  if (signed.error || !signed.data?.signedUrl) {
+  } catch {
     res.status(502).json({ error: 'Unable to generate secure document link.', code: 'SIGNED_URL_FAILED' });
-    return;
   }
-
-  res.status(201).json({
-    success: true,
-    storageProvider: 'supabase',
-    url: signed.data.signedUrl,
-    path: objectPath,
-  });
 });
 
 // Server-side Seller Role Promotion (replaces untrusted client role elevation)

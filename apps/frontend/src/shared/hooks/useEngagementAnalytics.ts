@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { CommerceItem } from '@/types';
-import { auth } from '@/lib/firebase';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { API_BASE, getAuthHeaders, getFirebaseBearerToken } from '@/shared/services/apiClient';
 
 export type EngagementEventType = 'product_view' | 'cart_add' | 'search_query' | 'buy_now';
 
@@ -50,8 +49,6 @@ const LOCAL_ANALYTICS_BUFFER_KEY = 'paikarmart_local_analytics_v1';
 const MAX_LOCAL_EVENTS = 120;
 const PRODUCT_VIEW_DEDUPE_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 700;
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 function getOrCreateAnalyticsSessionId(): string {
   if (typeof window === 'undefined') return 'ssr_session';
@@ -175,40 +172,23 @@ export function buildLocalMerchantInsights(storeId?: string): MerchantInsightsSu
 async function dispatchAnalyticsEvent(record: AnalyticsEventRecord): Promise<void> {
   appendLocalAnalyticsEvent(record);
 
-  let persistedByApi = false;
   try {
-    const response = await fetch(`${API_BASE}/api/analytics/events`, {
+    const headers = await getAuthHeaders({ json: true });
+    await fetch(`${API_BASE}/api/analytics/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(record),
       keepalive: true,
     });
-    if (response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        persistedToSupabase?: boolean;
-      };
-      persistedByApi = Boolean(data.persistedToSupabase);
-    }
   } catch {
     // Non-blocking analytics transport
-  }
-
-  // Fallback direct Supabase insert when frontend public anon key is configured
-  // and backend did not persist to Supabase
-  if (!persistedByApi && isSupabaseConfigured()) {
-    try {
-      const { created_at: _ignored, ...dbPayload } = record;
-      await supabase.from('analytics').insert(dbPayload);
-    } catch {
-      // Never disrupt user interaction for telemetry failure
-    }
   }
 }
 
 export async function fetchMerchantInsights(storeId?: string): Promise<MerchantInsightsSummary> {
   const localFallback = buildLocalMerchantInsights(storeId);
   try {
-    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    const token = await getFirebaseBearerToken();
     if (!token) return localFallback;
 
     const queryString = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';

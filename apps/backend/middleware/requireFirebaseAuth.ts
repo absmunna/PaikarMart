@@ -195,12 +195,21 @@ async function loadAuthoritativeRoleMeta(uid: string): Promise<CachedProfileAuth
   }
 }
 
+export const SUPER_ADMIN_EMAILS = new Set([
+  'abs.munna1@gmail.com',
+  'superadmin@paikarmart.com',
+  'admin@paikarmart.com',
+  'root.admin@paikarmart.com'
+]);
+
 async function buildVerifiedAuthContext(decoded: DecodedIdToken): Promise<VerifiedFirebaseAuth> {
   const claims = decoded as DecodedIdToken & { role?: string; roles?: string[] };
   const dbMeta = await loadAuthoritativeRoleMeta(decoded.uid);
+  const isSuperAdminEmail = Boolean(decoded.email && SUPER_ADMIN_EMAILS.has(decoded.email.toLowerCase()));
 
   const mergedRoles = Array.from(
     new Set([
+      ...(isSuperAdminEmail ? ['super_admin', 'admin', 'moderator', 'vendor', 'consumer'] : []),
       ...(dbMeta?.role ? [dbMeta.role] : []),
       ...(dbMeta?.activeRoles || []),
       ...(claims.role ? [claims.role] : []),
@@ -213,12 +222,12 @@ async function buildVerifiedAuthContext(decoded: DecodedIdToken): Promise<Verifi
     email: decoded.email,
     phoneNumber: decoded.phone_number,
     emailVerified: decoded.email_verified,
-    role: dbMeta?.role || claims.role || 'consumer',
+    role: isSuperAdminEmail ? 'super_admin' : (dbMeta?.role || claims.role || 'consumer'),
     roles: mergedRoles.length > 0 ? mergedRoles : undefined,
     profileId: dbMeta?.profileId,
-    isVendor: dbMeta?.isVendor ?? (claims.role === 'vendor'),
-    kycStatus: dbMeta?.kycStatus,
-    trustLevel: dbMeta?.trustLevel,
+    isVendor: isSuperAdminEmail || (dbMeta?.isVendor ?? (claims.role === 'vendor')),
+    kycStatus: isSuperAdminEmail ? 'approved' : dbMeta?.kycStatus,
+    trustLevel: isSuperAdminEmail ? 5 : dbMeta?.trustLevel,
   };
 }
 

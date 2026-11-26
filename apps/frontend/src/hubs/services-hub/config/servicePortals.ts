@@ -4,6 +4,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'local-services',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Local Services',
     labelBn: 'লোকাল সার্ভিস',
     entryRoute: '/hub/services',
@@ -21,6 +22,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'food-delivery',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Food Delivery',
     labelBn: 'ফুড ডেলিভারি',
     entryRoute: '/hub/services',
@@ -38,6 +40,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'health-clinic',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Health & Clinic',
     labelBn: 'হেলথ ও ক্লিনিক',
     entryRoute: '/hub/services',
@@ -54,6 +57,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'appliance-repair',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Appliance & Tech',
     labelBn: 'অ্যাপ্লায়েন্স ও টেক',
     entryRoute: '/hub/services',
@@ -70,6 +74,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'travel',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Travel & Stays',
     labelBn: 'ট্রাভেল ও স্টে',
     entryRoute: '/hub/services',
@@ -86,6 +91,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'logistics',
     hubId: 'services',
+    businessCategory: 'mobility',
     labelEn: 'Transit & Logistics',
     labelBn: 'ট্রানজিট ও লজিস্টিকস',
     entryRoute: '/portal/transit',
@@ -102,6 +108,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'nearby-services',
     hubId: 'services',
+    businessCategory: 'services',
     labelEn: 'Nearby Technicians',
     labelBn: 'কাছের টেকনিশিয়ান',
     entryRoute: '/portal/nearby?hub=services',
@@ -116,6 +123,7 @@ export const servicePortals: HubPortalDefinition[] = [
   {
     id: 'service-demands',
     hubId: 'services',
+    businessCategory: 'community',
     labelEn: 'Service Demands (RFQ)',
     labelBn: 'সার্ভিস রিকোয়েস্ট',
     entryRoute: '/portal/demand?hub=services',

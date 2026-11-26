@@ -1,3 +1,4 @@
+import { API_BASE } from '@/shared/services/apiClient';
 import type { SocialPost } from '@/types';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
@@ -77,9 +78,8 @@ export function normalizeFeedPost(raw: any, index = 0): SocialPost {
 export async function fetchSocialFeedResult(
   signal?: AbortSignal
 ): Promise<SocialFeedResult> {
-  const apiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
   try {
-    const response = await fetch(`${apiBase}/api/feed`, {
+    const response = await fetch(`${API_BASE}/api/feed`, {
       headers: { Accept: 'application/json' },
       signal,
     });

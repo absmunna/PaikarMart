@@ -1,53 +1,52 @@
-import { auth } from '@/lib/firebase';
 import { SavedAddress } from '@/types';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
+import { API_BASE, apiRequest, getAuthHeaders } from '@/shared/services/apiClient';
 
 export async function syncAuthenticatedProfile(payload: { name: string; handle?: string; avatar?: string; location?: string; phone?: string }): Promise<unknown | null> {
-  const response = await fetch(`${API_BASE}/api/auth/profile`, { method: 'PUT', headers: await authHeaders(), body: JSON.stringify(payload) });
-  if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || 'Profile sync failed.');
-  return (await response.json()).profile || null;
+  try {
+    const data = await apiRequest<{ profile?: unknown }>('/api/auth/profile', {
+      method: 'PUT',
+      json: true,
+      body: JSON.stringify(payload),
+    });
+    return data.profile || null;
+  } catch (err: any) {
+    throw new Error(err?.message || 'Profile sync failed.');
+  }
 }
 
 export async function fetchSavedAddresses(): Promise<SavedAddress[]> {
-  const response = await fetch(`${API_BASE}/api/auth/addresses`, { headers: await authHeaders() });
+  const response = await fetch(`${API_BASE}/api/auth/addresses`, { headers: await getAuthHeaders({ json: true }) });
   if (!response.ok) return [];
   return ((await response.json()).addresses || []).map((item: any) => ({ id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined }));
 }
 
 export async function createSavedAddress(address: Omit<SavedAddress, 'id'>): Promise<SavedAddress> {
-  const response = await fetch(`${API_BASE}/api/auth/addresses`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(address) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || 'Unable to save address.');
+  const data = await apiRequest<{ address: any }>('/api/auth/addresses', {
+    method: 'POST',
+    json: true,
+    body: JSON.stringify(address),
+  });
   const item = data.address;
   return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
 }
 
 export async function deleteSavedAddress(id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/auth/addresses/${encodeURIComponent(id)}`, { method: 'DELETE', headers: await authHeaders() });
-  if (!response.ok) throw new Error('Unable to delete address.');
+  await apiRequest(`/api/auth/addresses/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function setDefaultSavedAddress(id: string): Promise<SavedAddress> {
-  const response = await fetch(`${API_BASE}/api/auth/addresses/${encodeURIComponent(id)}/default`, { method: 'PATCH', headers: await authHeaders() });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error || 'Unable to set default address.');
+  const data = await apiRequest<{ address: any }>(`/api/auth/addresses/${encodeURIComponent(id)}/default`, {
+    method: 'PATCH',
+  });
   const item = data.address;
   return { id: item.id, label: item.label, recipientName: item.recipient_name, phone: item.phone, streetAddress: item.street_address, apartment: item.apartment || undefined, city: item.city, division: item.division || undefined, district: item.district || undefined, upazila: item.upazila || undefined, thana: item.thana || undefined, postalCode: item.postal_code || undefined, tag: item.tag, isDefault: item.is_default, notes: item.notes || undefined };
 }
 
 export async function fetchAuthenticatedProfile(): Promise<unknown | null> {
-  const response = await fetch(`${API_BASE}/api/auth/profile`, { headers: await authHeaders() });
-  if (!response.ok) {
-    const errPayload = await response.json().catch(() => ({}));
-    throw new Error(errPayload?.error || `Profile fetch failed (${response.status})`);
-  }
-  return (await response.json()).profile || null;
+  const data = await apiRequest<{ profile?: unknown }>('/api/auth/profile');
+  return data.profile || null;
 }
 
 export async function fetchAuthSecurityStatus(): Promise<{
@@ -61,7 +60,7 @@ export async function fetchAuthSecurityStatus(): Promise<{
   kycStatus: string;
   trustLevel: number;
 } | null> {
-  const response = await fetch(`${API_BASE}/api/auth/security-status`, { headers: await authHeaders() });
+  const response = await fetch(`${API_BASE}/api/auth/security-status`, { headers: await getAuthHeaders() });
   if (!response.ok) return null;
   const data = await response.json().catch(() => ({}));
   return data?.security || null;
@@ -72,15 +71,10 @@ export async function revokeAllAuthSessions(): Promise<{
   revokedAt?: string;
   serverRevocationSkipped?: boolean;
 }> {
-  const response = await fetch(`${API_BASE}/api/auth/revoke-sessions`, {
+  return await apiRequest('/api/auth/revoke-sessions', {
     method: 'POST',
-    headers: await authHeaders(),
+    json: true,
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Unable to revoke active sessions.');
-  }
-  return data;
 }
 
 export async function promoteToSellerApi(payload: {
@@ -92,16 +86,11 @@ export async function promoteToSellerApi(payload: {
   activeRoles: string[];
   user: Record<string, any>;
 }> {
-  const response = await fetch(`${API_BASE}/api/auth/promote-seller`, {
+  return await apiRequest('/api/auth/promote-seller', {
     method: 'POST',
-    headers: await authHeaders(),
+    json: true,
     body: JSON.stringify(payload),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Unable to activate seller role.');
-  }
-  return data;
 }
 
 export async function promoteToCreatorApi(payload?: {
@@ -111,15 +100,54 @@ export async function promoteToCreatorApi(payload?: {
   activeRoles: string[];
   user: Record<string, any>;
 }> {
-  const response = await fetch(`${API_BASE}/api/auth/promote-creator`, {
+  return await apiRequest('/api/auth/promote-creator', {
     method: 'POST',
-    headers: await authHeaders(),
+    json: true,
     body: JSON.stringify(payload || {}),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Unable to activate creator capability.');
-  }
-  return data;
 }
+
+export async function updateFirebaseIdentityProfile(payload: {
+  name: string;
+  handle?: string;
+  role: any;
+  avatar?: string;
+  location?: string;
+  phone?: string;
+}): Promise<void> {
+  const { auth, updateProfile, updateUserProfileToFirestore } = await import('@/lib/firebase');
+  const fUser = auth.currentUser;
+  if (!fUser) return;
+
+  await updateProfile(fUser, {
+    displayName: payload.name,
+    ...(payload.avatar ? { photoURL: payload.avatar } : {}),
+  }).catch(() => {});
+
+  await updateUserProfileToFirestore({
+    id: fUser.uid,
+    email: fUser.email || '',
+    name: payload.name,
+    handle: payload.handle,
+    role: payload.role,
+    avatar: payload.avatar,
+    location: payload.location,
+    emailVerified: fUser.emailVerified,
+  }).catch((err) => console.warn('Firestore user profile sync warning:', err));
+}
+
+export async function uploadProfileAvatarAsset(file: File, userId: string): Promise<string | null> {
+  const { uploadProfileAvatar } = await import('@/lib/firebase');
+  return await uploadProfileAvatar(file, userId);
+}
+
+export async function uploadComplianceVaultAsset(
+  file: File,
+  ownerId: string,
+  folder: 'avatars' | 'documents' | 'videos' = 'documents'
+): Promise<string | null> {
+  const { uploadUserAsset } = await import('@/lib/firebase');
+  return await uploadUserAsset(file, ownerId, folder);
+}
+
 

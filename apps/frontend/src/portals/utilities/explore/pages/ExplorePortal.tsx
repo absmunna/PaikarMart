@@ -12,6 +12,8 @@ import {
 import { PortalTab, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { HUB_PILLARS, SUPER_PORTALS, HubPillarId, SuperPortalEntry } from '@/data/portalsData';
+import type { BusinessCategoryId } from '@/hubs/shared/hubTypes';
+import { BUSINESS_CATEGORIES } from '@/hubs/shared/portalRegistry';
 import { MegaSearchPanel } from '../components/MegaSearchPanel';
 
 interface ExplorePortalProps {
@@ -34,6 +36,7 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
   const isBn = language === 'bn';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPillar, setSelectedPillar] = useState<'all' | HubPillarId>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | BusinessCategoryId>('all');
 
   const featuredPortals = useMemo(
     () => SUPER_PORTALS.filter((p) => p.isFeatured),
@@ -44,7 +47,8 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
     const q = searchQuery.trim().toLowerCase();
     return SUPER_PORTALS.filter((portal) => {
       const matchesPillar = selectedPillar === 'all' || portal.hubId === selectedPillar;
-      if (!matchesPillar) return false;
+      const matchesCategory = selectedCategory === 'all' || portal.businessCategory === selectedCategory;
+      if (!matchesPillar || !matchesCategory) return false;
       if (!q) return true;
       return (
         portal.nameEn.toLowerCase().includes(q) ||
@@ -52,7 +56,7 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
         portal.realWorldModel.toLowerCase().includes(q)
       );
     });
-  }, [searchQuery, selectedPillar]);
+  }, [searchQuery, selectedPillar, selectedCategory]);
 
   const handleLaunchPortal = (portal: SuperPortalEntry) => {
     if (portal.searchHint && onQuickSearch) {
@@ -189,6 +193,38 @@ export const ExplorePortal: React.FC<ExplorePortalProps> = ({
               );
             })}
           </div>
+        </div>
+
+        {/* 6 Business Category Filter Strip */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border cursor-pointer ${
+              selectedCategory === 'all'
+                ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border-[var(--pm-accent-border)]'
+                : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
+            }`}
+          >
+            {isBn ? 'সব ক্যাটাগরি (৬)' : 'All Categories (6)'}
+          </button>
+          {Object.values(BUSINESS_CATEGORIES).map((cat) => {
+            const active = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(active ? 'all' : cat.id)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border cursor-pointer ${
+                  active
+                    ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-xs'
+                    : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
+                }`}
+              >
+                {isBn ? cat.labelBn : cat.labelEn}
+              </button>
+            );
+          })}
         </div>
 
         {/* 4-Pillar Grouped Hub Grid (28+ Portals) */}

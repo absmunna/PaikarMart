@@ -1,52 +1,119 @@
-import { User, SocialPost, CommerceItem, Story, CreatorContent, RideOption, AppNotification, Order } from '@/types';
+import { User, SocialPost, CommerceItem, Story, CreatorContent, RideOption, AppNotification, Order, PaikarMartDelegate } from '@/types';
 
-export const CURRENT_USER: User = {
-  id: 'usr_001',
-  name: 'Alex Rivera',
-  handle: '@alexrivera',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
+export const DEFAULT_PERSONAL_USER: User = {
+  id: 'usr_personal_munna',
+  name: 'Munna',
+  email: 'abs.munna1@gmail.com',
+  handle: '@absmunna',
+  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=256&h=256&q=80',
   role: 'consumer',
   isVendor: false,
-  profession: 'Retail Shop Owner, Educator & Content Creator',
+  profileType: 'personal',
+  profession: 'E-commerce Entrepreneur & Platform Architect',
   education: 'University of Dhaka (M.Sc)',
-  skills: ['Wholesale Sourcing', 'Retail Merchandising', 'Video Tutorials'],
+  skills: ['Wholesale Sourcing', 'Platform Management', 'Retail Merchandising'],
   activeCapabilities: ['shop', 'service', 'creator'],
   personalVerification: {
-    status: 'unverified',
+    status: 'verified',
+    documentType: 'NID',
+    documentNumber: 'NID-BD-MUNNA-01',
+    verifiedAt: '2026-01-15',
+    verificationBadge: 'Verified Citizen'
   },
   location: 'Dhaka, Bangladesh',
-  balance: 384.50,
-  rewardPoints: 1250,
+  balance: 1540.00,
+  rewardPoints: 3200,
+  trustLevel: 3,
+  kycStatus: 'approved',
   transactions: [
     {
-      id: 'tx_01',
+      id: 'tx_p_01',
       type: 'deposit',
-      amount: 150.00,
-      description: 'Deposit via bKash Merchant Gateway',
-      timestamp: '2 hours ago',
-      status: 'completed',
-      referenceId: 'BKX-984210'
-    },
-    {
-      id: 'tx_02',
-      type: 'purchase',
-      amount: 45.00,
-      description: 'Order Payment #ORD-8491 (Organic Darjeeling Tea)',
+      amount: 500.00,
+      description: 'Deposit via bKash Personal',
       timestamp: 'Yesterday',
       status: 'completed',
-      referenceId: 'PM-PAY-582'
-    },
-    {
-      id: 'tx_03',
-      type: 'cashback',
-      amount: 4.50,
-      description: 'Loyalty Cashback Reward (10%)',
-      timestamp: 'Yesterday',
-      status: 'completed',
-      referenceId: 'REWARD-849'
+      referenceId: 'BKX-774921'
     }
   ]
 };
+
+export const PAIKARMART_SUPER_ADMIN_PROFILE: User = {
+  id: 'org_paikarmart_super_admin',
+  name: 'PaikarMart',
+  email: 'abs.munna1@gmail.com',
+  handle: '@paikarmart',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256&q=80',
+  role: 'super_admin',
+  isVendor: true,
+  profileType: 'organization',
+  profession: 'Official PaikarMart Super Admin & Platform Governance Organization',
+  education: 'PaikarMart System Architecture Core',
+  skills: [
+    'Super Admin Governance',
+    'Platform Security',
+    'Vendor KYC Verification',
+    'Catalog & Post Moderation',
+    'B2B Wholesale Escrow Management'
+  ],
+  activeCapabilities: ['shop', 'service', 'creator'],
+  personalVerification: {
+    status: 'verified',
+    documentType: 'NID',
+    documentNumber: 'NID-BD-98214-PAIKARMART',
+    verifiedAt: '2026-01-01',
+    verificationBadge: 'Super Admin Official'
+  },
+  location: 'Dhaka, Bangladesh',
+  balance: 500000.00,
+  rewardPoints: 25000,
+  trustLevel: 5,
+  kycStatus: 'approved',
+  transactions: [
+    {
+      id: 'tx_super_01',
+      type: 'deposit',
+      amount: 100000.00,
+      description: 'Platform Escrow Treasury Liquidity Allocation',
+      timestamp: 'Just now',
+      status: 'completed',
+      referenceId: 'PKM-TREASURY-01'
+    },
+    {
+      id: 'tx_super_02',
+      type: 'deposit',
+      amount: 25000.00,
+      description: 'bKash Merchant Settlement Transfer',
+      timestamp: '2 hours ago',
+      status: 'completed',
+      referenceId: 'BKX-984210'
+    }
+  ]
+};
+
+export const INITIAL_PAIKARMART_DELEGATES: PaikarMartDelegate[] = [
+  {
+    id: 'del_owner_1',
+    email: 'abs.munna1@gmail.com',
+    name: 'Munna (Primary Owner)',
+    role: 'super_admin',
+    addedAt: '2026-01-01',
+    addedBy: 'Platform Genesis',
+    status: 'active'
+  },
+  {
+    id: 'del_ops_2',
+    email: 'admin.ops@paikarmart.com',
+    name: 'PaikarMart Ops Head',
+    role: 'admin',
+    addedAt: '2026-02-01',
+    addedBy: 'abs.munna1@gmail.com',
+    status: 'active'
+  }
+];
+
+export const CURRENT_USER: User = DEFAULT_PERSONAL_USER;
+export const SUPER_ADMIN_USER: User = PAIKARMART_SUPER_ADMIN_PROFILE;
 
 export const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {

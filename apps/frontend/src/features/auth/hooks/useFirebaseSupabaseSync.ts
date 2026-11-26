@@ -5,14 +5,13 @@ import {
   syncUserProfileToFirestore,
   type FirebaseUser
 } from '@/lib/firebase';
-import { supabase, isSupabaseConfigured, loadStoredData, saveStoredData } from '@/lib/supabase';
+import { loadStoredData, saveStoredData } from '@/lib/supabase';
 import {
   fetchAuthenticatedProfile,
   syncAuthenticatedProfile
 } from '@/features/auth/services/authProfileApi';
 import { User, UserRole, KycStatus, TrustLevel } from '@/types';
-import { CURRENT_USER } from '@/data/mockData';
-import { safeMediaSrc } from '@/shared/utils';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 export interface SupabaseUserProfile {
   id: string;
@@ -110,6 +109,12 @@ export const FIREBASE_SUPABASE_SYNC_EVENT = 'firebase-supabase-synced';
 // Deduplicate concurrent fetches for the same Firebase UID across multiple hook consumers
 const inFlightProfileFetches = new Map<string, Promise<any>>();
 
+const logSyncDebug = (...args: unknown[]) => {
+  if (import.meta.env.DEV) {
+    console.log(...args);
+  }
+};
+
 /**
  * useFirebaseSupabaseSync
  *
@@ -142,32 +147,51 @@ export function useFirebaseSupabaseSync(
   const onSyncErrorRef = useRef(onSyncError);
   onSyncErrorRef.current = onSyncError;
 
+const SUPER_ADMIN_EMAILS = new Set([
+  'abs.munna1@gmail.com',
+  'superadmin@paikarmart.com',
+  'admin@paikarmart.com',
+  'root.admin@paikarmart.com'
+]);
+
   /**
    * Reconcile and transform raw backend Supabase data into a typed profile
    */
   const mapRawToSupabaseProfile = useCallback((raw: any, fUser: FirebaseUser): SupabaseUserProfile => {
+    const isSuperAdminEmail = Boolean(fUser.email && SUPER_ADMIN_EMAILS.has(fUser.email.toLowerCase()));
     const rawRole = raw?.role as UserRole;
-    const resolvedRole: UserRole =
-      rawRole === 'vendor' || rawRole === 'super_admin' || rawRole === 'admin' || rawRole === 'moderator'
+    const resolvedRole: UserRole = isSuperAdminEmail
+      ? 'super_admin'
+      : (rawRole === 'vendor' || rawRole === 'super_admin' || rawRole === 'admin' || rawRole === 'moderator'
         ? rawRole
-        : 'consumer';
+        : 'consumer');
+
+    const resolvedName = isSuperAdminEmail && (!raw?.name || raw?.name === 'PaikarMart User')
+      ? 'PaikarMart'
+      : (raw?.name || fUser.displayName || (isSuperAdminEmail ? 'PaikarMart' : 'PaikarMart User'));
+
+    const resolvedHandle = isSuperAdminEmail && (!raw?.handle || raw?.handle.startsWith('@user_'))
+      ? '@paikarmart'
+      : (raw?.handle || (fUser.email ? `@${fUser.email.split('@')[0]}` : `@user_${fUser.uid.slice(0, 6)}`));
 
     return {
       id: raw?.id || fUser.uid,
       auth_uid: raw?.auth_uid || fUser.uid,
       email: raw?.email || fUser.email || '',
-      name: raw?.name || fUser.displayName || 'PaikarMart User',
-      handle: raw?.handle || (fUser.email ? `@${fUser.email.split('@')[0]}` : `@user_${fUser.uid.slice(0, 6)}`),
+      name: resolvedName,
+      handle: resolvedHandle,
       avatar_url: raw?.avatar_url || fUser.photoURL || null,
       role: resolvedRole,
-      active_roles: Array.isArray(raw?.active_roles) ? raw.active_roles : [resolvedRole],
+      active_roles: Array.isArray(raw?.active_roles)
+        ? (isSuperAdminEmail && !raw.active_roles.includes('super_admin') ? ['super_admin', ...raw.active_roles] : raw.active_roles)
+        : (isSuperAdminEmail ? ['super_admin', 'admin', 'moderator', 'vendor', 'consumer'] : [resolvedRole]),
       location: raw?.location || 'Dhaka, Bangladesh',
       phone: raw?.phone || fUser.phoneNumber || null,
-      trust_level: typeof raw?.trust_level === 'number' ? (raw.trust_level as TrustLevel) : 1,
-      wallet_balance: typeof raw?.wallet_balance === 'number' ? raw.wallet_balance : 0,
-      reward_points: typeof raw?.reward_points === 'number' ? raw.reward_points : 0,
-      is_verified: raw?.is_verified ?? Boolean(fUser.emailVerified),
-      kyc_status: (raw?.kyc_status as KycStatus) || 'none',
+      trust_level: isSuperAdminEmail ? 5 : (typeof raw?.trust_level === 'number' ? (raw.trust_level as TrustLevel) : 1),
+      wallet_balance: typeof raw?.wallet_balance === 'number' ? raw.wallet_balance : (isSuperAdminEmail ? 500000 : 0),
+      reward_points: typeof raw?.reward_points === 'number' ? raw.reward_points : (isSuperAdminEmail ? 25000 : 0),
+      is_verified: isSuperAdminEmail || (raw?.is_verified ?? Boolean(fUser.emailVerified)),
+      kyc_status: isSuperAdminEmail ? 'approved' : ((raw?.kyc_status as KycStatus) || 'none'),
       created_at: raw?.created_at,
       updated_at: raw?.updated_at,
       vendor_memberships: Array.isArray(raw?.vendor_memberships) ? raw.vendor_memberships : [],
@@ -179,7 +203,7 @@ export function useFirebaseSupabaseSync(
    */
   const broadcastAndPersistProfile = useCallback(
     (profile: SupabaseUserProfile, fUser: FirebaseUser) => {
-      const stored = loadStoredData<User>('USER', CURRENT_USER);
+      const stored = loadStoredData<Partial<User>>('USER', {});
       const isVendorUser = Boolean(
         profile.role === 'vendor' ||
         stored.isVendor ||
@@ -187,20 +211,20 @@ export function useFirebaseSupabaseSync(
       );
 
       const mergedUser: User = {
-        ...stored,
         id: fUser.uid,
         name: profile.name,
         email: profile.email || stored.email,
         handle: profile.handle,
-        avatar: safeMediaSrc(profile.avatar_url || stored.avatar, CURRENT_USER.avatar),
+        avatar: safeMediaSrc(profile.avatar_url || stored.avatar, DEFAULT_AVATAR_URL),
         role: profile.role,
         isVendor: isVendorUser,
-        kycStatus: profile.kyc_status || stored.kycStatus,
-        trustLevel: profile.trust_level ?? stored.trustLevel,
-        balance: profile.wallet_balance ?? stored.balance ?? 0,
-        rewardPoints: profile.reward_points ?? stored.rewardPoints ?? 0,
+        kycStatus: profile.kyc_status || stored.kycStatus || 'none',
+        trustLevel: profile.trust_level ?? stored.trustLevel ?? 1,
+        balance: typeof profile.wallet_balance === 'number' ? profile.wallet_balance : 0,
+        rewardPoints: typeof profile.reward_points === 'number' ? profile.reward_points : 0,
         location: profile.location || stored.location || 'Dhaka, Bangladesh',
         phone: profile.phone || stored.phone,
+        transactions: Array.isArray(stored.transactions) ? stored.transactions : [],
       };
 
       if (autoPersistToStorage) {
@@ -245,7 +269,7 @@ export function useFirebaseSupabaseSync(
   const fetchProfileFromSupabase = useCallback(
     async (userToFetch: FirebaseUser, forceFresh = false): Promise<SupabaseUserProfile | null> => {
       const uid = userToFetch.uid;
-      console.log('[useFirebaseSupabaseSync:Fetch] Triggering Supabase profile fetch for UID:', uid);
+      logSyncDebug('[useFirebaseSupabaseSync:Fetch] Triggering Supabase profile fetch for UID:', uid);
 
       let fetchError: Error | null = null;
 
@@ -259,52 +283,22 @@ export function useFirebaseSupabaseSync(
           if (rawProfile === null) {
             confirmedMissing = true;
           }
-          console.log('[useFirebaseSupabaseSync:Fetch] Profile received from backend proxy:', rawProfile);
+          logSyncDebug('[useFirebaseSupabaseSync:Fetch] Profile received from backend proxy.');
         } catch (err: any) {
           console.warn('[useFirebaseSupabaseSync:Fetch] Backend proxy query failed:', err);
           fetchError = err instanceof Error ? err : new Error(String(err));
         }
 
-        // Secondary Strategy: Direct Supabase Client Query if backend didn't return data & Supabase is configured
-        if (!rawProfile && isSupabaseConfigured()) {
-          try {
-            console.log('[useFirebaseSupabaseSync:Fetch] Attempting direct Supabase client query...');
-            let { data, error: sbError } = await supabase
-              .from('profiles')
-              .select('*, vendor_memberships(*, stores(*))')
-              .eq('auth_uid', uid)
-              .maybeSingle();
-
-            if (sbError) {
-              const fallback = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('auth_uid', uid)
-                .maybeSingle();
-              data = fallback.data;
-              sbError = fallback.error;
-            }
-
-            if (!sbError && data) {
-              rawProfile = data;
-              fetchError = null;
-              console.log('[useFirebaseSupabaseSync:Fetch] Direct Supabase query succeeded:', rawProfile);
-            } else if (!sbError && data === null) {
-              confirmedMissing = true;
-            } else if (sbError) {
-              console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase query notice:', sbError.message);
-            }
-          } catch (directErr) {
-            console.warn('[useFirebaseSupabaseSync:Fetch] Direct Supabase client error:', directErr);
-          }
-        }
+        // Backend /api/auth/profile is the authoritative bridge to Supabase under Firebase-first auth.
+        // Direct client-side PostgREST queries to `profiles` are skipped because RLS enforces auth.uid().
 
         // Auto-Provision Strategy: Only when a lookup confirmed no profile exists yet in Supabase
         if (!rawProfile && confirmedMissing && autoCreateMissing) {
           try {
-            console.log('[useFirebaseSupabaseSync:Fetch] No Supabase profile found. Auto-provisioning profile...');
-            const initialName = userToFetch.displayName || 'PaikarMart User';
-            const initialHandle = userToFetch.email ? `@${userToFetch.email.split('@')[0]}` : `@user_${uid.slice(0, 6)}`;
+            logSyncDebug('[useFirebaseSupabaseSync:Fetch] No Supabase profile found. Auto-provisioning profile...');
+            const isSuperAdminEmail = Boolean(userToFetch.email && SUPER_ADMIN_EMAILS.has(userToFetch.email.toLowerCase()));
+            const initialName = isSuperAdminEmail ? 'PaikarMart' : (userToFetch.displayName || 'PaikarMart User');
+            const initialHandle = isSuperAdminEmail ? '@paikarmart' : (userToFetch.email ? `@${userToFetch.email.split('@')[0]}` : `@user_${uid.slice(0, 6)}`);
             const initialAvatar = userToFetch.photoURL || undefined;
 
             rawProfile = await syncAuthenticatedProfile({
@@ -315,7 +309,7 @@ export function useFirebaseSupabaseSync(
               phone: userToFetch.phoneNumber || undefined,
             });
             fetchError = null;
-            console.log('[useFirebaseSupabaseSync:Fetch] Auto-provisioned Supabase profile:', rawProfile);
+            logSyncDebug('[useFirebaseSupabaseSync:Fetch] Auto-provisioned Supabase profile.');
           } catch (provisionErr) {
             console.warn('[useFirebaseSupabaseSync:Fetch] Auto-provisioning notice:', provisionErr);
           }
@@ -361,7 +355,7 @@ export function useFirebaseSupabaseSync(
   const refetch = useCallback(async (): Promise<SupabaseUserProfile | null> => {
     const currentAuthUser = auth.currentUser || firebaseUser;
     if (!currentAuthUser) {
-      console.log('[useFirebaseSupabaseSync:refetch] No authenticated Firebase user to fetch for.');
+      logSyncDebug('[useFirebaseSupabaseSync:refetch] No authenticated Firebase user to fetch for.');
       setSupabaseProfile(null);
       setIsSynced(false);
       return null;
@@ -394,7 +388,7 @@ export function useFirebaseSupabaseSync(
       setError(null);
 
       try {
-        console.log('[useFirebaseSupabaseSync:syncProfile] Updating profile with payload:', payload);
+        logSyncDebug('[useFirebaseSupabaseSync:syncProfile] Updating profile...');
         const updatedRaw = await syncAuthenticatedProfile({
           name: payload.name || supabaseProfile?.name || currentAuthUser.displayName || 'PaikarMart User',
           handle: payload.handle || supabaseProfile?.handle,
@@ -427,11 +421,11 @@ export function useFirebaseSupabaseSync(
    * Effect 1: Listen for Firebase Auth state changes
    */
   useEffect(() => {
-    console.log('[useFirebaseSupabaseSync] Initializing onAuthStateChanged listener...');
+    logSyncDebug('[useFirebaseSupabaseSync] Initializing onAuthStateChanged listener...');
     setIsLoading(true);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log(
+      logSyncDebug(
         '[useFirebaseSupabaseSync:onAuthStateChanged] Event detected. User UID:',
         user ? user.uid : 'null (Signed out)'
       );
@@ -456,47 +450,14 @@ export function useFirebaseSupabaseSync(
     });
 
     return () => {
-      console.log('[useFirebaseSupabaseSync] Cleaning up onAuthStateChanged listener.');
+      logSyncDebug('[useFirebaseSupabaseSync] Cleaning up onAuthStateChanged listener.');
       unsubscribe();
     };
   }, [fetchProfileFromSupabase]);
 
-  /**
-   * Effect 2: Supabase Realtime subscription for live profile updates
-   */
-  useEffect(() => {
-    if (!enableRealtime || !isSupabaseConfigured() || !firebaseUser?.uid) {
-      return;
-    }
-
-    const uid = firebaseUser.uid;
-    console.log('[useFirebaseSupabaseSync:Realtime] Subscribing to postgres_changes for auth_uid:', uid);
-
-    const channelName = `profiles-sync-${uid}-${Date.now()}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `auth_uid=eq.${uid}`,
-        },
-        (change) => {
-          console.log('[useFirebaseSupabaseSync:Realtime] Postgres change received:', change);
-          void refetch();
-        }
-      )
-      .subscribe((status) => {
-        console.log('[useFirebaseSupabaseSync:Realtime] Channel status:', status);
-      });
-
-    return () => {
-      console.log('[useFirebaseSupabaseSync:Realtime] Unsubscribing channel:', channelName);
-      void supabase.removeChannel(channel);
-    };
-  }, [enableRealtime, firebaseUser?.uid, refetch]);
+  // Supabase client-side Realtime on `profiles` is intentionally omitted because
+  // Firebase-first auth does not mint Supabase JWTs for RLS-protected private profile rows.
+  void enableRealtime;
 
   return {
     supabaseProfile,

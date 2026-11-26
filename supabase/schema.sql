@@ -1366,5 +1366,122 @@ create policy "Buyers and admins can update RFQ status"
     or public.has_role('super_admin')
   );
 
+-- ==============================================================================
+-- 20. FINANCIAL PERSISTENCE, PAYMENT SESSIONS, MESSAGING & ATOMIC LEDGER RPCs
+-- ==============================================================================
+alter table if exists public.orders add column if not exists store_id text;
+alter table if exists public.orders add column if not exists store_name text;
+alter table if exists public.orders add column if not exists discount numeric(10,2) not null default 0.00;
+alter table if exists public.orders add column if not exists promo_code text;
+alter table if exists public.orders add column if not exists updated_at timestamp with time zone default timezone('utc'::text, now()) not null;
+alter table if exists public.product_reviews add column if not exists reviewer_name text;
+alter table if exists public.escrow_records add column if not exists dispute_reason text;
 
+create unique index if not exists idx_wallet_transactions_unique_ref
+  on public.wallet_transactions(reference_id)
+  where reference_id is not null;
 
+create table if not exists public.payment_sessions (
+  id text primary key,
+  uid text not null,
+  provider text not null check (provider in ('bkash', 'nagad', 'sslcommerz')),
+  purpose text not null check (purpose in ('wallet_deposit', 'order_checkout')),
+  amount numeric(12,2) not null check (amount > 0),
+  currency text not null default 'BDT',
+  order_id text,
+  customer_phone text,
+  mode text not null check (mode in ('live', 'sandbox')),
+  gateway_reference text not null,
+  trx_id text,
+  status text not null default 'initiated' check (status in ('initiated', 'completed', 'failed', 'cancelled')),
+  idempotency_key text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.payment_sessions enable row level security;
+
+create policy "Users can view only their own payment sessions"
+  on public.payment_sessions for select
+  using (auth.uid()::text = uid or public.has_role('admin') or public.has_role('super_admin'));
+
+create policy "Only admins mutate payment sessions directly"
+  on public.payment_sessions for all
+  using (public.has_role('admin') or public.has_role('super_admin'));
+
+create unique index if not exists idx_payment_sessions_uid_idem
+  on public.payment_sessions(uid, idempotency_key)
+  where idempotency_key is not null;
+
+create table if not exists public.conversations (
+  id text primary key,
+  owner_uid text not null,
+  participant_uid text,
+  participant_name text not null,
+  participant_avatar text,
+  participant_role text not null default 'vendor',
+  store_id text,
+  product_id text,
+  product_title text,
+  last_message text,
+  unread_count int not null default 0,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.messages (
+  id uuid primary key default uuid_generate_v4(),
+  conversation_id text references public.conversations(id) on delete cascade not null,
+  sender_uid text not null,
+  sender_name text not null,
+  text text not null,
+  attachments jsonb not null default '[]'::jsonb,
+  is_ai_suggested boolean not null default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+create index if not exists idx_conversations_owner on public.conversations(owner_uid, updated_at desc);
+create index if not exists idx_messages_conversation on public.messages(conversation_id, created_at asc);
+
+create table if not exists public.wholesale_samples (
+  id text primary key,
+  requester_uid text not null,
+  requester_name text not null,
+  product_id text not null,
+  product_title text not null,
+  supplier_name text,
+  quantity int not null default 1 check (quantity > 0),
+  shipping_address text not null,
+  notes text,
+  status text not null default 'requested' check (status in ('requested', 'approved', 'shipped', 'delivered', 'rejected')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.wholesale_samples enable row level security;
+create index if not exists idx_wholesale_samples_requester on public.wholesale_samples(requester_uid, created_at desc);
+
+-- ==============================================================================
+-- 21. PERSISTENT MODERATION QUEUE (FLAGGED POSTS) & RLS
+-- ==============================================================================
+create table if not exists public.flagged_posts (
+  id text primary key,
+  author_uid text not null,
+  content_excerpt text not null,
+  flagged_keywords jsonb not null default '[]'::jsonb,
+  status text not null default 'pending_human_review' check (status in ('pending_human_review', 'approved', 'rejected')),
+  reviewed_by text,
+  reviewed_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.flagged_posts enable row level security;
+
+create policy "Moderators and admins manage flagged posts"
+  on public.flagged_posts for all
+  using (public.has_role('moderator') or public.has_role('admin') or public.has_role('super_admin'))
+  with check (public.has_role('moderator') or public.has_role('admin') or public.has_role('super_admin'));
+
+create index if not exists idx_flagged_posts_status_created
+  on public.flagged_posts(status, created_at desc);

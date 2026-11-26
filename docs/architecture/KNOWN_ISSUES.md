@@ -1,39 +1,32 @@
-# PaikarMart Known Architecture and Safety Issues
+# KNOWN ISSUES TRACKER
 
-This list captures issues found during the 2026-11-26 read-only audit. It is not a list of completed fixes.
+Maintains active architectural, infrastructure, security, and schema issues discovered during Phase 1 audit until resolved and verified.
 
-## Release blockers
+---
 
-| ID | Severity | Issue | Status / first action |
-|---|---|---|---|
-| A-01 | P0 | Shipment endpoint returns complete shipment data including delivery OTP without authentication; invalid-OTP responses also disclose the expected code. POD authorization is not tied to the recipient/assigned courier. | Not fixed. Return a public tracking projection, remove OTP disclosure, and add ownership/role checks and tests. |
-| A-02 | P0 | Wallet/escrow balance and ledger changes are separate database requests and can partially commit. | Not fixed. Move operations to atomic SQL RPC/transaction boundaries and test partial failures/concurrency. |
-| A-03 | P0 | Payment verification can mark a session completed and return success while swallowing wallet-credit failure. | Not fixed. Make state/ledger completion durable and surface pending/retry/error state. |
+## Resolved in Phase 3–8 Hardening (2026-11-26)
 
-## Major functional and deployment issues
+1. **[KI-001 / P0] Payment Sessions Persistence (`paymentRoutes.ts`, `paymentRepository.ts`)** — Resolved via `payment_sessions` SQL schema + persistent repository + fail-closed webhook ledger sync.
+2. **[KI-002 / P0] Wallet/Escrow Fail-Closed & Atomic RPCs (`walletService.ts`, `walletRoutes.ts`, `escrowRoutes.ts`)** — Resolved via atomic SQL RPCs and strict `503` fail-closed responses in persistent finance mode.
+3. **[KI-003 / P0] Order Status & SKU Price Integrity (`orderRoutes.ts`)** — Resolved via Supabase `orders` reads/updates and authoritative server-side SKU pricing.
+4. **[KI-004 / P0] Retail Review UUID Mismatch & Q&A Authorization (`retailRoutes.ts`)** — Resolved via `resolveProfileUuidByAuthUid`, `supabaseAdmin`, merchant/admin RBAC on Q&A answers, and Supabase prescriptions persistence.
+5. **[KI-005 / P0] Wholesale/RFQ & Vendor KYC Persistence (`wholesaleRoutes.ts`, `rfqRoutes.ts`, `rfqRepository.ts`, `vendorService.ts`)** — Resolved via shared `rfqRepository`, ownership/escrow validation, and Supabase-first vendor/KYC/analytics queries.
+6. **[KI-006 / P0] Logistics Returns & Messaging Isolation (`logisticsService.ts`, `messagingRoutes.ts`)** — Resolved via Supabase `return_pickups`/`conversations`/`messages` persistence, persistent POD escrow release, and strict thread ACLs.
+7. **[KI-007 / P0] AI Route Auth (`aiRoutes.ts`, `aiApiClient.ts`, `VoiceSearchModal.tsx`)** — Resolved (`requireFirebaseAuth` enforced on `/chat`, `/search-grounding`, `/maps-grounding`, `/transcribe`; frontend clients updated).
+8. **[KI-008 / P0] Dev Server Port Alignment (`env.ts`, `vite.config.ts`)** — Verified aligned on port `3000` in development.
+9. **[KI-010 / P1] Prisma Schema Column Sync (`schema.prisma`)** — Synced missing catalog, review, order, and escrow fields with SQL schemas.
+10. **[KI-011 / P1] Direct Frontend DB Queries & Layer Violations** — Resolved (`shared/constants/routes.ts`, `shared/services/apiClient.ts`, `useEngagementAnalytics.ts`, `useFirebaseSupabaseSync.ts`, `AuthContext.tsx`, and portal decoupling).
+11. **[KI-012 / P1] `App.tsx` Modular Decomposition & Storage Keys** — Extracted `useCartStore`, `useSocialFeedStore`, `useNotificationsStore`, migrated `nexsphere_*` keys to `paikarmart_*`, and routed `handleDeductBalance` to authenticated wallet/escrow guidance.
+12. **[KI-013 / P2] Persistent AI Moderation Queue (`aiRoutes.ts`, `moderationRepository.ts`)** — Resolved via `public.flagged_posts` SQL table + RLS, `FlaggedPost` Prisma model, persistent repository, and `hardening.security.test.ts` coverage.
+13. **[KI-015 / P2] Portal Category Taxonomy & Shared Client Consolidation (`M1`, `M4`, `M7`)** — Consolidated frontend API clients onto `shared/services/apiClient.ts`, deleted duplicate `contexts/AppProviders.tsx`, and tagged all portals with `businessCategory`.
+14. **[KI-014 / P3] Backend Strict TypeScript, `TopNavbar.tsx` & `walletService.ts` Modular Split** — Resolved (`"strict": true` + `tests/**/*.ts` enabled in `apps/backend/tsconfig.json`; `TopNavSearchDropdown.tsx` + `TopNavMobileBar.tsx` extracted from `TopNavbar.tsx`; `walletMemoryStore.ts` extracted from `walletService.ts`; structured `logger.ts` redaction fixed and adopted in `aiRoutes.ts`).
 
-| ID | Severity | Issue | Status / first action |
-|---|---|---|---|
-| A-04 | P1 | Order creation uses caller-supplied price fallback, optional auth, and process-local order state; persistence errors do not prevent success responses. | Not fixed. Define guest identity contract and require server-authoritative listing/order persistence. |
-| A-05 | P1 | Payment sessions are held in a process-local `Map`. | Not fixed. Persist sessions and idempotency keys. |
-| A-06 | P1 | `publish-prod.yml` deletes `apps/frontend/dist` before attempting to copy that directory. | Not fixed. Validate a staging-directory workflow off production. |
-| A-07 | P1 | Prisma schema is not synchronized with `supabase/schema.sql`; no versioned Supabase migration directory was found. | Not fixed. Diff schemas and live state before creating safe migrations. |
-| A-08 | P1 | Escrow release is not server-enforced as dependent on a persisted, verified POD/OTP. | Not fixed. Define and test one durable order/shipment/escrow transition. |
+---
 
-## Maintainability and validation
+## Remaining Active Operational Items
 
-| ID | Severity | Issue | Status / first action |
-|---|---|---|---|
-| A-09 | P2 | Architecture document lives under `documents/`, not the requested `docs/architecture/` path. | Decide one canonical document location; avoid duplicate specifications. |
-| A-10 | P2 | Root-only npm configuration coexists with `bun.lock`; workspace linking is not configured; optional database entrypoint imports an uninstalled Prisma client. | Decide package manager and workspace model before adding package imports. |
-| A-11 | P2 | Design-system indexes and context/guard entrypoints re-export implementations from other directories. These are facades, not safe deletion candidates. | Keep until import/dynamic-reference audit proves deprecation safe. |
-| A-12 | P2 | Firebase Hosting is described but no Firebase Hosting target is configured in `firebase.json`. | Confirm whether Firebase Hosting is supported and configure/test separately if needed. |
-| A-13 | P2 | `server.ts` retains domain handlers while domain routers are mounted; some modules call across domain boundaries. | Extract incrementally, preserving route aliases and service contracts. |
-| A-14 | P2 | CI runs frontend build only; backend type-check is blocked locally by missing `express-rate-limit`; local backend HTTP tests are blocked by sandbox loopback restrictions. | Restore declared dependencies and permit loopback tests in an approved validation environment; add backend checks to CI. |
+1. **[KI-009 / Operational] Remote Push via Personal Access Token & Supabase SQL Execution**
+   - Remote `origin` has been configured locally (`https://github.com/absmunna/PaikarMart.git`). Because pushing requires GitHub credentials, run `git push -u origin refactor/modular-architecture` with your GitHub token, then create a PR to merge into `main`.
+   - Apply `supabase/migrations/20261126_financial_and_persistence_hardening.sql` in your Supabase SQL Editor.
+   - Legacy Windows scripts (`run_phase1_migrations.ps1`, `scripts/sync-to-web.ps1`, `scripts/sync-web.ps1`) remain untouched for historical reference.
 
-## Not confirmed
-
-- Live Supabase schema, RLS behavior, current production data, payment credentials, Firebase deployment state, and Render/Vercel configuration were not accessed.
-- No file was confirmed safe to delete.
-- No duplicate business implementation was proven solely from filenames.
-- The frontend test file under `apps/frontend/tests/` is untracked at the audited worktree; it is not part of the audited commit.

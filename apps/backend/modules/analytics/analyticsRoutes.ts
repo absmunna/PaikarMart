@@ -155,8 +155,8 @@ function aggregateMerchantInsights(rows: StoredAnalyticsRow[], storeId?: string)
 }
 
 analyticsRouter.post('/events', async (req: Request, res: Response) => {
-  const incoming = Array.isArray(req.body?.events) ? req.body.events : [req.body];
-  const sanitizedRows = incoming
+  const incoming: unknown[] = Array.isArray(req.body?.events) ? req.body.events : [req.body];
+  const sanitizedRows: StoredAnalyticsRow[] = incoming
     .map(sanitizeEvent)
     .filter((row: StoredAnalyticsRow | null): row is StoredAnalyticsRow => Boolean(row))
     .slice(0, 25);
@@ -178,7 +178,7 @@ analyticsRouter.post('/events', async (req: Request, res: Response) => {
 
   if (client) {
     try {
-      const insertPayload = sanitizedRows.map(({ created_at: _ignored, ...dbRow }) => dbRow);
+      const insertPayload = sanitizedRows.map(({ created_at: _ignored, ...dbRow }: StoredAnalyticsRow) => dbRow);
       const { error } = await client.from('analytics').insert(insertPayload);
       if (!error) {
         persistedToSupabase = true;

@@ -26,7 +26,7 @@ import {
 } from './courierAdapters.js';
 import { evaluateStoreGeofence, rankHyperlocalProviders } from './distanceEngine.js';
 import { LogisticsVehicleClass, VEHICLE_TARIFF_TABLE } from './tariffConfig.js';
-import { requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
+import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 import { backendEnv, isCourierWebhookConfigured } from '../../config/env.js';
 import { upsertStoredShipmentWaybill } from '../../services/dbService.js';
 
@@ -260,7 +260,7 @@ logisticsRouter.post('/shipments/:orderId/checkpoint', requireFirebaseAuth, requ
 });
 
 // POST /api/logistics/shipments/:orderId/verify-pod
-logisticsRouter.post('/shipments/:orderId/verify-pod', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.post('/shipments/:orderId/verify-pod', requireFirebaseAuth, async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { otp, recipientName, photoDataUrl, signatureDataUrl } = req.body;
 
@@ -269,12 +269,13 @@ logisticsRouter.post('/shipments/:orderId/verify-pod', requireFirebaseAuth, (req
     return;
   }
 
-  const result = verifyShipmentPod(orderId, {
+  const result = await verifyShipmentPod(orderId, {
     otp: String(otp),
     recipientName,
     photoDataUrl,
     signatureDataUrl,
-    userId: res.locals.auth.uid
+    userId: res.locals.auth.uid,
+    isPrivileged: isPrivilegedRole(res.locals.auth)
   });
 
   if (!result.ok) {
@@ -308,21 +309,25 @@ logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, 
 });
 
 // GET /api/logistics/returns & POST /api/logistics/returns
-logisticsRouter.get('/returns', requireFirebaseAuth, (_req: Request, res: Response) => {
+logisticsRouter.get('/returns', requireFirebaseAuth, async (_req: Request, res: Response) => {
+  const returns = await listReturnPickups(
+    res.locals.auth.uid,
+    isPrivilegedRole(res.locals.auth)
+  );
   res.json({
     success: true,
-    returns: listReturnPickups()
+    returns
   });
 });
 
-logisticsRouter.post('/returns', requireFirebaseAuth, (req: Request, res: Response) => {
+logisticsRouter.post('/returns', requireFirebaseAuth, async (req: Request, res: Response) => {
   const { orderId, reason, pickupAddress, courierPartner } = req.body;
   if (!orderId || !reason || !pickupAddress) {
     res.status(400).json({ error: 'orderId, reason, and pickupAddress are required' });
     return;
   }
 
-  const returnRecord = createReturnPickup({
+  const returnRecord = await createReturnPickup({
     orderId: String(orderId),
     userId: res.locals.auth.uid,
     reason: String(reason),

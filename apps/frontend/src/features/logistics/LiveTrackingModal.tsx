@@ -14,15 +14,13 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { auth } from '@/lib/firebase';
+import { logisticsOrderApiClient } from '@/features/logistics/services/logisticsOrderApiClient';
 
 interface LiveTrackingModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTrackingNumber?: string;
 }
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
   isOpen,
@@ -58,26 +56,13 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
     setPodSuccess(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(clean)}/track`);
-      if (res.ok) {
-        const data = await res.json();
-        setShipmentData(data.shipment);
-        setOrderData(data.order);
-        setIsLoading(false);
-        return;
+      const result = await logisticsOrderApiClient.trackOrderOrWaybill(clean);
+      if (result.shipment || result.order) {
+        setShipmentData(result.shipment);
+        setOrderData(result.order);
+      } else {
+        setErrorMsg(isBn ? 'শিপমেন্ট বা ট্র্যাকিং নম্বর পাওয়া যায়নি।' : 'Shipment or tracking number not found.');
       }
-
-      // Try fetching via logistics waybill lookup if order track fails
-      const fallbackRes = await fetch(`${API_BASE}/api/logistics/shipments/${encodeURIComponent(clean)}`);
-      if (fallbackRes.ok) {
-        const data = await fallbackRes.json();
-        setShipmentData(data.shipment || data);
-        setOrderData(null);
-        setIsLoading(false);
-        return;
-      }
-
-      setErrorMsg(isBn ? 'শিপমেন্ট বা ট্র্যাকিং নম্বর পাওয়া যায়নি।' : 'Shipment or tracking number not found.');
     } catch {
       setErrorMsg(isBn ? 'ট্র্যাকিং ডাটা লোড করতে সমস্যা হয়েছে।' : 'Failed to fetch tracking information.');
     } finally {
@@ -98,21 +83,11 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      const res = await fetch(`${API_BASE}/api/logistics/shipments/${encodeURIComponent(orderId)}/pod`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          otp: cleanOtp,
-          recipientName: recipientName.trim() || 'Verified Recipient',
-        }),
+      const data = await logisticsOrderApiClient.submitPodOtp(orderId, {
+        otp: cleanOtp,
+        recipientName: recipientName.trim() || 'Verified Recipient',
       });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
+      if (data.success) {
         setPodSuccess(isBn ? 'ডেলিভারি সফলভাবে ভেরিফাই ও কনফার্ম হয়েছে!' : 'Delivery verified and confirmed successfully!');
         if (data.shipment) setShipmentData(data.shipment);
       } else {

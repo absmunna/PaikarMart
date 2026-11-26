@@ -1,12 +1,11 @@
-import { 
-  AiRole, 
-  ChatMessage, 
-  SearchGroundingResponse, 
-  MapsGroundingResponse, 
-  TranscriptionResponse 
+import {
+  AiRole,
+  ChatMessage,
+  SearchGroundingResponse,
+  MapsGroundingResponse,
+  TranscriptionResponse,
 } from '@/features/ai/types/ai';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+import { apiRequest } from '@/shared/services/apiClient';
 
 export async function sendChatMessage(
   history: ChatMessage[],
@@ -14,78 +13,55 @@ export async function sendChatMessage(
   role: AiRole = 'general',
   isFastMode: boolean = false
 ): Promise<string> {
-  const formattedHistory = history.map(h => ({
+  const formattedHistory = history.map((h) => ({
     role: h.role,
-    parts: [{ text: h.text }]
+    parts: [{ text: h.text }],
   }));
 
-  const res = await fetch(`${API_BASE}/api/ai/chat`, {
+  const data = await apiRequest<{ reply: string }>('/api/ai/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    json: true,
+    requireAuth: true,
     body: JSON.stringify({
       history: formattedHistory,
       message,
       role,
-      isFastMode
-    })
+      isFastMode,
+    }),
   });
 
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.details || errorData.error || 'Chat AI response failed.');
-  }
-
-  const data = await res.json();
   return data.reply;
 }
 
 export async function fetchSearchGrounding(prompt: string): Promise<SearchGroundingResponse> {
-  const res = await fetch(`${API_BASE}/api/ai/search-grounding`, {
+  return await apiRequest<SearchGroundingResponse>('/api/ai/search-grounding', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt })
+    json: true,
+    requireAuth: true,
+    body: JSON.stringify({ prompt }),
   });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.details || errorData.error || 'Search grounding request failed.');
-  }
-
-  return await res.json();
 }
 
 export async function fetchMapsGrounding(
-  prompt: string, 
+  prompt: string,
   userLatLng?: { latitude: number; longitude: number }
 ): Promise<MapsGroundingResponse> {
-  const res = await fetch(`${API_BASE}/api/ai/maps-grounding`, {
+  return await apiRequest<MapsGroundingResponse>('/api/ai/maps-grounding', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, userLatLng })
+    json: true,
+    requireAuth: true,
+    body: JSON.stringify({ prompt, userLatLng }),
   });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.details || errorData.error || 'Maps grounding request failed.');
-  }
-
-  return await res.json();
 }
 
 export async function transcribeVoiceAudio(
-  base64Audio: string, 
+  base64Audio: string,
   mimeType: string = 'audio/webm'
 ): Promise<TranscriptionResponse> {
-  const res = await fetch(`${API_BASE}/api/ai/transcribe`, {
+  return await apiRequest<TranscriptionResponse>('/api/ai/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64Audio, mimeType })
+    json: true,
+    requireAuth: true,
+    body: JSON.stringify({ base64Audio, mimeType }),
   });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.details || errorData.error || 'Audio transcription failed.');
-  }
-
-  return await res.json();
 }

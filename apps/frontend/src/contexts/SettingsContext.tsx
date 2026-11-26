@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 
-export type SettingsTab = 'appearance' | 'language' | 'location' | 'about';
+export type SettingsTab = 'appearance' | 'language' | 'location' | 'about' | 'team_access';
 
 interface SettingsContextType {
   isSettingsOpen: boolean;

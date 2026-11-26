@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 import { resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
+import { logger } from '../../services/logger.js';
 
 export const catalogRouter = Router();
 
@@ -282,7 +283,7 @@ catalogRouter.get('/products', async (_req: Request, res: Response) => {
   }
 
   if (error && !isMissingTableError(error)) {
-    console.error('Catalog read failed:', error.message);
+    logger.error('Catalog read failed', { module: 'catalog', error: error.message });
     res.status(503).json({
       products: [],
       source: 'error',

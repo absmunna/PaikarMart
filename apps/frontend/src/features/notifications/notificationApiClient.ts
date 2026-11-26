@@ -1,16 +1,10 @@
-import { auth } from '@/lib/firebase';
+import { API_BASE, getAuthHeaders, getFirebaseBearerToken } from '@/shared/services/apiClient';
 import type { AppNotification, PortalTab } from '@/types';
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
 async function authHeaders(json = false): Promise<Record<string, string> | null> {
-  const user = auth.currentUser;
-  if (!user) return null;
-  const token = await user.getIdToken();
-  return {
-    ...(json ? { 'Content-Type': 'application/json' } : {}),
-    Authorization: `Bearer ${token}`,
-  };
+  const token = await getFirebaseBearerToken();
+  if (!token) return null;
+  return await getAuthHeaders({ json });
 }
 
 export async function fetchUserNotificationsApi(): Promise<AppNotification[] | null> {

@@ -1,5 +1,13 @@
 export type HubId = 'marketplace' | 'services' | 'community' | 'utility';
 
+export type BusinessCategoryId =
+  | 'commerce'
+  | 'services'
+  | 'digital'
+  | 'mobility'
+  | 'business'
+  | 'community';
+
 export type HubFeedCardKind =
   | 'product'
   | 'service'
@@ -15,6 +23,7 @@ export type HubFeedCardKind =
 export interface HubPortalDefinition {
   id: string;
   hubId: HubId;
+  businessCategory: BusinessCategoryId;
   labelEn: string;
   labelBn: string;
   entryRoute: string;

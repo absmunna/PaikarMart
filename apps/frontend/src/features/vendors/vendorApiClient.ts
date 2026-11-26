@@ -1,5 +1,5 @@
 import type { PublicProfileProjection } from '@paikarmart/shared';
-import { auth } from '@/lib/firebase';
+import { API_BASE, apiRequest, getAuthHeaders } from '@/shared/services/apiClient';
 import {
   BusinessDocument,
   BusinessRole,
@@ -11,13 +11,6 @@ import {
   UserRole,
   VendorProfile
 } from '@/types';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function authenticatedHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
-}
 
 export interface VendorKycSubmissionRequest {
   applicantId: string;
@@ -77,22 +70,18 @@ export const vendorApiClient = {
     vendorProfile: VendorProfile;
     message: string;
   }> {
-    const res = await fetch(`${API_BASE}/api/vendors/register`, {
+    return await apiRequest('/api/vendors/register', {
       method: 'POST',
-      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload)
+      json: true,
+      body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || 'Failed to submit KYC application.');
-    }
-    return data;
   },
 
   async fetchVendorAnalytics(vendorId: string, userId?: string): Promise<VendorAnalyticsSummary | null> {
+    void userId;
     try {
       const res = await fetch(`${API_BASE}/api/vendors/${encodeURIComponent(vendorId)}/analytics`, {
-      headers: await authenticatedHeaders()
+        headers: await getAuthHeaders(),
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -136,11 +125,8 @@ export const vendorApiClient = {
   },
 
   async fetchKycQueue(requesterRole: UserRole): Promise<KycApplicationItem[]> {
-    const res = await fetch(`${API_BASE}/api/vendors/kyc/queue`, { headers: await authenticatedHeaders() });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || 'Governance access required.');
-    }
+    void requesterRole;
+    const data = await apiRequest<{ applications?: KycApplicationItem[] }>('/api/vendors/kyc/queue');
     return data.applications || [];
   },
 
@@ -151,19 +137,18 @@ export const vendorApiClient = {
     reviewerEmail: string;
     note?: string;
   }): Promise<KycApplicationItem> {
-    const res = await fetch(`${API_BASE}/api/vendors/kyc/${encodeURIComponent(params.applicationId)}/decision`, {
-      method: 'POST',
-      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        decision: params.decision,
-        reviewerEmail: params.reviewerEmail,
-        note: params.note
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error || 'Failed to record KYC decision.');
-    }
+    const data = await apiRequest<{ application: KycApplicationItem }>(
+      `/api/vendors/kyc/${encodeURIComponent(params.applicationId)}/decision`,
+      {
+        method: 'POST',
+        json: true,
+        body: JSON.stringify({
+          decision: params.decision,
+          reviewerEmail: params.reviewerEmail,
+          note: params.note,
+        }),
+      }
+    );
     return data.application;
   },
 
@@ -175,7 +160,7 @@ export const vendorApiClient = {
   } | null> {
     try {
       const res = await fetch(`${API_BASE}/api/vendors/kyc/my-status`, {
-        headers: await authenticatedHeaders(),
+        headers: await getAuthHeaders(),
       });
       if (!res.ok) return null;
       return await res.json();
@@ -199,16 +184,11 @@ export const vendorApiClient = {
     authUid?: string;
     role: UserRole;
   }): Promise<{ success: boolean; profile?: Record<string, unknown> | null }> {
-    const res = await fetch(`${API_BASE}/api/vendors/governance/roles`, {
+    return await apiRequest('/api/vendors/governance/roles', {
       method: 'POST',
-      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
+      json: true,
       body: JSON.stringify(params),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data?.error || 'Unable to update governance role.');
-    }
-    return data;
   }
 };
 

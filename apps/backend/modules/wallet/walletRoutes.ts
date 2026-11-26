@@ -89,17 +89,23 @@ walletRouter.post('/webhooks/payment', async (req: Request, res: Response) => {
 walletRouter.use(requireFirebaseAuth);
 
 walletRouter.get('/', async (_req: Request, res: Response) => {
-  const userId = String(res.locals.auth.uid);
-  const overview = await getPersistentWalletOverview(userId);
+  try {
+    const userId = String(res.locals.auth.uid);
+    const overview = await getPersistentWalletOverview(userId);
 
-  res.json({
-    success: true,
-    source: overview.source,
-    persistenceReady: isPersistentFinanceEnabled(),
-    wallet: overview.wallet,
-    escrowSummary: overview.escrowSummary,
-    escrows: overview.escrows
-  });
+    res.json({
+      success: true,
+      source: overview.source,
+      persistenceReady: isPersistentFinanceEnabled(),
+      wallet: overview.wallet,
+      escrowSummary: overview.escrowSummary,
+      escrows: overview.escrows
+    });
+  } catch {
+    res.status(503).json({
+      error: 'Wallet service temporarily unavailable. Please try again shortly.'
+    });
+  }
 });
 
 // Direct client deposits/withdrawals/transfers stay fail-closed; deposits credit only via signed gateway webhook

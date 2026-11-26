@@ -7,13 +7,15 @@ import {
   type CoPilotAction
 } from '../ai/aiServices.js';
 import { isPrivilegedRole, requireFirebaseAuth, type VerifiedFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
+import { supabaseAdmin } from '../../services/dbService.js';
+import { logger } from '../../services/logger.js';
 
 export const messagingRouter = Router();
 messagingRouter.use(requireFirebaseAuth);
 
 function canAccessConversation(conv: any, auth: VerifiedFirebaseAuth): boolean {
   if (!conv) return false;
-  if (!conv.ownerId) return true; // Shared AI / public storefront showcase threads
+  if (conv.isAiBot || conv.id === 'conv_ai_assistant') return true;
   return (
     conv.ownerId === auth.uid ||
     conv.participantId === auth.uid ||
@@ -37,6 +39,7 @@ let conversations: any[] = [
   },
   {
     id: 'conv_samsung_brand',
+    ownerId: 'demo_showcase',
     participantId: 'vendor_samsung',
     participantName: 'Samsung Official Brand Shop',
     participantAvatar: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=150&h=150&q=80',
@@ -55,6 +58,7 @@ let conversations: any[] = [
   },
   {
     id: 'conv_standard_garments',
+    ownerId: 'demo_showcase',
     participantId: 'vendor_textile_mill',
     participantName: 'Standard Garments Factory',
     participantAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
@@ -73,6 +77,7 @@ let conversations: any[] = [
   },
   {
     id: 'conv_coolmaster_ac',
+    ownerId: 'demo_showcase',
     participantId: 'vendor_cool_tech',
     participantName: 'CoolMaster AC Service BD',
     participantAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
@@ -171,24 +176,142 @@ let messageThreads: Record<string, any[]> = {
   ]
 };
 
+function mapDbConversation(row: Record<string, any>) {
+  return {
+    id: String(row.id),
+    ownerId: String(row.owner_uid),
+    participantId: String(row.participant_uid || ''),
+    participantName: String(row.participant_name),
+    participantAvatar: row.participant_avatar ? String(row.participant_avatar) : undefined,
+    participantRole: String(row.participant_role || 'vendor'),
+    lastMessage: String(row.last_message || ''),
+    lastMessageTimestamp: row.updated_at ? new Date(row.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+    unreadCount: Number(row.unread_count || 0),
+    onlineStatus: 'online',
+    productContext: row.product_id
+      ? { id: String(row.product_id), title: String(row.product_title || 'Product') }
+      : undefined,
+  };
+}
+
+function mapDbMessage(row: Record<string, any>) {
+  return {
+    id: String(row.id),
+    conversationId: String(row.conversation_id),
+    senderId: String(row.sender_uid),
+    senderName: String(row.sender_name),
+    senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
+    text: String(row.text || ''),
+    timestamp: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+    isRead: true,
+    isAiSuggested: Boolean(row.is_ai_suggested),
+  };
+}
+
+async function persistConversation(conv: any) {
+  if (!supabaseAdmin || !conv?.id || conv.id === 'conv_ai_assistant') return;
+  try {
+    await supabaseAdmin.from('conversations').upsert({
+      id: conv.id,
+      owner_uid: conv.ownerId || 'system',
+      participant_uid: conv.participantId || null,
+      participant_name: conv.participantName,
+      participant_avatar: conv.participantAvatar || null,
+      participant_role: conv.participantRole || 'vendor',
+      product_id: conv.productContext?.id || null,
+      product_title: conv.productContext?.title || null,
+      last_message: conv.lastMessage || '',
+      unread_count: conv.unreadCount || 0,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // Graceful fallback when migration hasn't run
+  }
+}
+
+async function persistMessage(msg: any) {
+  if (!supabaseAdmin || !msg?.conversationId || msg.conversationId === 'conv_ai_assistant') return;
+  try {
+    await supabaseAdmin.from('messages').insert({
+      conversation_id: msg.conversationId,
+      sender_uid: msg.senderId,
+      sender_name: msg.senderName,
+      text: msg.text || '',
+      attachments: msg.quoteOffer ? [msg.quoteOffer] : [],
+      is_ai_suggested: msg.senderId === 'bot_gemini_ai',
+    });
+  } catch {
+    // Graceful fallback
+  }
+}
+
 // GET /api/messages/conversations
-messagingRouter.get('/conversations', (_req: Request, res: Response) => {
+messagingRouter.get('/conversations', async (_req: Request, res: Response) => {
   const auth = res.locals.auth as VerifiedFirebaseAuth;
-  const visible = conversations.filter((c) => canAccessConversation(c, auth));
-  res.json({ success: true, conversations: visible });
+  const visibleMap = new Map<string, any>();
+
+  for (const c of conversations) {
+    if (canAccessConversation(c, auth)) visibleMap.set(c.id, c);
+  }
+
+  if (supabaseAdmin) {
+    try {
+      let query = supabaseAdmin.from('conversations').select('*').order('updated_at', { ascending: false }).limit(50);
+      if (!isPrivilegedRole(auth)) {
+        query = query.or(`owner_uid.eq.${auth.uid},participant_uid.eq.${auth.uid}`);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const mapped = mapDbConversation(row);
+          if (!visibleMap.has(mapped.id)) visibleMap.set(mapped.id, mapped);
+        }
+      }
+    } catch {
+      // Fallback cleanly
+    }
+  }
+
+  res.json({ success: true, conversations: Array.from(visibleMap.values()) });
 });
 
 // GET /api/messages/thread/:conversationId
-messagingRouter.get('/thread/:conversationId', (req: Request, res: Response) => {
+messagingRouter.get('/thread/:conversationId', async (req: Request, res: Response) => {
   const auth = res.locals.auth as VerifiedFirebaseAuth;
   const { conversationId } = req.params;
-  const conv = conversations.find((c) => c.id === conversationId);
+  let conv = conversations.find((c) => c.id === conversationId);
+
+  if (!conv && supabaseAdmin) {
+    try {
+      const { data } = await supabaseAdmin.from('conversations').select('*').eq('id', conversationId).maybeSingle();
+      if (data) conv = mapDbConversation(data);
+    } catch {
+      // Fallback below
+    }
+  }
+
   if (conv && !canAccessConversation(conv, auth)) {
     res.status(403).json({ success: false, error: 'Forbidden: Not authorized to view this conversation.' });
     return;
   }
 
-  const messages = messageThreads[conversationId] || [];
+  let messages = messageThreads[conversationId] || [];
+  if (messages.length === 0 && supabaseAdmin) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (Array.isArray(data) && data.length > 0) {
+        messages = data.map(mapDbMessage);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   if (conv) {
     conv.unreadCount = 0;
   }
@@ -197,7 +320,7 @@ messagingRouter.get('/thread/:conversationId', (req: Request, res: Response) => 
 });
 
 // POST /api/messages/conversations/init (Deterministic buyer-vendor thread creation)
-messagingRouter.post('/conversations/init', (req: Request, res: Response) => {
+messagingRouter.post('/conversations/init', async (req: Request, res: Response) => {
   const auth = res.locals.auth as VerifiedFirebaseAuth;
   const buyerId = auth.uid;
   const {
@@ -219,7 +342,7 @@ messagingRouter.post('/conversations/init', (req: Request, res: Response) => {
   const vendorId = vendor.id || `vendor_${vendor.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   const existing = conversations.find(
     (c) =>
-      (c.ownerId === buyerId || !c.ownerId) &&
+      c.ownerId === buyerId &&
       (c.participantId === vendorId || c.participantName.toLowerCase().includes(String(vendor.name).toLowerCase()))
   );
 
@@ -245,6 +368,8 @@ messagingRouter.post('/conversations/init', (req: Request, res: Response) => {
     activeConv.productContext = productContext;
   }
 
+  await persistConversation(activeConv);
+
   if (initialMessage) {
     const cleanInitText = String(initialMessage).slice(0, 2000);
     const initMsg = {
@@ -261,6 +386,8 @@ messagingRouter.post('/conversations/init', (req: Request, res: Response) => {
     messageThreads[activeConv.id].push(initMsg);
     activeConv.lastMessage = cleanInitText;
     activeConv.lastMessageTimestamp = 'Just now';
+    await persistMessage(initMsg);
+    await persistConversation(activeConv);
   }
 
   return res.status(200).json({
@@ -289,7 +416,11 @@ messagingRouter.post('/send', async (req: Request, res: Response) => {
   let activeConvId = conversationId;
 
   if (activeConvId) {
-    const existingConv = conversations.find((c) => c.id === activeConvId);
+    let existingConv = conversations.find((c) => c.id === activeConvId);
+    if (!existingConv && supabaseAdmin) {
+      const { data } = await supabaseAdmin.from('conversations').select('*').eq('id', activeConvId).maybeSingle();
+      if (data) existingConv = mapDbConversation(data);
+    }
     if (existingConv && !canAccessConversation(existingConv, auth)) {
       res.status(403).json({ success: false, error: 'Forbidden: Not authorized to post to this conversation.' });
       return;
@@ -314,6 +445,7 @@ messagingRouter.post('/send', async (req: Request, res: Response) => {
     };
     conversations.unshift(newConv);
     messageThreads[activeConvId] = [];
+    await persistConversation(newConv);
   }
 
   const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -333,12 +465,14 @@ messagingRouter.post('/send', async (req: Request, res: Response) => {
     messageThreads[activeConvId] = [];
   }
   messageThreads[activeConvId].push(userMsg);
+  await persistMessage(userMsg);
 
   const convIndex = conversations.findIndex(c => c.id === activeConvId);
   if (convIndex !== -1) {
     conversations[convIndex].lastMessage =
       text || (quoteOffer ? `B2B Quote proposed: ৳${quoteOffer.price}/unit for ${quoteOffer.quantity} pcs` : 'New message');
     conversations[convIndex].lastMessageTimestamp = 'Just now';
+    await persistConversation(conversations[convIndex]);
   }
 
   // Handle multi-turn AI Assistant response with productContext awareness
@@ -382,7 +516,7 @@ messagingRouter.post('/send', async (req: Request, res: Response) => {
     message: userMsg,
     aiReply,
     conversationId: activeConvId,
-    conversations,
+    conversations: conversations.filter((c) => canAccessConversation(c, auth)),
     thread: messageThreads[activeConvId]
   });
 });
@@ -425,7 +559,10 @@ messagingRouter.post('/ai-copilot', async (req: Request, res: Response) => {
 
     return res.json({ success: true, ...advice });
   } catch (error: any) {
-    console.error('Error in /api/messages/ai-copilot:', error);
+    logger.error('Error in /api/messages/ai-copilot', {
+      module: 'messaging',
+      error: error instanceof Error ? error.message : String(error)
+    });
     return res.status(500).json({
       success: false,
       error: 'AI Co-Pilot analysis failed.',

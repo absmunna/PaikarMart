@@ -13,9 +13,11 @@ import { FeedPostCard } from '@/features/social';
 import { SpendingAnalyticsDashboard } from '@/portals/utilities/user-profile/components/SpendingAnalyticsDashboard';
 import { SavedAddressesPage } from '@/portals/utilities/user-profile/components/account';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth, syncAuthenticatedProfile } from '@/features/auth';
-import { updateProfile as updateFirebaseProfile, updateUserProfileToFirestore, uploadProfileAvatar } from '@/lib/firebase';
-import { ProfileHeader } from '@/portals/utilities/user-profile/components/ProfileHeader';
+import { useAuth, syncAuthenticatedProfile, updateFirebaseIdentityProfile, uploadProfileAvatarAsset } from '@/features/auth';
+import { PortalTab } from '@/types';
+import { SettingsSectionId } from '@/portals/utilities/settings-center';
+import { OrdersPortal } from '@/portals/utilities/orders-hub';
+import { BarChart2 } from 'lucide-react';
 
 interface ProfilePortalProps {
   currentUser: UserType;
@@ -80,23 +82,16 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
     let nextAvatar = avatar;
     try {
       if (avatarFile && firebaseUser) {
-        nextAvatar = (await uploadProfileAvatar(avatarFile, firebaseUser.uid)) || avatar;
+        nextAvatar = (await uploadProfileAvatarAsset(avatarFile, firebaseUser.uid)) || avatar;
       }
 
       if (firebaseUser) {
-        await updateFirebaseProfile(firebaseUser, {
-          displayName: name,
-          ...(nextAvatar ? { photoURL: nextAvatar } : {}),
-        });
-        await updateUserProfileToFirestore({
-          id: firebaseUser.uid,
-          email: firebaseUser.email || currentUser.email || '',
+        await updateFirebaseIdentityProfile({
           name,
           handle: currentUser.handle,
           role: currentUser.role,
           avatar: nextAvatar,
           location,
-          emailVerified: firebaseUser.emailVerified,
         });
         await syncAuthenticatedProfile({
           name,

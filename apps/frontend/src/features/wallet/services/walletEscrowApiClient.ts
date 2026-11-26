@@ -1,17 +1,5 @@
 import { EscrowRecord, EscrowSummary, WalletServerPayload } from '@/features/wallet/types/walletTypes';
-import { auth } from '@/lib/firebase';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function authenticatedHeaders(json = false): Promise<Record<string, string>> {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in to use wallet services.');
-  const token = await user.getIdToken();
-  return {
-    ...(json ? { 'Content-Type': 'application/json' } : {}),
-    Authorization: `Bearer ${token}`,
-  };
-}
+import { apiRequest } from '@/shared/services/apiClient';
 
 export async function fetchWalletStateApi(userId = 'user_me'): Promise<{
   wallet: WalletServerPayload;
@@ -19,9 +7,7 @@ export async function fetchWalletStateApi(userId = 'user_me'): Promise<{
   escrows: EscrowRecord[];
 }> {
   void userId;
-  const res = await fetch(`${API_BASE}/api/wallet`, { headers: await authenticatedHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch wallet state');
-  return await res.json();
+  return await apiRequest('/api/wallet', { requireAuth: true });
 }
 
 export async function depositWalletApi(payload: {
@@ -30,14 +16,12 @@ export async function depositWalletApi(payload: {
   method: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload; earnedCoins?: number }> {
-  const res = await fetch(`${API_BASE}/api/wallet/deposit`, {
+  return await apiRequest('/api/wallet/deposit', {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify(payload)
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Deposit failed');
-  return data;
 }
 
 export async function withdrawWalletApi(payload: {
@@ -47,14 +31,12 @@ export async function withdrawWalletApi(payload: {
   accountDetails?: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload }> {
-  const res = await fetch(`${API_BASE}/api/wallet/withdraw`, {
+  return await apiRequest('/api/wallet/withdraw', {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify(payload)
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
-  return data;
 }
 
 export async function transferWalletApi(payload: {
@@ -64,28 +46,24 @@ export async function transferWalletApi(payload: {
   note?: string;
   idempotencyKey?: string;
 }): Promise<{ wallet: WalletServerPayload }> {
-  const res = await fetch(`${API_BASE}/api/wallet/transfer`, {
+  return await apiRequest('/api/wallet/transfer', {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify(payload)
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Transfer failed');
-  return data;
 }
 
 export async function redeemCoinsApi(payload: {
   userId?: string;
   coinsToRedeem: number;
 }): Promise<{ wallet: WalletServerPayload; bdtValue: number }> {
-  const res = await fetch(`${API_BASE}/api/wallet/redeem-coins`, {
+  return await apiRequest('/api/wallet/redeem-coins', {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify(payload)
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Coin redemption failed');
-  return data;
 }
 
 export async function fetchEscrowSummaryApi(userId = 'user_me'): Promise<{
@@ -93,9 +71,7 @@ export async function fetchEscrowSummaryApi(userId = 'user_me'): Promise<{
   escrows: EscrowRecord[];
 }> {
   void userId;
-  const res = await fetch(`${API_BASE}/api/escrow/summary`, { headers: await authenticatedHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch escrow summary');
-  return await res.json();
+  return await apiRequest('/api/escrow/summary', { requireAuth: true });
 }
 
 export async function createEscrowHoldApi(payload: {
@@ -109,39 +85,33 @@ export async function createEscrowHoldApi(payload: {
   sellerName?: string;
   holdDays?: number;
 }): Promise<{ escrow: EscrowRecord; wallet: WalletServerPayload }> {
-  const res = await fetch(`${API_BASE}/api/escrow/hold`, {
+  return await apiRequest('/api/escrow/hold', {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify(payload)
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Could not create escrow hold');
-  return data;
 }
 
 export async function releaseEscrowApi(escrowId: string): Promise<{
   escrow: EscrowRecord;
   wallet: WalletServerPayload;
 }> {
-  const res = await fetch(`${API_BASE}/api/escrow/release/${encodeURIComponent(escrowId)}`, {
+  return await apiRequest(`/api/escrow/release/${encodeURIComponent(escrowId)}`, {
     method: 'POST',
-    headers: await authenticatedHeaders(true)
+    requireAuth: true,
+    json: true,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Could not release escrow');
-  return data;
 }
 
 export async function disputeEscrowApi(
   escrowId: string,
   reason: string
 ): Promise<{ escrow: EscrowRecord; wallet: WalletServerPayload }> {
-  const res = await fetch(`${API_BASE}/api/escrow/dispute/${encodeURIComponent(escrowId)}`, {
+  return await apiRequest(`/api/escrow/dispute/${encodeURIComponent(escrowId)}`, {
     method: 'POST',
-    headers: await authenticatedHeaders(true),
-    body: JSON.stringify({ reason })
+    requireAuth: true,
+    json: true,
+    body: JSON.stringify({ reason }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Could not file dispute');
-  return data;
 }

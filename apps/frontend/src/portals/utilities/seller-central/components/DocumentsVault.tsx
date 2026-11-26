@@ -13,7 +13,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { uploadUserAsset } from '@/lib/firebase';
+import { uploadComplianceVaultAsset } from '@/features/auth';
 
 interface DocumentsVaultProps {
   documents: BusinessDocument[];
@@ -44,7 +44,7 @@ export const DocumentsVault: React.FC<DocumentsVaultProps> = ({
     let fileUrl: string | null = null;
     try {
       if (documentFile) {
-        fileUrl = await uploadUserAsset(documentFile, ownerId, 'documents');
+        fileUrl = await uploadComplianceVaultAsset(documentFile, ownerId, 'documents');
       }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Document upload failed.');
@@ -148,15 +148,22 @@ export const DocumentsVault: React.FC<DocumentsVaultProps> = ({
 
             <div className="pt-2 border-t border-[var(--pm-border)] flex items-center justify-between text-[11px] text-[var(--pm-muted)] font-mono">
               <span>Uploaded: {doc.uploadedAt}</span>
-              <button
-                type="button"
-                onClick={() => doc.fileUrl && window.open(doc.fileUrl, '_blank', 'noopener,noreferrer')}
-                disabled={!doc.fileUrl}
-                className="text-[var(--pm-accent)] font-bold hover:underline flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>View File</span>
-              </button>
+              {doc.fileUrl && /^(https?:|blob:)/i.test(doc.fileUrl) ? (
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--pm-accent)] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View File</span>
+                </a>
+              ) : (
+                <span className="text-[var(--pm-accent)] font-bold flex items-center gap-1 opacity-50 cursor-not-allowed">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View File</span>
+                </span>
+              )}
             </div>
           </div>
         ))}

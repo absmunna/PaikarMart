@@ -33,10 +33,10 @@ interface SuperAdminControlModalProps {
 
 const INITIAL_MANAGED_ADMINS = [
   {
-    id: 'user_dev_1',
-    name: 'Governance Root Lead',
-    email: 'root.admin@paikarmart.com',
-    handle: '@root_admin',
+    id: 'usr_super_admin_paikarmart',
+    name: 'PaikarMart',
+    email: 'abs.munna1@gmail.com',
+    handle: '@paikarmart',
     role: 'super_admin' as UserRole,
     grantedAt: 'Project Initialization',
     grantedBy: 'System Governance'

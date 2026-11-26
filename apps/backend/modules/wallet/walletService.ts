@@ -4,477 +4,20 @@ import {
   resolveProfileUuidByAuthUid,
   supabaseAdmin
 } from '../../services/dbService.js';
+import { logger } from '../../services/logger.js';
+import {
+  getEscrowSummaryForUser,
+  getOrCreateWallet,
+  mapDbEscrowRow,
+  summarizeEscrows,
+  type ServerEscrowRecord,
+  type ServerWalletAccount,
+  type ServerWalletTransaction,
+  type WalletTxStatus,
+  type WalletTxType,
+} from './walletMemoryStore.js';
 
-export type WalletTxType = 'deposit' | 'withdrawal' | 'transfer' | 'purchase' | 'cashback' | 'escrow_hold' | 'escrow_release';
-export type WalletTxStatus = 'completed' | 'pending' | 'failed';
-export type EscrowStatus = 'held' | 'released' | 'disputed' | 'refunded';
-
-export interface ServerWalletTransaction {
-  id: string;
-  idempotencyKey?: string;
-  type: WalletTxType;
-  amount: number;
-  currency: 'BDT' | 'COIN';
-  description: string;
-  method?: string;
-  referenceId: string;
-  timestamp: string;
-  status: WalletTxStatus;
-}
-
-export interface ServerWalletAccount {
-  userId: string;
-  balance: number;
-  coins: number;
-  escrowHeldBalance: number;
-  transactions: ServerWalletTransaction[];
-  updatedAt: string;
-}
-
-export interface ServerEscrowRecord {
-  id: string;
-  orderId: string;
-  poNumber?: string;
-  title: string;
-  amount: number;
-  buyerId: string;
-  buyerName: string;
-  sellerId: string;
-  sellerName: string;
-  status: EscrowStatus;
-  holdDays: number;
-  disputeReason?: string;
-  createdAt: string;
-  releaseAt: string;
-  releasedAt?: string;
-}
-
-const walletStore = new Map<string, ServerWalletAccount>();
-const escrowStore = new Map<string, ServerEscrowRecord>();
-const processedIdempotencyKeys = new Set<string>();
-
-function computeHeldBalanceForUser(userId: string): number {
-  let held = 0;
-  for (const esc of escrowStore.values()) {
-    if ((esc.buyerId === userId || esc.sellerId === userId) && esc.status === 'held') {
-      held += esc.amount;
-    }
-  }
-  return held;
-}
-
-export function getOrCreateWallet(userId = 'user_me'): ServerWalletAccount {
-  const key = userId || 'user_me';
-  let wallet = walletStore.get(key);
-  if (!wallet) {
-    wallet = {
-      userId: key,
-      balance: 0,
-      coins: 0,
-      escrowHeldBalance: computeHeldBalanceForUser(key),
-      transactions: [],
-      updatedAt: new Date().toISOString()
-    };
-    walletStore.set(key, wallet);
-  } else {
-    wallet.escrowHeldBalance = computeHeldBalanceForUser(key);
-  }
-  return wallet;
-}
-
-export function depositToWallet(params: {
-  userId?: string;
-  amount: number;
-  method?: string;
-  referenceId?: string;
-  idempotencyKey?: string;
-}) {
-  const { userId = 'user_me', amount, method = 'bKash Mobile Banking', referenceId, idempotencyKey } = params;
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 5000000) {
-    throw new Error('INVALID_AMOUNT');
-  }
-
-  const wallet = getOrCreateWallet(userId);
-  if (idempotencyKey && processedIdempotencyKeys.has(idempotencyKey)) {
-    return { wallet, transaction: wallet.transactions[0], isDuplicate: true };
-  }
-
-  const earnedCoins = Math.max(5, Math.floor(amount / 100));
-  wallet.balance += amount;
-  wallet.coins += earnedCoins;
-  wallet.updatedAt = new Date().toISOString();
-
-  const tx: ServerWalletTransaction = {
-    id: `tx_${Date.now()}`,
-    idempotencyKey,
-    type: 'deposit',
-    amount,
-    currency: 'BDT',
-    description: `${method} এর মাধ্যমে ডিপোজিট`,
-    method,
-    referenceId: referenceId || `PM-DEP-${Math.floor(100000 + Math.random() * 900000)}`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  };
-
-  wallet.transactions.unshift(tx);
-  if (idempotencyKey) processedIdempotencyKeys.add(idempotencyKey);
-  return { wallet, transaction: tx, earnedCoins, isDuplicate: false };
-}
-
-export function withdrawFromWallet(params: {
-  userId?: string;
-  amount: number;
-  method?: string;
-  accountDetails?: string;
-  idempotencyKey?: string;
-}) {
-  const {
-    userId = 'user_me',
-    amount,
-    method = 'bKash Mobile Wallet',
-    accountDetails,
-    idempotencyKey
-  } = params;
-
-  if (!Number.isFinite(amount) || amount < 50 || amount > 1000000) {
-    throw new Error('INVALID_WITHDRAW_AMOUNT');
-  }
-
-  const wallet = getOrCreateWallet(userId);
-  if (idempotencyKey && processedIdempotencyKeys.has(idempotencyKey)) {
-    return { wallet, transaction: wallet.transactions[0], isDuplicate: true };
-  }
-
-  if (wallet.balance < amount) {
-    throw new Error('INSUFFICIENT_BALANCE');
-  }
-
-  wallet.balance -= amount;
-  wallet.updatedAt = new Date().toISOString();
-
-  const tx: ServerWalletTransaction = {
-    id: `tx_${Date.now()}`,
-    idempotencyKey,
-    type: 'withdrawal',
-    amount,
-    currency: 'BDT',
-    description: accountDetails ? `উইথড্র (${method}: ${accountDetails})` : `উইথড্র (${method})`,
-    method,
-    referenceId: `PM-WTH-${Math.floor(100000 + Math.random() * 900000)}`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  };
-
-  wallet.transactions.unshift(tx);
-  if (idempotencyKey) processedIdempotencyKeys.add(idempotencyKey);
-  return { wallet, transaction: tx, isDuplicate: false };
-}
-
-export function transferWalletP2P(params: {
-  userId?: string;
-  amount: number;
-  recipient: string;
-  note?: string;
-  idempotencyKey?: string;
-}) {
-  const { userId = 'user_me', amount, recipient, note, idempotencyKey } = params;
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 500000) {
-    throw new Error('INVALID_AMOUNT');
-  }
-  if (!recipient.trim()) {
-    throw new Error('INVALID_RECIPIENT');
-  }
-
-  const wallet = getOrCreateWallet(userId);
-  if (idempotencyKey && processedIdempotencyKeys.has(idempotencyKey)) {
-    return { wallet, transaction: wallet.transactions[0], isDuplicate: true };
-  }
-
-  if (wallet.balance < amount) {
-    throw new Error('INSUFFICIENT_BALANCE');
-  }
-
-  wallet.balance -= amount;
-  wallet.updatedAt = new Date().toISOString();
-
-  const tx: ServerWalletTransaction = {
-    id: `tx_${Date.now()}`,
-    idempotencyKey,
-    type: 'transfer',
-    amount,
-    currency: 'BDT',
-    description: note ? `${recipient}-কে সেন্ড মানি (${note})` : `${recipient}-কে ইনস্ট্যান্ট সেন্ড মানি`,
-    method: 'PaikarMart P2P',
-    referenceId: `PM-TRF-${Math.floor(100000 + Math.random() * 900000)}`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  };
-
-  wallet.transactions.unshift(tx);
-  if (idempotencyKey) processedIdempotencyKeys.add(idempotencyKey);
-  return { wallet, transaction: tx, isDuplicate: false };
-}
-
-export function redeemWalletCoins(params: { userId?: string; coinsToRedeem: number }) {
-  const { userId = 'user_me', coinsToRedeem } = params;
-  const wallet = getOrCreateWallet(userId);
-
-  if (!Number.isFinite(coinsToRedeem) || coinsToRedeem < 10) {
-    throw new Error('INVALID_COINS');
-  }
-  if (wallet.coins < coinsToRedeem) {
-    throw new Error('INSUFFICIENT_COINS');
-  }
-
-  const bdtValue = Math.floor(coinsToRedeem / 5);
-  wallet.coins -= coinsToRedeem;
-  wallet.balance += bdtValue;
-  wallet.updatedAt = new Date().toISOString();
-
-  const tx: ServerWalletTransaction = {
-    id: `tx_${Date.now()}`,
-    type: 'cashback',
-    amount: bdtValue,
-    currency: 'BDT',
-    description: `${coinsToRedeem} রিওয়ার্ড কয়েন থেকে ৳${bdtValue} কনভার্সন`,
-    method: 'Coin Redemption',
-    referenceId: `PM-REDEEM-${Math.floor(1000 + Math.random() * 9000)}`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  };
-
-  wallet.transactions.unshift(tx);
-  return { wallet, transaction: tx, bdtValue };
-}
-
-export function createEscrowHoldRecord(params: {
-  orderId: string;
-  poNumber?: string;
-  title?: string;
-  amount: number;
-  buyerId?: string;
-  buyerName?: string;
-  sellerId?: string;
-  sellerName?: string;
-  holdDays?: number;
-}) {
-  const {
-    orderId,
-    poNumber,
-    title = `Escrow Protection for ${orderId}`,
-    amount,
-    buyerId = 'user_me',
-    buyerName = 'Alex Rivera',
-    sellerId = 'vendor_verified',
-    sellerName = 'Verified PaikarMart Merchant',
-    holdDays = 7
-  } = params;
-
-  if (!orderId || !Number.isFinite(amount) || amount <= 0) {
-    throw new Error('INVALID_ESCROW_PARAMS');
-  }
-
-  const buyerWallet = getOrCreateWallet(buyerId);
-  if (buyerWallet.balance < amount) {
-    throw new Error('INSUFFICIENT_BALANCE');
-  }
-
-  buyerWallet.balance -= amount;
-  buyerWallet.updatedAt = new Date().toISOString();
-
-  const now = Date.now();
-  const escrowId = `ESC-${new Date().getFullYear()}-${String(now).slice(-4)}`;
-  const escrow: ServerEscrowRecord = {
-    id: escrowId,
-    orderId,
-    poNumber,
-    title,
-    amount,
-    buyerId,
-    buyerName,
-    sellerId,
-    sellerName,
-    status: 'held',
-    holdDays,
-    createdAt: new Date(now).toISOString(),
-    releaseAt: new Date(now + holdDays * 86400000).toISOString()
-  };
-
-  escrowStore.set(escrowId, escrow);
-  buyerWallet.escrowHeldBalance = computeHeldBalanceForUser(buyerId);
-
-  const tx: ServerWalletTransaction = {
-    id: `tx_${now}`,
-    type: 'escrow_hold',
-    amount,
-    currency: 'BDT',
-    description: `Escrow Hold Locked — ${orderId}`,
-    method: 'PaikarMart Escrow',
-    referenceId: escrowId,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  };
-  buyerWallet.transactions.unshift(tx);
-
-  return { escrow, wallet: buyerWallet, transaction: tx };
-}
-
-export function releaseEscrowRecord(escrowId: string) {
-  let target: ServerEscrowRecord | undefined = escrowStore.get(escrowId);
-  if (!target) {
-    for (const esc of escrowStore.values()) {
-      if (esc.orderId === escrowId || esc.poNumber === escrowId) {
-        target = esc;
-        break;
-      }
-    }
-  }
-
-  if (!target) {
-    throw new Error('ESCROW_NOT_FOUND');
-  }
-  if (target.status === 'released') {
-    return { escrow: target, wallet: getOrCreateWallet(target.buyerId) };
-  }
-  if (target.status === 'disputed') {
-    throw new Error('ESCROW_DISPUTED');
-  }
-
-  target.status = 'released';
-  target.releasedAt = new Date().toISOString();
-
-  // Credit seller wallet and add release ledger item to buyer/viewer wallet
-  const sellerWallet = getOrCreateWallet(target.sellerId);
-  sellerWallet.balance += target.amount;
-  sellerWallet.updatedAt = new Date().toISOString();
-  sellerWallet.transactions.unshift({
-    id: `tx_rel_${Date.now()}`,
-    type: 'escrow_release',
-    amount: target.amount,
-    currency: 'BDT',
-    description: `Escrow Payout Released — ${target.orderId}`,
-    method: 'PaikarMart Escrow',
-    referenceId: target.id,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  });
-
-  const buyerWallet = getOrCreateWallet(target.buyerId);
-  buyerWallet.escrowHeldBalance = computeHeldBalanceForUser(target.buyerId);
-  buyerWallet.transactions.unshift({
-    id: `tx_rel_b_${Date.now()}`,
-    type: 'escrow_release',
-    amount: target.amount,
-    currency: 'BDT',
-    description: `Delivery Confirmed · Escrow Released (${target.sellerName})`,
-    method: 'PaikarMart Escrow',
-    referenceId: target.id,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    status: 'completed'
-  });
-
-  return { escrow: target, wallet: buyerWallet };
-}
-
-export function disputeEscrowRecord(escrowId: string, reason: string) {
-  let target: ServerEscrowRecord | undefined = escrowStore.get(escrowId);
-  if (!target) {
-    for (const esc of escrowStore.values()) {
-      if (esc.orderId === escrowId || esc.poNumber === escrowId) {
-        target = esc;
-        break;
-      }
-    }
-  }
-
-  if (!target) {
-    throw new Error('ESCROW_NOT_FOUND');
-  }
-  if (!reason.trim()) {
-    throw new Error('DISPUTE_REASON_REQUIRED');
-  }
-
-  target.status = 'disputed';
-  target.disputeReason = reason.trim();
-
-  const buyerWallet = getOrCreateWallet(target.buyerId);
-  buyerWallet.escrowHeldBalance = computeHeldBalanceForUser(target.buyerId);
-
-  return { escrow: target, wallet: buyerWallet };
-}
-
-export function getEscrowSummaryForUser(userId = 'user_me') {
-  const all = Array.from(escrowStore.values()).filter(
-    (e) => e.buyerId === userId || e.sellerId === userId || userId === 'user_me'
-  );
-
-  const totalHeld = all
-    .filter((e) => e.status === 'held')
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  const totalReleased = all
-    .filter((e) => e.status === 'released')
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  const disputedCount = all.filter((e) => e.status === 'disputed').length;
-
-  const nextRelease = all
-    .filter((e) => e.status === 'held')
-    .sort((a, b) => new Date(a.releaseAt).getTime() - new Date(b.releaseAt).getTime())[0];
-
-  return {
-    summary: {
-      totalHeld,
-      totalReleased,
-      disputedCount,
-      nextPayoutAmount: nextRelease ? nextRelease.amount : 0,
-      nextPayoutDate: nextRelease ? nextRelease.releaseAt : null
-    },
-    escrows: all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  };
-}
-
-function summarizeEscrows(escrows: ServerEscrowRecord[]) {
-  const totalHeld = escrows
-    .filter((e) => e.status === 'held')
-    .reduce((sum, e) => sum + e.amount, 0);
-  const totalReleased = escrows
-    .filter((e) => e.status === 'released')
-    .reduce((sum, e) => sum + e.amount, 0);
-  const disputedCount = escrows.filter((e) => e.status === 'disputed').length;
-  const nextRelease = escrows
-    .filter((e) => e.status === 'held')
-    .sort((a, b) => new Date(a.releaseAt).getTime() - new Date(b.releaseAt).getTime())[0];
-
-  return {
-    totalHeld,
-    totalReleased,
-    disputedCount,
-    nextPayoutAmount: nextRelease ? nextRelease.amount : 0,
-    nextPayoutDate: nextRelease ? nextRelease.releaseAt : null
-  };
-}
-
-function mapDbEscrowRow(row: any, viewerProfileUuid: string, viewerAuthUid: string): ServerEscrowRecord {
-  const createdMs = row.created_at ? new Date(row.created_at).getTime() : Date.now();
-  const releaseAt = new Date(createdMs + 7 * 86400000).toISOString();
-  return {
-    id: String(row.id),
-    orderId: String(row.order_id),
-    title: `Escrow Protection · Order ${String(row.order_id).slice(0, 8)}`,
-    amount: Number(row.amount_bdt ?? 0),
-    buyerId: row.buyer_id === viewerProfileUuid ? viewerAuthUid : String(row.buyer_id),
-    buyerName: row.buyer_id === viewerProfileUuid ? 'You' : 'Buyer',
-    sellerId: row.vendor_id === viewerProfileUuid ? viewerAuthUid : String(row.vendor_id),
-    sellerName: row.vendor_id === viewerProfileUuid ? 'Your Store' : 'Verified Merchant',
-    status: (row.status || 'held') as EscrowStatus,
-    holdDays: 7,
-    createdAt: String(row.created_at || new Date(createdMs).toISOString()),
-    releaseAt,
-    releasedAt: row.released_at ? String(row.released_at) : undefined
-  };
-}
+export * from './walletMemoryStore.js';
 
 export async function getPersistentEscrowSummary(authUid: string): Promise<{
   source: 'supabase' | 'memory';
@@ -484,25 +27,33 @@ export async function getPersistentEscrowSummary(authUid: string): Promise<{
   if (supabaseAdmin) {
     const profileUuid = await resolveProfileUuidByAuthUid(authUid);
     if (profileUuid) {
-      try {
-        const { data, error } = await supabaseAdmin
-          .from('escrow_records')
-          .select('*')
-          .or(`buyer_id.eq.${profileUuid},vendor_id.eq.${profileUuid}`)
-          .order('created_at', { ascending: false })
-          .limit(50);
+      const { data, error } = await supabaseAdmin
+        .from('escrow_records')
+        .select('*')
+        .or(`buyer_id.eq.${profileUuid},vendor_id.eq.${profileUuid}`)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-        if (!error && Array.isArray(data)) {
-          const mapped = data.map((row) => mapDbEscrowRow(row, profileUuid, authUid));
-          return {
-            source: 'supabase',
-            summary: summarizeEscrows(mapped),
-            escrows: mapped
-          };
-        }
-      } catch (err: any) {
-        console.warn('Supabase escrow summary fallback to memory:', err?.message || err);
+      if (!error && Array.isArray(data)) {
+        const mapped = data.map((row) => mapDbEscrowRow(row, profileUuid, authUid));
+        return {
+          source: 'supabase',
+          summary: summarizeEscrows(mapped),
+          escrows: mapped
+        };
       }
+
+      if (isPersistentFinanceEnabled()) {
+        logger.error('wallet.escrow_query_failed', { authUid, error: error?.message });
+        throw new Error('FINANCE_DATABASE_ERROR');
+      }
+      logger.warn('wallet.escrow_query_fallback', { authUid, error: error?.message });
+    } else if (isPersistentFinanceEnabled()) {
+      return {
+        source: 'supabase',
+        summary: summarizeEscrows([]),
+        escrows: []
+      };
     }
   }
 
@@ -523,58 +74,74 @@ export async function getPersistentWalletOverview(authUid: string): Promise<{
   if (supabaseAdmin) {
     const profileUuid = await resolveProfileUuidByAuthUid(authUid);
     if (profileUuid) {
-      try {
-        const [{ data: profile, error: profileErr }, { data: txRows, error: txErr }, escrowData] =
-          await Promise.all([
-            supabaseAdmin
-              .from('profiles')
-              .select('wallet_balance, reward_points, updated_at')
-              .eq('id', profileUuid)
-              .maybeSingle(),
-            supabaseAdmin
-              .from('wallet_transactions')
-              .select('*')
-              .eq('user_id', profileUuid)
-              .order('created_at', { ascending: false })
-              .limit(50),
-            getPersistentEscrowSummary(authUid)
-          ]);
+      const [{ data: profile, error: profileErr }, { data: txRows, error: txErr }, escrowData] =
+        await Promise.all([
+          supabaseAdmin
+            .from('profiles')
+            .select('wallet_balance, reward_points, updated_at')
+            .eq('id', profileUuid)
+            .maybeSingle(),
+          supabaseAdmin
+            .from('wallet_transactions')
+            .select('*')
+            .eq('user_id', profileUuid)
+            .order('created_at', { ascending: false })
+            .limit(50),
+          getPersistentEscrowSummary(authUid)
+        ]);
 
-        if (!profileErr && profile) {
-          const transactions: ServerWalletTransaction[] = (!txErr && Array.isArray(txRows) ? txRows : []).map(
-            (row: any) => ({
-              id: String(row.id),
-              type: (row.type || 'deposit') as WalletTxType,
-              amount: Number(row.amount ?? 0),
-              currency: 'BDT',
-              description: String(row.description || ''),
-              referenceId: String(row.reference_id || row.id),
-              timestamp: row.created_at
-                ? new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '',
-              status: (row.status || 'completed') as WalletTxStatus
-            })
-          );
+      if (!profileErr && profile) {
+        const transactions: ServerWalletTransaction[] = (!txErr && Array.isArray(txRows) ? txRows : []).map(
+          (row: any) => ({
+            id: String(row.id),
+            type: (row.type || 'deposit') as WalletTxType,
+            amount: Number(row.amount ?? 0),
+            currency: 'BDT',
+            description: String(row.description || ''),
+            referenceId: String(row.reference_id || row.id),
+            timestamp: row.created_at
+              ? new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : '',
+            status: (row.status || 'completed') as WalletTxStatus
+          })
+        );
 
-          const wallet: ServerWalletAccount = {
-            userId: authUid,
-            balance: Number(profile.wallet_balance ?? 0),
-            coins: Number(profile.reward_points ?? 0),
-            escrowHeldBalance: escrowData.summary.totalHeld,
-            transactions,
-            updatedAt: String(profile.updated_at || new Date().toISOString())
-          };
+        const wallet: ServerWalletAccount = {
+          userId: authUid,
+          balance: Number(profile.wallet_balance ?? 0),
+          coins: Number(profile.reward_points ?? 0),
+          escrowHeldBalance: escrowData.summary.totalHeld,
+          transactions,
+          updatedAt: String(profile.updated_at || new Date().toISOString())
+        };
 
-          return {
-            source: 'supabase',
-            wallet,
-            escrowSummary: escrowData.summary,
-            escrows: escrowData.escrows
-          };
-        }
-      } catch (err: any) {
-        console.warn('Supabase wallet overview fallback to memory:', err?.message || err);
+        return {
+          source: 'supabase',
+          wallet,
+          escrowSummary: escrowData.summary,
+          escrows: escrowData.escrows
+        };
       }
+
+      if (isPersistentFinanceEnabled()) {
+        logger.error('wallet.overview_query_failed', { authUid, error: profileErr?.message });
+        throw new Error('FINANCE_DATABASE_ERROR');
+      }
+      logger.warn('wallet.overview_query_fallback', { authUid, error: profileErr?.message });
+    } else if (isPersistentFinanceEnabled()) {
+      return {
+        source: 'supabase',
+        wallet: {
+          userId: authUid,
+          balance: 0,
+          coins: 0,
+          escrowHeldBalance: 0,
+          transactions: [],
+          updatedAt: new Date().toISOString()
+        },
+        escrowSummary: summarizeEscrows([]),
+        escrows: []
+      };
     }
   }
 
@@ -586,6 +153,30 @@ export async function getPersistentWalletOverview(authUid: string): Promise<{
     escrowSummary: escrowData.summary,
     escrows: escrowData.escrows
   };
+}
+
+function isRpcUnavailableError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = String(err.message || '').toLowerCase();
+  return err.code === 'PGRST202' || msg.includes('could not find the function') || msg.includes('does not exist');
+}
+
+function mapRpcErrorCode(err: { message?: string } | null | undefined, fallback: string): string {
+  const msg = String(err?.message || '').toUpperCase();
+  for (const known of [
+    'INVALID_AMOUNT',
+    'PROFILE_NOT_FOUND',
+    'INSUFFICIENT_BALANCE',
+    'INVALID_COINS',
+    'INSUFFICIENT_COINS',
+    'INVALID_ESCROW_PARAMS',
+    'ORDER_OR_PROFILE_NOT_FOUND',
+    'ESCROW_NOT_FOUND',
+    'ESCROW_DISPUTED',
+  ]) {
+    if (msg.includes(known)) return known;
+  }
+  return fallback;
 }
 
 export async function applyVerifiedPaymentWebhook(params: {
@@ -616,6 +207,36 @@ export async function applyVerifiedPaymentWebhook(params: {
     throw new Error('PROFILE_NOT_FOUND');
   }
 
+  const earnedCoins = params.type === 'deposit' ? Math.max(5, Math.floor(amount / 100)) : 0;
+  const description =
+    params.description?.trim() ||
+    `${params.method || 'Verified Payment Gateway'} (${params.type})`;
+
+  // Primary path: atomic PostgreSQL row-locked RPC
+  const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('apply_wallet_ledger_atomic', {
+    p_profile_id: profileUuid,
+    p_type: params.type,
+    p_amount: amount,
+    p_description: description,
+    p_reference_id: refKey,
+    p_coins_delta: earnedCoins,
+  });
+
+  if (!rpcErr && rpcData) {
+    return {
+      duplicate: Boolean(rpcData.duplicate),
+      balance: rpcData.balance !== undefined ? Number(rpcData.balance) : undefined,
+      coins: rpcData.coins !== undefined ? Number(rpcData.coins) : undefined,
+      earnedCoins: rpcData.duplicate ? 0 : earnedCoins,
+      transaction: rpcData.transaction,
+    };
+  }
+
+  if (rpcErr && !isRpcUnavailableError(rpcErr)) {
+    throw new Error(mapRpcErrorCode(rpcErr, 'CONCURRENT_LEDGER_CONFLICT'));
+  }
+
+  // Fallback optimistic-locked path when RPC migration has not yet been applied
   const { data: existingTx } = await supabaseAdmin
     .from('wallet_transactions')
     .select('*')
@@ -645,7 +266,6 @@ export async function applyVerifiedPaymentWebhook(params: {
     throw new Error('INSUFFICIENT_BALANCE');
   }
 
-  const earnedCoins = params.type === 'deposit' ? Math.max(5, Math.floor(amount / 100)) : 0;
   const nextCoins = currentCoins + earnedCoins;
 
   const { data: updatedProf, error: updateErr } = await supabaseAdmin
@@ -663,10 +283,6 @@ export async function applyVerifiedPaymentWebhook(params: {
   if (updateErr || !updatedProf) {
     throw new Error('CONCURRENT_LEDGER_CONFLICT');
   }
-
-  const description =
-    params.description?.trim() ||
-    `${params.method || 'Verified Payment Gateway'} (${params.type})`;
 
   const { data: txRow, error: txErr } = await supabaseAdmin
     .from('wallet_transactions')
@@ -707,6 +323,26 @@ export async function redeemPersistentWalletCoins(authUid: string, coinsToRedeem
     throw new Error('PROFILE_NOT_FOUND');
   }
 
+  const refId = `PM-REDEEM-${Date.now()}`;
+  const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('redeem_wallet_coins_atomic', {
+    p_profile_id: profileUuid,
+    p_coins: cleanCoins,
+    p_reference_id: refId,
+  });
+
+  if (!rpcErr && rpcData) {
+    return {
+      bdtValue: Number(rpcData.bdtValue),
+      balance: Number(rpcData.balance),
+      coins: Number(rpcData.coins),
+      transaction: rpcData.transaction,
+    };
+  }
+
+  if (rpcErr && !isRpcUnavailableError(rpcErr)) {
+    throw new Error(mapRpcErrorCode(rpcErr, 'CONCURRENT_LEDGER_CONFLICT'));
+  }
+
   const { data: profile, error: profErr } = await supabaseAdmin
     .from('profiles')
     .select('wallet_balance, reward_points')
@@ -744,7 +380,6 @@ export async function redeemPersistentWalletCoins(authUid: string, coinsToRedeem
     throw new Error('CONCURRENT_LEDGER_CONFLICT');
   }
 
-  const refId = `PM-REDEEM-${Date.now()}`;
   const { data: txRow } = await supabaseAdmin
     .from('wallet_transactions')
     .insert({
@@ -792,6 +427,25 @@ export async function createPersistentEscrowHold(params: {
   }
   if (!vendorUuid) {
     throw new Error('VENDOR_NOT_FOUND');
+  }
+
+  const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('create_escrow_hold_atomic', {
+    p_order_id: orderUuid,
+    p_buyer_id: buyerUuid,
+    p_vendor_id: vendorUuid,
+    p_amount: amount,
+    p_order_key: params.orderKey,
+  });
+
+  if (!rpcErr && rpcData?.escrow) {
+    return {
+      escrow: mapDbEscrowRow(rpcData.escrow, buyerUuid, params.buyerAuthUid),
+      duplicate: Boolean(rpcData.duplicate),
+    };
+  }
+
+  if (rpcErr && !isRpcUnavailableError(rpcErr)) {
+    throw new Error(mapRpcErrorCode(rpcErr, 'CONCURRENT_LEDGER_CONFLICT'));
   }
 
   const { data: existingEscrow } = await supabaseAdmin
@@ -901,6 +555,21 @@ export async function releasePersistentEscrow(params: {
     };
   }
 
+  const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('release_escrow_atomic', {
+    p_escrow_id: escrowRow.id,
+  });
+
+  if (!rpcErr && rpcData?.escrow) {
+    return {
+      escrow: mapDbEscrowRow(rpcData.escrow, actorUuid || escrowRow.buyer_id, params.actorAuthUid),
+      alreadyReleased: Boolean(rpcData.alreadyReleased),
+    };
+  }
+
+  if (rpcErr && !isRpcUnavailableError(rpcErr)) {
+    throw new Error(mapRpcErrorCode(rpcErr, 'CONCURRENT_LEDGER_CONFLICT'));
+  }
+
   const releasedAt = new Date().toISOString();
   const { data: updatedEscrow, error: updEscErr } = await supabaseAdmin
     .from('escrow_records')
@@ -923,13 +592,20 @@ export async function releasePersistentEscrow(params: {
 
   if (vendorProf) {
     const currentVendorBal = Number(vendorProf.wallet_balance ?? 0);
-    await supabaseAdmin
+    const { data: creditedVendor, error: vendorCredErr } = await supabaseAdmin
       .from('profiles')
       .update({
         wallet_balance: Number((currentVendorBal + payoutAmount).toFixed(2)),
         updated_at: releasedAt
       })
-      .eq('id', escrowRow.vendor_id);
+      .eq('id', escrowRow.vendor_id)
+      .eq('wallet_balance', currentVendorBal)
+      .select('wallet_balance')
+      .maybeSingle();
+
+    if (vendorCredErr || !creditedVendor) {
+      throw new Error('CONCURRENT_LEDGER_CONFLICT');
+    }
   }
 
   await supabaseAdmin.from('wallet_transactions').insert({
@@ -984,9 +660,10 @@ export async function disputePersistentEscrow(params: {
     throw new Error('FORBIDDEN');
   }
 
+  const trimmedReason = params.reason.trim().slice(0, 500);
   const { data: updated, error } = await supabaseAdmin
     .from('escrow_records')
-    .update({ status: 'disputed' })
+    .update({ status: 'disputed', dispute_reason: trimmedReason })
     .eq('id', escrowRow.id)
     .select('*')
     .single();
@@ -998,7 +675,7 @@ export async function disputePersistentEscrow(params: {
   return {
     escrow: {
       ...mapDbEscrowRow(updated, actorUuid || updated.buyer_id, params.actorAuthUid),
-      disputeReason: params.reason.trim()
+      disputeReason: updated.dispute_reason || trimmedReason
     }
   };
 }

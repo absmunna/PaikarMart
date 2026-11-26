@@ -1,12 +1,5 @@
-import { auth } from '@/lib/firebase';
+import { API_BASE, apiRequest, getAuthHeaders } from '@/shared/services/apiClient';
 import { IdentityVerificationPayload, IdentityVerificationResponse } from '../types';
-
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -20,23 +13,14 @@ function fileToBase64(file: File): Promise<string> {
 export async function submitIdentityVerification(
   payload: IdentityVerificationPayload
 ): Promise<IdentityVerificationResponse> {
-  const headers = await authHeaders();
-  const response = await fetch(`${API_BASE}/api/identity/verification`, {
+  const data = await apiRequest<{ verification?: IdentityVerificationResponse }>('/api/identity/verification', {
     method: 'POST',
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
+    json: true,
     body: JSON.stringify({
       documentType: payload.documentType,
       documentNumber: payload.documentNumber,
     }),
   });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Failed to submit identity verification.');
-  }
 
   const verification: IdentityVerificationResponse = data.verification || {
     id: `ver_${Date.now()}`,
@@ -50,10 +34,7 @@ export async function submitIdentityVerification(
     const dataBase64 = await fileToBase64(payload.frontImage);
     await fetch(`${API_BASE}/api/identity/verification/${encodeURIComponent(verification.id)}/document`, {
       method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
+      headers: await getAuthHeaders({ json: true }),
       body: JSON.stringify({
         doc_type: 'front',
         fileName: payload.frontImage.name,
@@ -67,12 +48,8 @@ export async function submitIdentityVerification(
 }
 
 export async function fetchIdentityStatus(verificationId: string): Promise<IdentityVerificationResponse | null> {
-  const headers = await authHeaders();
   const response = await fetch(`${API_BASE}/api/identity/verification/${encodeURIComponent(verificationId)}`, {
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
+    headers: await getAuthHeaders({ json: true }),
   });
 
   if (!response.ok) return null;
@@ -108,12 +85,8 @@ export interface FlaggedPostModerationItem {
 }
 
 export async function fetchPendingCitizenVerifications(): Promise<PendingCitizenVerificationItem[]> {
-  const headers = await authHeaders();
   const response = await fetch(`${API_BASE}/api/identity/verifications/pending`, {
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
+    headers: await getAuthHeaders({ json: true }),
   });
   if (!response.ok) return [];
   const data = await response.json().catch(() => ({}));
@@ -125,29 +98,20 @@ export async function reviewCitizenVerification(
   decision: 'verified' | 'rejected',
   rejectionReason?: string
 ): Promise<PendingCitizenVerificationItem> {
-  const headers = await authHeaders();
-  const response = await fetch(`${API_BASE}/api/identity/verifications/${encodeURIComponent(verificationId)}/review`, {
-    method: 'PATCH',
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ decision, rejectionReason }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Unable to process citizen verification decision.');
-  }
+  const data = await apiRequest<{ verification: PendingCitizenVerificationItem }>(
+    `/api/identity/verifications/${encodeURIComponent(verificationId)}/review`,
+    {
+      method: 'PATCH',
+      json: true,
+      body: JSON.stringify({ decision, rejectionReason }),
+    }
+  );
   return data.verification;
 }
 
 export async function fetchFlaggedPostsForModeration(): Promise<FlaggedPostModerationItem[]> {
-  const headers = await authHeaders();
   const response = await fetch(`${API_BASE}/api/ai/moderation/posts`, {
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
+    headers: await getAuthHeaders({ json: true }),
   });
   if (!response.ok) return [];
   const data = await response.json().catch(() => ({}));
@@ -158,18 +122,13 @@ export async function reviewFlaggedPost(
   postId: string,
   decision: 'approved' | 'rejected'
 ): Promise<FlaggedPostModerationItem> {
-  const headers = await authHeaders();
-  const response = await fetch(`${API_BASE}/api/ai/moderation/posts/${encodeURIComponent(postId)}/review`, {
-    method: 'PATCH',
-    headers: {
-      ...headers,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ decision }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error || 'Unable to update flagged post decision.');
-  }
+  const data = await apiRequest<{ post: FlaggedPostModerationItem }>(
+    `/api/ai/moderation/posts/${encodeURIComponent(postId)}/review`,
+    {
+      method: 'PATCH',
+      json: true,
+      body: JSON.stringify({ decision }),
+    }
+  );
   return data.post;
 }

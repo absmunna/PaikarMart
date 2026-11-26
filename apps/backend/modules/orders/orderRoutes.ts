@@ -1,6 +1,12 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { getStoredOrders, insertStoredOrder, supabaseAdmin } from '../../services/dbService.js';
+import {
+  findStoredOrderByIdOrKey,
+  getStoredOrders,
+  insertStoredOrder,
+  supabaseAdmin,
+  updateStoredOrderStatus
+} from '../../services/dbService.js';
 import {
   appendShipmentCheckpoint,
   getOrCreateShipment,
@@ -10,6 +16,7 @@ import { evaluateVoucher } from '../retail/retailRoutes.js';
 import { isPrivilegedRole, optionalFirebaseAuth, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
 import { isStoreOwnedByUser } from '../vendors/vendorService.js';
 import { createUserNotification } from '../notifications/notificationService.js';
+import { isLiveDatabaseConfigured } from '../../config/env.js';
 
 export const orderRouter = Router();
 
@@ -68,25 +75,32 @@ const STATUS_TO_SHIPMENT: Record<OrderLifecycleStatus, ShipmentStatus> = {
 // GET /api/orders
 orderRouter.get('/', requireFirebaseAuth, async (_req: Request, res: Response) => {
   const auth = res.locals.auth;
-  const allOrders = await getStoredOrders(serverOrders);
-  const orders = isPrivilegedRole(auth)
-    ? allOrders
-    : allOrders.filter((o: any) => o.customerId === auth.uid || o.customer_id === auth.uid);
+  const privileged = isPrivilegedRole(auth);
+  const orders = await getStoredOrders(
+    privileged ? serverOrders : serverOrders.filter((o) => o.customerId === auth.uid),
+    auth.uid,
+    privileged
+  );
   res.json({ orders });
 });
 
 // GET /api/orders/:id
-orderRouter.get('/:id', requireFirebaseAuth, (req: Request, res: Response) => {
-  const order = serverOrders.find((o) => o.id === req.params.id);
+orderRouter.get('/:id', requireFirebaseAuth, async (req: Request, res: Response) => {
+  const order =
+    (await findStoredOrderByIdOrKey(req.params.id)) ||
+    serverOrders.find((o) => o.id === req.params.id || o.idempotencyKey === req.params.id);
+
   if (!order) {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
+
   const auth = res.locals.auth;
   if (!isPrivilegedRole(auth) && order.customerId !== auth.uid) {
     res.status(403).json({ error: 'Not authorized to view this order.' });
     return;
   }
+
   const shipment = getOrCreateShipment(order.id, {
     dropLocation: order.deliveryAddress,
     shippingFee: order.deliveryFee
@@ -95,8 +109,10 @@ orderRouter.get('/:id', requireFirebaseAuth, (req: Request, res: Response) => {
 });
 
 // GET /api/orders/:id/track (Public zero-PII status & milestone projection)
-orderRouter.get('/:id/track', (req: Request, res: Response) => {
-  const order = serverOrders.find((o) => o.id === req.params.id);
+orderRouter.get('/:id/track', async (req: Request, res: Response) => {
+  const order =
+    (await findStoredOrderByIdOrKey(req.params.id)) ||
+    serverOrders.find((o) => o.id === req.params.id || o.idempotencyKey === req.params.id);
   const shipment = getOrCreateShipment(req.params.id);
 
   res.json({
@@ -131,28 +147,34 @@ async function calculateAuthoritativeOrderTotals(params: {
   promoCode?: string;
 }) {
   const sanitizedItems = Array.isArray(params.items) ? params.items : [];
-  const listingIds = sanitizedItems
+  const uuidIds = sanitizedItems
     .map((item) => item?.product?.id || item?.productId || item?.id)
     .filter((id): id is string => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id));
 
   const authoritativePriceMap = new Map<string, number>();
-  if (supabaseAdmin && listingIds.length > 0) {
+  if (supabaseAdmin && uuidIds.length > 0) {
     try {
-      const { data } = await supabaseAdmin
-        .from('seller_listings')
-        .select('id, price')
-        .in('id', listingIds)
-        .eq('is_active', true);
-      if (Array.isArray(data)) {
-        for (const row of data) {
-          const price = Number(row.price);
-          if (Number.isFinite(price) && price >= 0) {
-            authoritativePriceMap.set(row.id, price);
-          }
+      const [{ data: listingRows }, { data: legacyProdRows }] = await Promise.all([
+        supabaseAdmin
+          .from('seller_listings')
+          .select('id, price')
+          .in('id', uuidIds)
+          .eq('is_active', true),
+        supabaseAdmin
+          .from('products')
+          .select('id, price')
+          .in('id', uuidIds)
+          .eq('in_stock', true),
+      ]);
+
+      for (const row of [...(listingRows || []), ...(legacyProdRows || [])]) {
+        const price = Number(row.price);
+        if (Number.isFinite(price) && price >= 0) {
+          authoritativePriceMap.set(row.id, price);
         }
       }
     } catch {
-      // Fallback to sanitized item prices when offline
+      // Fallback gracefully when DB client unavailable
     }
   }
 
@@ -160,6 +182,17 @@ async function calculateAuthoritativeOrderTotals(params: {
   for (const item of sanitizedItems) {
     const itemId = String(item?.product?.id || item?.productId || item?.id || '');
     const dbUnitPrice = authoritativePriceMap.get(itemId);
+
+    // If connected to live DB and UUID matches an inactive/missing SKU, reject tampered zero price
+    if (
+      dbUnitPrice === undefined &&
+      isLiveDatabaseConfigured() &&
+      /^[0-9a-f-]{36}$/i.test(itemId) &&
+      process.env.NODE_ENV === 'production'
+    ) {
+      throw new Error('AUTHORITATIVE_SKU_NOT_FOUND');
+    }
+
     const rawUnit = dbUnitPrice !== undefined
       ? dbUnitPrice
       : Number(item?.product?.price ?? item?.price ?? 0);
@@ -208,7 +241,9 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     (req.headers['x-idempotency-key'] as string) || req.body?.idempotencyKey;
 
   if (idempotencyKey) {
-    const existing = serverOrders.find((o) => o.idempotencyKey === idempotencyKey);
+    const existing =
+      (await findStoredOrderByIdOrKey(idempotencyKey)) ||
+      serverOrders.find((o) => o.idempotencyKey === idempotencyKey);
     if (existing) {
       const shipment = getOrCreateShipment(existing.id, {
         dropLocation: existing.deliveryAddress,
@@ -225,17 +260,27 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     return;
   }
 
-  const totals = await calculateAuthoritativeOrderTotals({
-    items,
-    fallbackSubtotal: req.body?.subtotal,
-    promoCode: req.body?.promoCode
-  });
+  let totals: Awaited<ReturnType<typeof calculateAuthoritativeOrderTotals>>;
+  try {
+    totals = await calculateAuthoritativeOrderTotals({
+      items,
+      fallbackSubtotal: req.body?.subtotal,
+      promoCode: req.body?.promoCode
+    });
+  } catch (err: any) {
+    if (err?.message === 'AUTHORITATIVE_SKU_NOT_FOUND') {
+      res.status(400).json({ error: 'One or more ordered SKUs could not be verified in the catalog.' });
+      return;
+    }
+    throw err;
+  }
 
   const orderId = `PKM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const nowIso = new Date().toISOString();
   const newOrder: ServerOrderRecord = {
     id: orderId,
     customerId: res.locals.auth?.uid,
-    createdAt: new Date().toISOString(),
+    createdAt: nowIso,
     status: 'confirmed',
     trackingStep: 1,
     deliveryAddress: String(req.body?.deliveryAddress || 'Dhaka, Bangladesh').slice(0, 300),
@@ -254,7 +299,7 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     storeName: req.body?.storeName ? String(req.body.storeName).slice(0, 120) : undefined,
     prescriptionId: req.body?.prescriptionId ? String(req.body.prescriptionId).slice(0, 120) : undefined,
     idempotencyKey,
-    updatedAt: new Date().toISOString()
+    updatedAt: nowIso
   };
 
   await insertStoredOrder(newOrder);
@@ -281,7 +326,9 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
 
 // POST /api/orders/:id/reorder
 orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: Response) => {
-  const previous = serverOrders.find((o) => o.id === req.params.id);
+  const previous =
+    (await findStoredOrderByIdOrKey(req.params.id)) ||
+    serverOrders.find((o) => o.id === req.params.id || o.idempotencyKey === req.params.id);
   const auth = res.locals.auth;
   if (previous && !isPrivilegedRole(auth) && previous.customerId !== auth.uid) {
     res.status(403).json({ error: 'Not authorized to reorder this order.' });
@@ -309,11 +356,12 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
   });
 
   const nextId = `PKM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const nowIso = new Date().toISOString();
   const cloned: ServerOrderRecord = {
     id: nextId,
     customerId: auth.uid,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: nowIso,
+    updatedAt: nowIso,
     status: 'confirmed',
     trackingStep: 1,
     deliveryAddress: String(sourceOrder.deliveryAddress || 'Dhaka, Bangladesh').slice(0, 300),
@@ -343,7 +391,7 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
   res.status(201).json({ success: true, order: cloned, shipment });
 });
 
-const handleUpdateStatus = (req: Request, res: Response) => {
+const handleUpdateStatus = async (req: Request, res: Response) => {
   const targetStatus = req.body?.status as OrderLifecycleStatus | undefined;
   const validStatuses: OrderLifecycleStatus[] = [
     'confirmed',
@@ -358,7 +406,10 @@ const handleUpdateStatus = (req: Request, res: Response) => {
   }
 
   const auth = res.locals.auth;
-  let order = serverOrders.find((o) => o.id === req.params.id);
+  let order =
+    serverOrders.find((o) => o.id === req.params.id || o.idempotencyKey === req.params.id) ||
+    (await findStoredOrderByIdOrKey(req.params.id));
+
   const fallbackOrder = req.body?.fallbackOrder;
   if (!order && fallbackOrder) {
     const canHydrateFallback =
@@ -404,9 +455,12 @@ const handleUpdateStatus = (req: Request, res: Response) => {
     }
   }
 
+  const nowIso = new Date().toISOString();
   order.status = targetStatus;
   order.trackingStep = STATUS_TO_STEP[targetStatus];
-  order.updatedAt = new Date().toISOString();
+  order.updatedAt = nowIso;
+
+  await updateStoredOrderStatus(order.id, targetStatus, nowIso);
 
   const shipmentStatus = STATUS_TO_SHIPMENT[targetStatus];
   const shipment = appendShipmentCheckpoint(

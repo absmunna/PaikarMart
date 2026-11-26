@@ -14,12 +14,12 @@ import {
 } from 'lucide-react';
 import { MasterProduct, SellerListing, TradeMode, MasterCatalogSubmission } from '@/types';
 import {
-  createSellerListingOffer,
   fetchMasterCatalogProducts,
   INITIAL_MASTER_PRODUCTS,
-  submitCatalogProposal
+  publishSellerListingAuthenticated,
+  submitCatalogProposalAuthenticated,
+  verifyCatalogProduct,
 } from '@/features/marketplace';
-import { auth } from '@/lib/firebase';
 
 interface QuickAttachCatalogModalProps {
   isOpen: boolean;
@@ -134,9 +134,8 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
     };
 
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      if (token && catalogStatus !== 'unconfigured') {
-        const result = await createSellerListingOffer(token, payload);
+      if (catalogStatus !== 'unconfigured') {
+        const result = await publishSellerListingAuthenticated(payload);
         if (!result.ok) {
           setAttachError(result.error || 'Failed to publish listing.');
           setIsAttaching(false);
@@ -162,23 +161,13 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
     setAiAuditResult(null);
 
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const apiBase = ((import.meta as any).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
-      const response = await fetch(`${apiBase}/api/catalog/verify-product`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          title: newTitle,
-          brand: newBrand,
-          category: newCategory,
-          description: newDescription,
-          price: Number(newPrice)
-        })
+      const data = await verifyCatalogProduct({
+        title: newTitle,
+        brand: newBrand,
+        category: newCategory,
+        description: newDescription,
+        price: Number(newPrice),
       });
-      const data = await response.json();
       setAiAuditResult(data);
 
       const proposalPayload: Partial<MasterCatalogSubmission> = {
@@ -193,8 +182,8 @@ export const QuickAttachCatalogModal: React.FC<QuickAttachCatalogModalProps> = (
         aiAuditNotes: data.auditNotes || 'Passed Automated Quality Check'
       };
 
-      if (token && catalogStatus !== 'unconfigured') {
-        await submitCatalogProposal(token, proposalPayload);
+      if (catalogStatus !== 'unconfigured') {
+        await submitCatalogProposalAuthenticated(proposalPayload);
       }
 
       setTimeout(() => {
