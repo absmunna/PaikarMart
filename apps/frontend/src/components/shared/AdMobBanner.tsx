@@ -1,8 +1,8 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
+import { ButtonLink } from '@/components/shared/Button';
 
 interface AdMobBannerProps {
   format?: 'banner' | 'leaderboard' | 'native';
@@ -67,13 +67,15 @@ export const AdMobBanner: React.FC<AdMobBannerProps> = ({ variant = 'vercel', cl
         </p>
       </div>
       <div className="flex justify-end">
-        <Link
+        <ButtonLink
           to={ad.url}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[var(--pm-accent)] px-4 text-xs font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)]"
+          variant="primary"
+          size="md"
+          className="text-xs font-bold"
         >
           <span>{isBn ? 'দেখুন' : 'Explore'}</span>
           <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+        </ButtonLink>
       </div>
     </SponsoredFeedCard>
   );

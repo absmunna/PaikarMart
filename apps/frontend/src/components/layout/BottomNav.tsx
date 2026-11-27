@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, Grid, ShoppingBag, Wrench, Car } from 'lucide-react';
+import { Home, Compass, ShoppingBag, Wrench, Car } from 'lucide-react';
 import { PortalTab, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -69,6 +69,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <nav
+      aria-label={isBn ? 'প্রধান নেভিগেশন' : 'Primary navigation'}
       className={`md:hidden fixed bottom-0 left-0 right-0 z-40 pm-glass border-t border-[var(--pm-border)] px-1 sm:px-2 flex items-center justify-around h-[4.5rem] pb-safe shadow-2xl transition-transform duration-300 ${
         isHidden ? 'translate-y-full' : 'translate-y-0'
       }`}
@@ -91,7 +92,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         () => onSelectTab('commerce')
       )}
 
-      {/* 3. Center Elevated Super App Hub Button */}
+      {/* 3. Center Elevated Explore Button */}
       <div className="relative flex flex-col items-center justify-end flex-1 h-full pb-2.5 pointer-events-none">
         <button
           type="button"
@@ -99,12 +100,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           className={`absolute -top-5 w-12 h-12 rounded-2xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center shadow-xl pointer-events-auto active:scale-95 ring-4 ring-[var(--pm-card)] transition-transform ${
             currentTab === 'explore' ? 'scale-105' : ''
           }`}
-          aria-label={isBn ? 'সুপার অ্যাপ হাব খুলুন' : 'Open Super App Hub'}
+          aria-label={isBn ? 'এক্সপ্লোর পেজ খুলুন' : 'Open Explore page'}
         >
-          <Grid className="w-6 h-6" />
+          <Compass className="w-6 h-6" />
         </button>
         <span className="text-[10px] font-black text-[var(--pm-accent)] tracking-normal whitespace-nowrap leading-none">
-          {t.nav.superHub}
+          {t.nav.explore}
         </span>
       </div>
 

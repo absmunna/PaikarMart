@@ -15,6 +15,7 @@ import { User, SocialPost, CommerceItem, ReactionType, PostType, TaggedProduct, 
 interface SocialPortalProps {
   currentUser: User;
   posts: SocialPost[];
+  savedPostIds: string[];
   commerceItems: CommerceItem[];
   isLoading?: boolean;
   onCreatePost: (
@@ -28,17 +29,20 @@ interface SocialPortalProps {
   ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (item: CommerceItem) => void;
 }
 
 export const SocialPortal: React.FC<SocialPortalProps> = ({
   currentUser,
   posts,
+  savedPostIds,
   commerceItems,
   isLoading = false,
   onCreatePost,
   onReactToPost,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart
 }) => {
   const { setCurrentUser } = useAuth();
@@ -88,8 +92,10 @@ export const SocialPortal: React.FC<SocialPortalProps> = ({
               <FeedPostCard
                 post={post}
                 currentUser={currentUser}
+                isSaved={savedPostIds.includes(post.id)}
                 onReact={onReactToPost}
                 onAddComment={onAddComment}
+                onToggleSave={onToggleSavedPost}
                 onAddToCart={onAddToCart}
                 commerceItems={commerceItems}
               />

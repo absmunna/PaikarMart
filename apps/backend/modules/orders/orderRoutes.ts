@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import {
@@ -10,7 +11,8 @@ import {
 import {
   appendShipmentCheckpoint,
   getOrCreateShipment,
-  ShipmentStatus
+  ShipmentStatus,
+  toOrderOwnerShipmentRecord
 } from '../logistics/logisticsService.js';
 import { evaluateVoucher } from '../retail/retailRoutes.js';
 import { isPrivilegedRole, optionalFirebaseAuth, requireFirebaseAuth } from '../../middleware/requireFirebaseAuth.js';
@@ -50,6 +52,8 @@ interface ServerOrderRecord {
 }
 
 const serverOrders: ServerOrderRecord[] = [];
+
+const createPublicOrderId = () => `PKM-${randomUUID().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
 
 const STATUS_TO_STEP: Record<OrderLifecycleStatus, number> = {
   confirmed: 1,
@@ -105,7 +109,7 @@ orderRouter.get('/:id', requireFirebaseAuth, async (req: Request, res: Response)
     dropLocation: order.deliveryAddress,
     shippingFee: order.deliveryFee
   });
-  res.json({ order, shipment });
+  res.json({ order, shipment: toOrderOwnerShipmentRecord(shipment) });
 });
 
 // GET /api/orders/:id/track (Public zero-PII status & milestone projection)
@@ -183,11 +187,10 @@ async function calculateAuthoritativeOrderTotals(params: {
     const itemId = String(item?.product?.id || item?.productId || item?.id || '');
     const dbUnitPrice = authoritativePriceMap.get(itemId);
 
-    // If connected to live DB and UUID matches an inactive/missing SKU, reject tampered zero price
+    // Production orders must use a price resolved from a live catalog record.
     if (
       dbUnitPrice === undefined &&
       isLiveDatabaseConfigured() &&
-      /^[0-9a-f-]{36}$/i.test(itemId) &&
       process.env.NODE_ENV === 'production'
     ) {
       throw new Error('AUTHORITATIVE_SKU_NOT_FOUND');
@@ -237,6 +240,19 @@ async function calculateAuthoritativeOrderTotals(params: {
 
 // POST /api/orders
 orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) => {
+  const requestedPaymentMethod =
+    typeof req.body?.paymentMethod === 'string' ? req.body.paymentMethod.trim() : '';
+  if (requestedPaymentMethod && requestedPaymentMethod !== 'Cash on Delivery') {
+    res.status(400).json({ error: 'Only Cash on Delivery is currently available for orders.' });
+    return;
+  }
+
+  const auth = res.locals.auth;
+  if (!auth?.uid) {
+    res.status(401).json({ error: 'Sign in to place an order. Guest checkout is not available yet.' });
+    return;
+  }
+
   const idempotencyKey =
     (req.headers['x-idempotency-key'] as string) || req.body?.idempotencyKey;
 
@@ -245,11 +261,19 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
       (await findStoredOrderByIdOrKey(idempotencyKey)) ||
       serverOrders.find((o) => o.idempotencyKey === idempotencyKey);
     if (existing) {
+      if (existing.customerId !== auth.uid && !isPrivilegedRole(auth)) {
+        res.status(403).json({ error: 'Not authorized to access this order.' });
+        return;
+      }
       const shipment = getOrCreateShipment(existing.id, {
         dropLocation: existing.deliveryAddress,
         shippingFee: existing.deliveryFee
       });
-      res.status(200).json({ success: true, order: existing, shipment });
+      res.status(200).json({
+        success: true,
+        order: existing,
+        shipment: toOrderOwnerShipmentRecord(shipment)
+      });
       return;
     }
   }
@@ -275,16 +299,16 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     throw err;
   }
 
-  const orderId = `PKM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const orderId = createPublicOrderId();
   const nowIso = new Date().toISOString();
   const newOrder: ServerOrderRecord = {
     id: orderId,
-    customerId: res.locals.auth?.uid,
+    customerId: auth.uid,
     createdAt: nowIso,
     status: 'confirmed',
     trackingStep: 1,
     deliveryAddress: String(req.body?.deliveryAddress || 'Dhaka, Bangladesh').slice(0, 300),
-    paymentMethod: String(req.body?.paymentMethod || 'Mobile Wallet (bKash/Nagad)').slice(0, 80),
+    paymentMethod: 'Cash on Delivery',
     estimatedArrival: String(req.body?.estimatedArrival || '45 mins').slice(0, 60),
     subtotal: totals.subtotal,
     deliveryFee: totals.deliveryFee,
@@ -302,7 +326,11 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     updatedAt: nowIso
   };
 
-  await insertStoredOrder(newOrder);
+  const persisted = await insertStoredOrder(newOrder);
+  if (!persisted) {
+    res.status(503).json({ error: 'We could not save your order. Please try again later.' });
+    return;
+  }
   serverOrders.unshift(newOrder);
 
   const shipment = getOrCreateShipment(newOrder.id, {
@@ -321,7 +349,11 @@ orderRouter.post('/', optionalFirebaseAuth, async (req: Request, res: Response) 
     });
   }
 
-  res.status(201).json({ success: true, order: newOrder, shipment });
+  res.status(201).json({
+    success: true,
+    order: newOrder,
+    shipment: toOrderOwnerShipmentRecord(shipment)
+  });
 });
 
 // POST /api/orders/:id/reorder
@@ -355,7 +387,7 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
     promoCode: sourceOrder.promoCode
   });
 
-  const nextId = `PKM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const nextId = createPublicOrderId();
   const nowIso = new Date().toISOString();
   const cloned: ServerOrderRecord = {
     id: nextId,
@@ -365,7 +397,7 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
     status: 'confirmed',
     trackingStep: 1,
     deliveryAddress: String(sourceOrder.deliveryAddress || 'Dhaka, Bangladesh').slice(0, 300),
-    paymentMethod: String(sourceOrder.paymentMethod || 'Mobile Wallet (bKash/Nagad)').slice(0, 80),
+    paymentMethod: 'Cash on Delivery',
     estimatedArrival: '40 mins',
     subtotal: totals.subtotal,
     deliveryFee: totals.deliveryFee,
@@ -380,7 +412,11 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
     storeName: sourceOrder.storeName
   };
 
-  await insertStoredOrder(cloned);
+  const persisted = await insertStoredOrder(cloned);
+  if (!persisted) {
+    res.status(503).json({ error: 'We could not save your order. Please try again later.' });
+    return;
+  }
   serverOrders.unshift(cloned);
 
   const shipment = getOrCreateShipment(cloned.id, {
@@ -388,7 +424,11 @@ orderRouter.post('/:id/reorder', requireFirebaseAuth, async (req: Request, res: 
     shippingFee: cloned.deliveryFee
   });
 
-  res.status(201).json({ success: true, order: cloned, shipment });
+  res.status(201).json({
+    success: true,
+    order: cloned,
+    shipment: toOrderOwnerShipmentRecord(shipment)
+  });
 });
 
 const handleUpdateStatus = async (req: Request, res: Response) => {
@@ -490,7 +530,7 @@ const handleUpdateStatus = async (req: Request, res: Response) => {
   res.json({
     success: true,
     order,
-    shipment
+    shipment: toOrderOwnerShipmentRecord(shipment)
   });
 };
 

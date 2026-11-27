@@ -33,16 +33,22 @@ export function useCartStore({
       product: CommerceItem,
       quantity = 1,
       isWholesale = false,
-      specialInstructions?: string
+      specialInstructions?: string,
+      selectedVariant?: string
     ) => {
       onTrackCartAdd?.(product, quantity, isWholesale);
       setCartItems((prev) => {
         const existing = prev.find(
-          (i) => i.product.id === product.id && i.isWholesale === isWholesale
+          (i) =>
+            i.product.id === product.id &&
+            i.isWholesale === isWholesale &&
+            i.selectedVariant === selectedVariant
         );
         if (existing) {
           return prev.map((i) =>
-            i.product.id === product.id && i.isWholesale === isWholesale
+            i.product.id === product.id &&
+            i.isWholesale === isWholesale &&
+            i.selectedVariant === selectedVariant
               ? {
                   ...i,
                   quantity: i.quantity + quantity,
@@ -51,7 +57,7 @@ export function useCartStore({
               : i
           );
         }
-        return [...prev, { product, quantity, isWholesale, specialInstructions }];
+        return [...prev, { product, quantity, isWholesale, specialInstructions, selectedVariant }];
       });
     },
     [onTrackCartAdd]
@@ -62,22 +68,36 @@ export function useCartStore({
       product: CommerceItem,
       quantity = 1,
       isWholesale = false,
-      specialInstructions?: string
+      specialInstructions?: string,
+      selectedVariant?: string
     ) => {
       onTrackBuyNow?.(product, quantity, isWholesale);
-      handleAddToCart(product, quantity, isWholesale, specialInstructions);
+      handleAddToCart(product, quantity, isWholesale, specialInstructions, selectedVariant);
       onOpenCart?.();
     },
     [onTrackBuyNow, handleAddToCart, onOpenCart]
   );
 
-  const handleUpdateCartQuantity = useCallback((productId: string, quantity: number) => {
+  const handleUpdateCartQuantity = useCallback((
+    productId: string,
+    quantity: number,
+    selectedVariant?: string,
+    isWholesale = false
+  ) => {
     setCartItems((prev) => {
-      const item = prev.find((i) => i.product.id === productId);
+      const item = prev.find((i) =>
+        i.product.id === productId &&
+        i.selectedVariant === selectedVariant &&
+        i.isWholesale === isWholesale
+      );
       if (!item) return prev;
 
       if (quantity <= 0) {
-        return prev.filter((i) => i.product.id !== productId);
+        return prev.filter((i) => !(
+          i.product.id === productId &&
+          i.selectedVariant === selectedVariant &&
+          i.isWholesale === isWholesale
+        ));
       }
 
       let nextQty = quantity;
@@ -88,12 +108,26 @@ export function useCartStore({
         }
       }
 
-      return prev.map((i) => (i.product.id === productId ? { ...i, quantity: nextQty } : i));
+      return prev.map((i) => (
+        i.product.id === productId &&
+        i.selectedVariant === selectedVariant &&
+        i.isWholesale === isWholesale
+          ? { ...i, quantity: nextQty }
+          : i
+      ));
     });
   }, []);
 
-  const handleRemoveCartItem = useCallback((productId: string) => {
-    setCartItems((prev) => prev.filter((i) => i.product.id !== productId));
+  const handleRemoveCartItem = useCallback((
+    productId: string,
+    selectedVariant?: string,
+    isWholesale = false
+  ) => {
+    setCartItems((prev) => prev.filter((i) => !(
+      i.product.id === productId &&
+      i.selectedVariant === selectedVariant &&
+      i.isWholesale === isWholesale
+    )));
   }, []);
 
   const handleClearCart = useCallback(() => {

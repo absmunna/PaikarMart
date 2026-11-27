@@ -1,147 +1,73 @@
-import React, { useState } from 'react';
-import { Bell, Mail, Smartphone, ShieldCheck, Tag, Check } from 'lucide-react';
+import React from 'react';
+import { Bell, Clock, Mail, ShieldCheck, Smartphone, Tag } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { UserNotificationPreferences } from '@/types';
-
-const DEFAULT_PREFS: UserNotificationPreferences = {
-  orderUpdatesEmail: true,
-  orderUpdatesSms: true,
-  deliveryPushAlerts: true,
-  socialInteractions: true,
-  promotionalOffers: false,
-  securityLoginAlerts: true,
-};
 
 export const NotificationPreferencesPage: React.FC = () => {
   const { language } = useLanguage();
-  const [prefs, setPrefs] = useState<UserNotificationPreferences>(() => {
-    try {
-      const stored = localStorage.getItem('paikarmart_user_notification_prefs');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return DEFAULT_PREFS;
-  });
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
   const isBn = language === 'bn';
-
-  const toggle = (key: keyof UserNotificationPreferences) => {
-    setPrefs(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem('paikarmart_user_notification_prefs', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const notificationItems = [
+  const options = [
     {
-      key: 'orderUpdatesEmail' as const,
-      title: isBn ? 'অর্ডার ইমেইল আপডেট' : 'Order Confirmation & Invoice Email',
-      desc: isBn ? 'অর্ডার প্লেস, ইনভয়েস এবং ট্র্যাকিং লিঙ্ক ইমেইলে পাঠানো হবে' : 'Receive instant digital invoices and receipts via email',
       icon: Mail,
-      iconColor: 'text-blue-500'
+      label: isBn ? 'ইমেইল আপডেট' : 'Email updates',
     },
     {
-      key: 'orderUpdatesSms' as const,
-      title: isBn ? 'ডেলিভারি SMS অ্যালার্ট' : 'Courier Rider Delivery SMS',
-      desc: isBn ? 'পার্সেল পিকআপ এবং রাইডারের আগমন সংক্রান্ত জরুরি SMS' : 'Real-time SMS alerts when rider is nearby with OTP pin',
       icon: Smartphone,
-      iconColor: 'text-emerald-500'
+      label: isBn ? 'SMS ও ডেলিভারি অ্যালার্ট' : 'SMS and delivery alerts',
     },
     {
-      key: 'deliveryPushAlerts' as const,
-      title: isBn ? 'লাইভ পুশ নোটিফিকেশন' : 'Live Delivery Radar Push',
-      desc: isBn ? 'রিয়েল-টাইম প্যাকেজ ট্র্যাকিং এবং স্ট্যাটাস চেঞ্জ পপআপ' : 'Instant in-app push notifications when shipping status advances',
       icon: Bell,
-      iconColor: 'text-purple-500'
+      label: isBn ? 'অ্যাপ নোটিফিকেশন' : 'App notifications',
     },
     {
-      key: 'socialInteractions' as const,
-      title: isBn ? 'সোশ্যাল ইন্টারঅ্যাকশন' : 'Social Likes, Comments & Mentions',
-      desc: isBn ? 'পোস্টে লাইক, কমেন্ট ও রিপ্লাই পেলে নোটিফিকেশন' : 'Get notified when community members interact with your posts',
-      icon: Bell,
-      iconColor: 'text-amber-500'
-    },
-    {
-      key: 'securityLoginAlerts' as const,
-      title: isBn ? 'নিরাপত্তা ও লগইন অ্যালার্ট' : 'Security & Login Alerts',
-      desc: isBn ? 'নতুন কোনো ডিভাইস থেকে অ্যাকাউন্টে ঢুকলে তাৎক্ষণিক অ্যালার্ট' : 'Urgent alerts when a new browser or device logs into your account',
       icon: ShieldCheck,
-      iconColor: 'text-red-500'
+      label: isBn ? 'নিরাপত্তা অ্যালার্ট' : 'Security alerts',
     },
     {
-      key: 'promotionalOffers' as const,
-      title: isBn ? 'প্রমোশনাল অফার ও ডিসকাউন্ট' : 'Exclusive Flash Sales & Coupons',
-      desc: isBn ? 'বিশেষ ছাড় ও ক্যাশব্যাক ক্যাম্পেইনের তথ্য' : 'Weekly wholesale discounts and vendor promotional coupons',
       icon: Tag,
-      iconColor: 'text-pink-500'
-    }
+      label: isBn ? 'অফার ও প্রচারণা' : 'Offers and promotions',
+    },
   ];
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-5">
       <div>
-        <h3 className="text-lg font-black text-[var(--pm-text)]">
-          {isBn ? 'নোটিফিকেশন প্রিফারেন্স' : 'Notification Preferences'}
+        <h3 className="text-lg font-bold text-[var(--pm-text)]">
+          {isBn ? 'নোটিফিকেশন পছন্দ' : 'Notification preferences'}
         </h3>
-        <p className="text-xs text-[var(--pm-muted)]">
-          {isBn 
-            ? 'ইমেইল, SMS এবং মোবাইল পুশ অ্যালার্ট কাস্টমাইজ করুন' 
-            : 'Choose what updates and alerts you wish to receive'}
+        <p className="mt-1 text-sm text-[var(--pm-muted)]">
+          {isBn
+            ? 'নোটিফিকেশন পাঠানোর ব্যবস্থা যুক্ত হলে কোন আপডেট পাবেন তা বেছে নিন।'
+            : 'Choose which updates to receive once notification delivery is connected.'}
         </p>
       </div>
 
-      {saveSuccess && (
-        <div className="p-3.5 rounded-2xl bg-[var(--pm-success-soft)] border border-[var(--pm-success)]/30 text-[var(--pm-success)] text-xs font-bold flex items-center gap-2 animate-fadeIn">
-          <Check className="w-4 h-4 shrink-0" />
-          <span>{isBn ? 'পছন্দসমূহ সংরক্ষিত হয়েছে!' : 'Notification preferences saved!'}</span>
+      <div
+        role="status"
+        className="flex items-start gap-3 rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-4"
+      >
+        <Clock className="mt-0.5 h-5 w-5 shrink-0 text-[var(--pm-accent)]" />
+        <div>
+          <p className="text-sm font-semibold text-[var(--pm-text)]">
+            {isBn ? 'নোটিফিকেশন নিয়ন্ত্রণ শীঘ্রই আসছে' : 'Notification controls are coming soon'}
+          </p>
+          <p className="mt-1 text-sm leading-5 text-[var(--pm-muted)]">
+            {isBn
+              ? 'এই পছন্দগুলো এখনো ইমেইল, SMS বা অ্যাপ নোটিফিকেশন পাঠানো নিয়ন্ত্রণ করে না।'
+              : 'These preferences are not connected to email, SMS, or in-app notification delivery yet.'}
+          </p>
         </div>
-      )}
+      </div>
 
-      <div className="space-y-3">
-        {notificationItems.map(item => {
-          const Icon = item.icon;
-          const isEnabled = prefs[item.key];
-
-          return (
-            <div
-              key={item.key}
-              className="p-4 rounded-3xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className={`p-2 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-2xs ${item.iconColor}`}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-[var(--pm-text)]">
-                    {item.title}
-                  </h4>
-                  <p className="text-[11px] text-[var(--pm-muted)]">
-                    {item.desc}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => toggle(item.key)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  isEnabled ? 'bg-[var(--pm-accent)]' : 'bg-[var(--pm-border)]'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                    isEnabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          );
-        })}
+      <div className="overflow-hidden rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] divide-y divide-[var(--pm-border)]">
+        {options.map(({ icon: Icon, label }) => (
+          <div key={label} className="flex items-center gap-3 p-4">
+            <Icon className="h-5 w-5 shrink-0 text-[var(--pm-muted)]" />
+            <p className="min-w-0 flex-1 text-sm font-medium text-[var(--pm-text)]">{label}</p>
+            <span className="shrink-0 rounded-full bg-[var(--pm-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--pm-muted)]">
+              {isBn ? 'শীঘ্রই' : 'Coming soon'}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, ShieldCheck, Clock, Store } from 'lucide-react';
+import { Lock, ShieldCheck, Clock } from 'lucide-react';
 import { User, UserRole } from '@/types';
 import { canAccessSellerCentral, isGovernanceRole } from '@paikarmart/shared';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -8,7 +8,6 @@ interface RoleGuardProps {
   currentUser: User;
   requiredMode: 'seller' | 'governance';
   allowedRoles?: UserRole[];
-  onOpenVendorModal?: () => void;
   onNavigateHome?: () => void;
   children: React.ReactNode;
 }
@@ -16,7 +15,6 @@ interface RoleGuardProps {
 export const RoleGuard: React.FC<RoleGuardProps> = ({
   currentUser,
   requiredMode,
-  onOpenVendorModal,
   onNavigateHome,
   children
 }) => {
@@ -74,23 +72,12 @@ export const RoleGuard: React.FC<RoleGuardProps> = ({
                 ? `আপনার স্টোর আবেদন (${storeName}) বর্তমানে KYC যাচাই তালিকায় রয়েছে। অনুমোদন সম্পন্ন হলে Seller Central স্বয়ংক্রিয়ভাবে চালু হবে।`
                 : `Your store application (${storeName}) is currently in the KYC verification queue. Seller Central activates automatically once approved.`)
             : (isBn
-                ? 'Seller Central, B2B পাইকারি রেট এবং ইনভেন্টরি ম্যানেজমেন্ট চালু করতে আপনার ৫-ধাপের মার্চেন্ট KYC (NID, ট্রেড লাইসেন্স, e-TIN, পে-আউট) সম্পন্ন করুন।'
-                : 'Complete your 5-step Merchant KYC onboarding (NID, Trade License, e-TIN, Payout Account) to unlock Seller Central, B2B Wholesale tiers, and inventory management.')}
+                ? 'ব্যবসা নিবন্ধন বা KYC সম্পন্ন করতে সাইডবারের “আমার ব্যবসা” খুলুন।'
+                : 'Open My Business in the sidebar to register your store or complete KYC.')}
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-3">
-        {requiredMode === 'seller' && !isPendingReview && onOpenVendorModal && (
-          <button
-            type="button"
-            onClick={onOpenVendorModal}
-            className="min-h-11 px-5 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer active-scale"
-          >
-            <Store className="w-4 h-4" />
-            <span>{isBn ? '৫-ধাপের মার্চেন্ট KYC শুরু করুন' : 'Start 5-Step Merchant KYC'}</span>
-          </button>
-        )}
-
         {onNavigateHome && (
           <button
             type="button"

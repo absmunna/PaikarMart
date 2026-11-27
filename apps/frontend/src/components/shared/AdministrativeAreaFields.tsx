@@ -1,5 +1,6 @@
 import React from 'react';
 import { BANGLADESH_DISTRICTS, BANGLADESH_DIVISIONS } from '@/data/bangladeshLocations';
+import { FormInput, FormSelect } from '@/components/shared/FormControls';
 import type { AdministrativeArea } from '@/types';
 
 interface AdministrativeAreaFieldsProps {
@@ -9,7 +10,7 @@ interface AdministrativeAreaFieldsProps {
 }
 
 const fieldClassName =
-  'w-full rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] px-3 py-2.5 text-sm text-[var(--pm-text)] outline-none focus:border-[var(--pm-accent)]';
+  'w-full bg-[var(--pm-surface)] px-3 py-2.5 text-sm text-[var(--pm-text)]';
 
 export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> = ({
   value,
@@ -24,7 +25,7 @@ export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> =
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="space-y-1.5 text-sm font-medium text-[var(--pm-text)]">
         <span>{isBn ? 'বিভাগ' : 'Division'}</span>
-        <select
+        <FormSelect
           className={fieldClassName}
           value={division?.id ?? ''}
           onChange={(event) => {
@@ -44,12 +45,12 @@ export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> =
               {isBn ? item.nameBn : item.nameEn}
             </option>
           ))}
-        </select>
+        </FormSelect>
       </label>
 
       <label className="space-y-1.5 text-sm font-medium text-[var(--pm-text)]">
         <span>{isBn ? 'জেলা' : 'District'}</span>
-        <select
+        <FormSelect
           className={fieldClassName}
           value={BANGLADESH_DISTRICTS.find((item) => item.nameEn === value.district)?.id ?? ''}
           onChange={(event) => {
@@ -68,12 +69,12 @@ export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> =
               {isBn ? item.nameBn : item.nameEn}
             </option>
           ))}
-        </select>
+        </FormSelect>
       </label>
 
       <label className="space-y-1.5 text-sm font-medium text-[var(--pm-text)]">
         <span>{isBn ? 'উপজেলা' : 'Upazila'}</span>
-        <input
+        <FormInput
           className={fieldClassName}
           value={value.upazila ?? ''}
           onChange={(event) => update({ upazila: event.target.value || undefined, thana: undefined })}
@@ -84,7 +85,7 @@ export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> =
 
       <label className="space-y-1.5 text-sm font-medium text-[var(--pm-text)]">
         <span>{isBn ? 'থানা' : 'Thana'}</span>
-        <input
+        <FormInput
           className={fieldClassName}
           value={value.thana ?? ''}
           onChange={(event) => update({ thana: event.target.value || undefined })}
@@ -95,7 +96,7 @@ export const AdministrativeAreaFields: React.FC<AdministrativeAreaFieldsProps> =
 
       <label className="space-y-1.5 text-sm font-medium text-[var(--pm-text)] sm:col-span-2">
         <span>{isBn ? 'পোস্ট কোড' : 'Postal code'}</span>
-        <input
+        <FormInput
           className={fieldClassName}
           value={value.postalCode ?? ''}
           onChange={(event) => update({ postalCode: event.target.value || undefined })}

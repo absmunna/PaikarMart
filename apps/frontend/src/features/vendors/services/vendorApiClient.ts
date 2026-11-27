@@ -9,7 +9,7 @@ import {
   SellerTier,
   TrustLevel,
   UserRole,
-  VendorProfile
+  VendorProfile,
 } from '@/types';
 
 export interface VendorKycSubmissionRequest {
@@ -172,7 +172,7 @@ export const vendorApiClient = {
   async updateStorefrontLocation(storeAddress: string, serviceArea: AdministrativeArea): Promise<void> {
     const res = await fetch(`${API_BASE}/api/vendors/storefront/location`, {
       method: 'PATCH',
-      headers: await authenticatedHeaders({ 'Content-Type': 'application/json' }),
+      headers: await getAuthHeaders({ json: true }),
       body: JSON.stringify({ storeAddress, serviceArea }),
     });
     const data = await res.json().catch(() => ({}));

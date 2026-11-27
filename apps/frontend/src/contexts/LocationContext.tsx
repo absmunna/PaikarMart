@@ -90,7 +90,7 @@ export const LocationProvider: React.FC<{
       const stored = localStorage.getItem(LOCATION_COORDS_KEY);
       if (stored) return JSON.parse(stored);
     } catch {}
-    return { lat: 23.7925, lng: 90.4078, accuracy: 15 };
+    return { lat: 23.7925, lng: 90.4078 };
   });
 
   const [radarRadiusKm, setRadarRadiusKmState] = useState<number>(() => {

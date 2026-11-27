@@ -7,7 +7,6 @@ import {
 } from '@paikarmart/shared';
 import {
   Search,
-  ShoppingCart,
   MessageCircle,
   ArrowLeft,
   Share2,
@@ -21,19 +20,24 @@ import {
 } from 'lucide-react';
 import { CommerceItem, ReactionType, ServiceBooking, SocialPost, User } from '@/types';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { ProfileHeader } from '@/portals/utilities/user-profile/components/ProfileHeader';
 import { vendorApiClient } from '@/features/vendors';
 import { FeedPostCard } from '@/features/social';
+import { ProductCardActionRow } from '@/features/marketplace/components/ProductCardActionRow';
 import { ServiceCard, ServiceBookingModal } from '@/features/services';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface PublicStorefrontPageProps {
   commerceItems: CommerceItem[];
   posts: SocialPost[];
+  savedPostIds: string[];
   currentUser: User;
   onAddToCart: (item: CommerceItem, qty: number, isWholesale: boolean) => void;
   onBookService?: (booking: Omit<ServiceBooking, 'id' | 'status'>) => void;
   onReact: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onDeductBalance?: (amount: number) => boolean;
 }
 
@@ -42,15 +46,19 @@ type ProfileSectionTab = 'all' | 'posts' | 'photos' | 'products' | 'services';
 export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   commerceItems,
   posts,
+  savedPostIds,
   currentUser,
   onAddToCart,
   onBookService,
   onReact,
   onAddComment,
+  onToggleSavedPost,
   onDeductBalance
 }) => {
   const { handle, storeId } = useParams<{ handle?: string; storeId?: string }>();
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
 
   const rawParam = handle || storeId || currentUser.handle || currentUser.name;
   const targetSlug = normalizeHandle(rawParam);
@@ -223,7 +231,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[var(--pm-accent)] hover:underline"
+          className="hidden md:inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--pm-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
@@ -383,19 +391,29 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {matchingProducts.map((item) => (
-                    <div
+                    <ContentCard
                       key={item.id}
-                      className="p-4 rounded-2xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between space-y-3"
+                      className="flex flex-col justify-between space-y-2.5 p-2.5"
                     >
-                      <div className="space-y-3">
-                        <div className="aspect-4/3 rounded-xl overflow-hidden bg-[var(--pm-surface)]">
+                      <div className="space-y-2.5">
+                        <ContentCardMedia className="aspect-[4/3] rounded-xl">
                           <img
                             src={safeMediaSrc(item.imageUrl, DEFAULT_AVATAR_URL)}
                             alt={item.title}
                             referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                           />
-                        </div>
+                        </ContentCardMedia>
+                        <ProductCardActionRow
+                          item={item}
+                          isBn={isBn}
+                          onAddToCart={(product, isWholesale) =>
+                            onAddToCart(product, product.minWholesaleQty || 1, isWholesale)
+                          }
+                          className="-mx-2.5 -mt-2.5"
+                        />
                         <div className="space-y-1">
                           <p className="text-xs text-[var(--pm-muted)]">
                             {item.category} · {(item.tradeMode || item.type).toUpperCase()}
@@ -414,16 +432,14 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
                         <span className="text-base font-mono tabular-nums font-bold text-[var(--pm-text)]">
                           ৳{item.price.toLocaleString()}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => onAddToCart(item, item.minWholesaleQty || 1, item.type === 'wholesale')}
-                          className="px-3.5 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 cursor-pointer active-scale"
+                        <Link
+                          to={`/hub/marketplace/product/${encodeURIComponent(item.id)}`}
+                          className="min-h-10 rounded-xl px-3.5 flex items-center text-xs font-semibold text-[var(--pm-accent)] hover:bg-[var(--pm-card-hover)]"
                         >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>Add</span>
-                        </button>
+                          {isBn ? 'পণ্য দেখুন' : 'View product'}
+                        </Link>
                       </div>
-                    </div>
+                    </ContentCard>
                   ))}
                 </div>
               )}
@@ -475,8 +491,10 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
                       key={post.id}
                       post={post}
                       currentUser={currentUser}
+                      isSaved={savedPostIds.includes(post.id)}
                       onReact={onReact}
                       onAddComment={onAddComment}
+                      onToggleSave={onToggleSavedPost}
                       onAddToCart={(item) => onAddToCart(item, 1, item.type === 'wholesale')}
                       commerceItems={commerceItems}
                     />

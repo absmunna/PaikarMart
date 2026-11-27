@@ -42,9 +42,11 @@ export const LocationPreferences: React.FC<LocationPreferencesProps> = ({
       <div className="p-4 rounded-2xl bg-[var(--pm-accent-soft)] border border-[var(--pm-accent-border)] space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-bold text-[var(--pm-accent)]">
-            <Radio className="w-4 h-4 animate-pulse" />
+            <Radio className="w-4 h-4" />
             <span className="uppercase tracking-wider text-[11px]">
-              {t.settings.location.currentCoordinates}
+              {coordinates.accuracy
+                ? t.settings.location.currentCoordinates
+                : t.settings.location.selectedCoordinates}
             </span>
           </div>
           {coordinates.accuracy && (
@@ -68,7 +70,7 @@ export const LocationPreferences: React.FC<LocationPreferencesProps> = ({
               {t.settings.location.latitude}
             </span>
             <span className="font-bold text-[var(--pm-text)]">
-              {coordinates.lat.toFixed(5)}° N
+              {coordinates.lat.toFixed(coordinates.accuracy ? 5 : 3)}° N
             </span>
           </div>
           <div className="p-2.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)]">
@@ -76,10 +78,15 @@ export const LocationPreferences: React.FC<LocationPreferencesProps> = ({
               {t.settings.location.longitude}
             </span>
             <span className="font-bold text-[var(--pm-text)]">
-              {coordinates.lng.toFixed(5)}° E
+              {coordinates.lng.toFixed(coordinates.accuracy ? 5 : 3)}° E
             </span>
           </div>
         </div>
+        {!coordinates.accuracy && (
+          <p className="text-[11px] text-[var(--pm-muted)]">
+            {t.settings.location.approximateCoordinates}
+          </p>
+        )}
       </div>
 
       {/* GPS Error Box */}
@@ -118,15 +125,22 @@ export const LocationPreferences: React.FC<LocationPreferencesProps> = ({
         <button
           type="button"
           onClick={toggleContinuousWatch}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-            isLiveTracking ? 'bg-[var(--pm-accent)]' : 'bg-[var(--pm-border)]'
-          }`}
+          aria-label={t.settings.location.continuousWatch}
+          aria-pressed={isLiveTracking}
+          className="relative inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pm-accent)]"
         >
           <span
-            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-              isLiveTracking ? 'translate-x-5' : 'translate-x-0'
+            aria-hidden="true"
+            className={`relative inline-flex h-6 w-11 items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+              isLiveTracking ? 'bg-[var(--pm-accent)]' : 'bg-[var(--pm-border)]'
             }`}
-          />
+          >
+            <span
+              className={`pointer-events-none absolute left-0 inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                isLiveTracking ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </span>
         </button>
       </div>
 

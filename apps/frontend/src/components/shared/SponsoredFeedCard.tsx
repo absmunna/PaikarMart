@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sparkles, X } from 'lucide-react';
+import { ContentCard } from '@/components/shared/CardPrimitives';
 
 interface SponsoredFeedCardProps {
   label: string;
@@ -16,9 +17,9 @@ export const SponsoredFeedCard: React.FC<SponsoredFeedCardProps> = ({
   dismissLabel = 'Dismiss sponsored post',
   className = '',
 }) => (
-  <article
+  <ContentCard
     aria-label={`Sponsored by PaikarMart: ${label}`}
-    className={`bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-6 shadow-sm space-y-3 sm:space-y-4 transition-shadow duration-300 hover:shadow-md premium-shadow ${className}`}
+    className={`p-4 sm:p-6 space-y-3 sm:space-y-4 transition-shadow duration-300 hover:shadow-md premium-shadow ${className}`}
   >
     <header className="flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
@@ -44,5 +45,5 @@ export const SponsoredFeedCard: React.FC<SponsoredFeedCardProps> = ({
       )}
     </header>
     <div className="space-y-3 sm:space-y-4">{children}</div>
-  </article>
+  </ContentCard>
 );

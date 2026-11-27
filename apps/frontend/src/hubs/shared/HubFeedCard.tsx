@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin, Star, ShieldCheck } from 'lucide-react';
 import type { CommerceItem } from '@/types';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface HubFeedCardProps {
   item: CommerceItem;
@@ -17,11 +18,11 @@ const KIND_STYLES: Record<string, string> = {
 };
 
 export const HubFeedCard: React.FC<HubFeedCardProps> = ({ item, kind, onOpen }) => (
-  <article
-    className="group overflow-hidden rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] shadow-xs transition-all hover:-translate-y-0.5 hover:border-[var(--pm-accent)]/50 hover:shadow-lg"
+  <ContentCard
+    className="group transition-all hover:-translate-y-0.5 hover:border-[var(--pm-accent)]/50 hover:shadow-lg"
     onClick={() => onOpen?.(item)}
   >
-    <div className="relative aspect-[16/9] overflow-hidden bg-[var(--pm-surface)]">
+    <ContentCardMedia className="aspect-[16/9]">
       <img
         src={item.imageUrl || '/src/assets/images/paikarmart_fresh_grocery_1794489814176.jpg'}
         alt={item.title}
@@ -35,7 +36,7 @@ export const HubFeedCard: React.FC<HubFeedCardProps> = ({ item, kind, onOpen }) 
       <span className={`absolute left-3 top-3 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-wider backdrop-blur-sm ${KIND_STYLES[kind] || KIND_STYLES.Provider}`}>
         {kind}
       </span>
-    </div>
+    </ContentCardMedia>
 
     <div className="space-y-3 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -62,5 +63,5 @@ export const HubFeedCard: React.FC<HubFeedCardProps> = ({ item, kind, onOpen }) 
         </span>
       </div>
     </div>
-  </article>
+  </ContentCard>
 );

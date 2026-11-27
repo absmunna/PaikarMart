@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { User, Camera, Mail, Phone, MapPin, AtSign, Check, Sparkles, GraduationCap, Briefcase, Award, ShieldCheck, Store, Video, Wrench, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, AtSign, Check, Sparkles, GraduationCap, Briefcase, Award, ShieldCheck, Store, Video, Wrench, Loader2 } from 'lucide-react';
 import { User as UserType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { CURRENT_USER } from '@/data/mockData';
-import { promoteToCreatorApi, promoteToSellerApi, syncAuthenticatedProfile, updateFirebaseIdentityProfile, useAuth } from '@/features/auth';
+import { promoteToCreatorApi, syncAuthenticatedProfile, updateFirebaseIdentityProfile, useAuth } from '@/features/auth';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 import { PersonalVerificationModal } from '../PersonalVerificationModal';
 
@@ -38,10 +38,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSellerSetup, setShowSellerSetup] = useState(false);
-  const [sellerShopName, setSellerShopName] = useState(currentUser.vendorProfile?.storeName || `${currentUser.name} Store`);
-  const [sellerShopType, setSellerShopType] = useState<'retail' | 'wholesale' | 'service'>('retail');
-  const [promotingRole, setPromotingRole] = useState<'seller' | 'creator' | null>(null);
+  const [promotingRole, setPromotingRole] = useState<'creator' | null>(null);
   const [roleFeedback, setRoleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   React.useEffect(() => {
@@ -116,71 +113,6 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
       activeCaps.includes('creator')
   );
 
-  const handleActivateSeller = async () => {
-    if (!firebaseUser) {
-      setRoleFeedback({
-        type: 'error',
-        message: isBn ? 'সেলার অ্যাকাউন্ট চালু করতে আগে সাইন-ইন করুন।' : 'Please sign in first to activate a Seller account.',
-      });
-      return;
-    }
-    const cleanShopName = sellerShopName.trim();
-    if (cleanShopName.length < 2) {
-      setRoleFeedback({
-        type: 'error',
-        message: isBn ? 'সঠিক শপ বা সার্ভিসের নাম লিখুন।' : 'Please enter a valid shop or store name.',
-      });
-      return;
-    }
-    setPromotingRole('seller');
-    setRoleFeedback(null);
-    try {
-      const res = await promoteToSellerApi({
-        shopName: cleanShopName,
-        type: sellerShopType,
-        address: location,
-      });
-      const promotedCaps = Array.from(new Set([...activeCaps, ...(res.activeRoles || []), 'vendor']));
-      const nextVendorCategory = sellerShopType === 'service' ? 'services' : sellerShopType;
-      onUpdateUser({
-        ...currentUser,
-        role: isPrivileged ? currentUser.role : 'vendor',
-        isVendor: true,
-        vendorProfile: {
-          id: currentUser.vendorProfile?.id || `store_${currentUser.id}`,
-          storeName: cleanShopName,
-          legalEntityName: currentUser.vendorProfile?.legalEntityName || cleanShopName,
-          businessRegNumber: currentUser.vendorProfile?.businessRegNumber || '',
-          taxIdentificationNumber: currentUser.vendorProfile?.taxIdentificationNumber || '',
-          category: nextVendorCategory,
-          verified: currentUser.vendorProfile?.verified ?? false,
-          status: currentUser.vendorProfile?.status || 'active',
-          commissionTier: currentUser.vendorProfile?.commissionTier || 'Standard 8%',
-          rating: currentUser.vendorProfile?.rating ?? 5,
-          totalSales: currentUser.vendorProfile?.totalSales ?? 0,
-          location,
-          createdAt: currentUser.vendorProfile?.createdAt || new Date().toISOString(),
-        },
-        ...(promotedCaps.length ? { activeCapabilities: promotedCaps } : {}),
-      } as UserType);
-      await refetchProfile().catch(() => {});
-      setShowSellerSetup(false);
-      setRoleFeedback({
-        type: 'success',
-        message: isBn
-          ? `সেলার সুবিধা সক্রিয় হয়েছে! "${cleanShopName}" এখন সক্রিয়।`
-          : `Seller capability activated for "${cleanShopName}".`,
-      });
-    } catch (error) {
-      setRoleFeedback({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Unable to activate seller capability.',
-      });
-    } finally {
-      setPromotingRole(null);
-    }
-  };
-
   const handleActivateCreator = async () => {
     if (!firebaseUser) {
       setRoleFeedback({
@@ -228,24 +160,17 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
 
       {/* Facebook Page-style Context Switching Banner */}
       {hasPaikarMartAccess && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-600/10 via-indigo-600/15 to-blue-600/10 border border-purple-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white font-black flex items-center justify-center shrink-0 shadow-md">
-              🏢
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-black text-[var(--pm-text)]">
-                  {isBn ? 'পাইকারমার্ট সুপার অ্যাডমিন অর্গানাইজেশন প্রোফাইল' : 'PaikarMart Organization & Super Admin Profile'}
-                </p>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300">
-                  {activeProfileMode === 'paikarmart' ? (isBn ? 'সক্রিয় মোড' : 'Active Mode') : (isBn ? 'অ্যাডমিন অ্যাক্সেস উপলব্ধ' : 'Access Available')}
-                </span>
-              </div>
-              <p className="text-[11px] text-[var(--pm-muted)] mt-0.5">
-                {isBn 
-                  ? 'ফেসবুক পেজ সুইচিং সিস্টেমের মতো আপনার ব্যক্তিগত অ্যাকাউন্ট থেকে পাইকারমার্ট সুপার অ্যাডমিন মোডে সুইচ করুন।'
-                  : 'Just like Facebook Page switching, seamlessly toggle between your personal profile and the PaikarMart organization profile.'}
+        <div className="p-3 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <ShieldCheck className="w-5 h-5 text-[var(--pm-accent)] shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--pm-text)] truncate">
+                {isBn ? 'পাইকারমার্ট অর্গানাইজেশন' : 'PaikarMart organization'}
+              </p>
+              <p className="text-xs text-[var(--pm-muted)]">
+                {activeProfileMode === 'paikarmart'
+                  ? (isBn ? 'অর্গানাইজেশন প্রোফাইল সক্রিয়' : 'Organization profile active')
+                  : (isBn ? 'অ্যাডমিন প্রোফাইলে যেতে পারেন' : 'Admin profile available')}
               </p>
             </div>
           </div>
@@ -255,9 +180,11 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               const nextMode = activeProfileMode === 'personal' ? 'paikarmart' : 'personal';
               switchProfileMode(nextMode);
             }}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shrink-0 transition-all cursor-pointer shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+            className="min-h-11 px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-semibold text-xs shrink-0 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
-            <span>{activeProfileMode === 'paikarmart' ? `👤 Switch to ${personalUser.name.split(' ')[0]} (Personal)` : '🏢 Switch to PaikarMart (Admin)'}</span>
+            <span>{activeProfileMode === 'paikarmart'
+              ? (isBn ? `${personalUser.name.split(' ')[0]}-এর প্রোফাইলে ফিরুন` : `Switch to ${personalUser.name.split(' ')[0]}`)
+              : (isBn ? 'অ্যাডমিন প্রোফাইলে যান' : 'Switch to admin')}</span>
           </button>
         </div>
       )}
@@ -271,33 +198,23 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
       {saveError && <div role="alert" className="p-3.5 rounded-2xl bg-[var(--pm-danger-soft)] border border-[var(--pm-danger)]/30 text-[var(--pm-danger)] text-xs font-bold">{saveError}</div>}
 
       {/* Avatar & Cover Photo Preview */}
-      <div className="p-5 rounded-3xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex flex-col sm:flex-row items-center gap-5">
+      <div className="p-3 sm:p-5 rounded-2xl sm:rounded-3xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center gap-3 sm:gap-5">
         <div className="relative group">
           <img
             src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
             alt={currentUser.name}
-            className="w-20 h-20 rounded-full object-cover ring-4 ring-[var(--pm-card)] shadow-md"
+            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover ring-2 sm:ring-4 ring-[var(--pm-card)]"
           />
-          <button
-            type="button"
-            className="absolute bottom-0 right-0 p-1.5 rounded-full bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-md hover:bg-[var(--pm-accent-hover)] transition-transform active:scale-90 cursor-pointer"
-            title={isBn ? 'ছবি পরিবর্তন করুন' : 'Change Avatar'}
-          >
-            <Camera className="w-3.5 h-3.5" />
-          </button>
         </div>
 
-        <div className="text-center sm:text-left space-y-1">
-          <div className="flex items-center justify-center sm:justify-start gap-2">
-            <h4 className="text-base font-bold text-[var(--pm-text)]">{name}</h4>
+        <div className="min-w-0 text-left space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-base font-bold text-[var(--pm-text)] truncate">{name}</h4>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]">
               {currentUser.isVendor ? (isBn ? 'ভেন্ডর' : 'Verified Vendor') : (isBn ? 'সদস্য' : 'Member')}
             </span>
           </div>
-          <p className="text-xs text-[var(--pm-muted)] font-mono">{handle}</p>
-          <p className="text-[11px] text-[var(--pm-muted)]">
-            {isBn ? 'JPG, PNG বা WEBP সমর্থনযোগ্য। সর্বোচ্চ ৫ মেগাবাইট।' : 'JPG, PNG or WEBP recommended. Max size 5MB.'}
-          </p>
+          <p className="text-xs text-[var(--pm-muted)] truncate">{handle}</p>
         </div>
       </div>
 
@@ -314,7 +231,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
 
@@ -328,7 +245,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
 
@@ -342,7 +259,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               value={email}
               readOnly
               title={isBn ? 'নিরাপত্তার জন্য Firebase account email পরিবর্তন করা যায় না' : 'Account email is managed by Firebase Authentication'}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
 
@@ -355,7 +272,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
         </div>
@@ -372,7 +289,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               value={profession}
               onChange={(e) => setProfession(e.target.value)}
               placeholder={isBn ? 'যেমন: শিক্ষক, শপ ওনার, ফ্রিল্যান্সার' : 'e.g. Teacher, Shop Owner, Creator'}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
 
@@ -386,7 +303,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
               value={education}
               onChange={(e) => setEducation(e.target.value)}
               placeholder={isBn ? 'যেমন: ঢাকা বিশ্ববিদ্যালয়' : 'e.g. University of Dhaka'}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+              className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
             />
           </div>
         </div>
@@ -401,16 +318,16 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             value={skillsInput}
             onChange={(e) => setSkillsInput(e.target.value)}
             placeholder="Retail Sourcing, Teaching, Digital Marketing"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+            className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
           />
         </div>
 
-        {/* Dynamic Capabilities Showcase & Self-Service Role Promotion */}
+        {/* Dynamic Capabilities Showcase */}
         <div className="p-4 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h4 className="text-xs font-black uppercase tracking-wider text-[var(--pm-text)] flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
-              {isBn ? 'প্রোফাইলের তথ্যের ভিত্তিতে সক্রিয় সুবিধাসমূহ (Dynamic Access)' : 'Dynamically Unlocked Capabilities'}
+              {isBn ? 'সক্রিয় অ্যাপ সুবিধাসমূহ' : 'Active app capabilities'}
             </h4>
             <span className="text-[11px] font-bold text-[var(--pm-success)]">
               {isBn ? '১টি অ্যাকাউন্টে সব সুবিধা' : 'Single Unified Identity'}
@@ -446,15 +363,9 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
                   {isBn ? 'সক্রিয়' : 'Active'}
                 </span>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowSellerSetup((prev) => !prev)}
-                  className="w-full py-1.5 px-2.5 rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-[11px] font-bold transition-colors cursor-pointer"
-                >
-                  {showSellerSetup
-                    ? (isBn ? 'বন্ধ করুন' : 'Close Setup')
-                    : (isBn ? 'সেলার চালু করুন' : 'Activate Seller')}
-                </button>
+                <span className="text-[10px] font-semibold text-[var(--pm-muted)]">
+                  {isBn ? 'আমার ব্যবসা থেকে নিবন্ধন করুন' : 'Register in My Business'}
+                </span>
               )}
             </div>
 
@@ -472,16 +383,9 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
                   {isBn ? 'সক্রিয়' : 'Ready'}
                 </span>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSellerShopType('service');
-                    setShowSellerSetup(true);
-                  }}
-                  className="w-full py-1.5 px-2.5 rounded-lg border border-[var(--pm-border-strong)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-[11px] font-bold transition-colors cursor-pointer"
-                >
-                  {isBn ? 'সার্ভিস প্রোফাইল চালু করুন' : 'Offer Services'}
-                </button>
+                <span className="text-[10px] font-semibold text-[var(--pm-muted)]">
+                  {isBn ? 'ব্যবসা সেটআপ আমার ব্যবসায়' : 'Setup in My Business'}
+                </span>
               )}
             </div>
 
@@ -512,56 +416,6 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             </div>
           </div>
 
-          {showSellerSetup && !hasSellerAccess && (
-            <div className="p-3.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border-strong)] space-y-3 animate-fadeIn">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[var(--pm-text)]">
-                    {isBn ? 'শপ বা সার্ভিসের নাম' : 'Store / Service Name'}
-                  </label>
-                  <input
-                    type="text"
-                    value={sellerShopName}
-                    onChange={(e) => setSellerShopName(e.target.value)}
-                    placeholder={isBn ? 'যেমন: ঢাকা ট্রেডার্স' : 'e.g. Dhaka Fresh Mart'}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[var(--pm-text)]">
-                    {isBn ? 'ব্যবসার ধরন' : 'Account Type'}
-                  </label>
-                  <select
-                    value={sellerShopType}
-                    onChange={(e) => setSellerShopType(e.target.value as 'retail' | 'wholesale' | 'service')}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
-                  >
-                    <option value="retail">{isBn ? 'রিটেইল শপ' : 'Retail Store'}</option>
-                    <option value="wholesale">{isBn ? 'হোলসেল ও B2B' : 'Wholesale & B2B'}</option>
-                    <option value="service">{isBn ? 'সার্ভিস ও টিউশন' : 'Services & Tutoring'}</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSellerSetup(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer"
-                >
-                  {isBn ? 'বাতিল' : 'Cancel'}
-                </button>
-                <button
-                  type="button"
-                  disabled={promotingRole === 'seller'}
-                  onClick={handleActivateSeller}
-                  className="px-4 py-1.5 rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-60 text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  {promotingRole === 'seller' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isBn ? 'নিশ্চিত করুন ও চালু করুন' : 'Confirm & Activate Seller'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Citizen Verification Trigger Banner */}
@@ -599,7 +453,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+            className="w-full min-h-11 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-semibold text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
           />
         </div>
 
@@ -612,7 +466,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             rows={3}
-            className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs font-medium text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)]"
+            className="w-full min-h-24 px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-sm font-medium text-[var(--pm-text)] focus:outline-hidden focus:border-[var(--pm-accent)] focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]/30"
           />
         </div>
 
@@ -620,7 +474,7 @@ export const PersonalProfilePage: React.FC<PersonalProfilePageProps> = ({
             <button
             type="submit"
               disabled={isSaving}
-            className="px-6 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+            className="w-full sm:w-auto min-h-11 px-6 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-semibold text-sm transition-colors disabled:opacity-60 cursor-pointer"
           >
             {isSaving ? (isBn ? 'সংরক্ষণ হচ্ছে...' : 'Saving...') : (isBn ? 'পরিবর্তন সংরক্ষণ করুন' : 'Save Profile Changes')}
           </button>

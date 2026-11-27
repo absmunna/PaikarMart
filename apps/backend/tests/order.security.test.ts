@@ -39,52 +39,94 @@ test('GET /api/orders rejects unauthenticated requests with 401', async () => {
   }
 });
 
-test('POST /api/orders rejects empty cart / zero subtotal and ignores tampered client total', async () => {
+test('POST /api/orders requires sign-in and fails closed when persistence is unavailable', async () => {
+  const unauthenticatedApp = express();
+  unauthenticatedApp.use(express.json());
+  unauthenticatedApp.use('/api/orders', orderRouter);
+
+  const unauthenticatedServer = await startTestServer(unauthenticatedApp);
+  try {
+    const unauthenticatedResponse = await fetch(`${unauthenticatedServer.baseUrl}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{ product: { id: 'auth-required-product', price: 100 }, quantity: 1 }],
+      }),
+    });
+    assert.equal(unauthenticatedResponse.status, 401);
+    assert.deepEqual(await unauthenticatedResponse.json(), {
+      error: 'Sign in to place an order. Guest checkout is not available yet.',
+    });
+  } finally {
+    await unauthenticatedServer.close();
+  }
+
+  const authenticatedApp = express();
+  authenticatedApp.use(express.json());
+  authenticatedApp.use((_req, res, next) => {
+    res.locals.auth = { uid: 'order-persistence-test-user' };
+    next();
+  });
+  authenticatedApp.use('/api/orders', orderRouter);
+
+  const authenticatedServer = await startTestServer(authenticatedApp);
+  try {
+    const invalidCartResponse = await fetch(`${authenticatedServer.baseUrl}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [], subtotal: 0 }),
+    });
+    assert.equal(invalidCartResponse.status, 400);
+
+    const payload = {
+      items: [{ product: { id: 'p_1', price: 1000 }, quantity: 2 }],
+      subtotal: 1,
+      total: 1,
+      deliveryAddress: 'Dhaka, Bangladesh',
+      paymentMethod: 'Cash on Delivery',
+      idempotencyKey: 'sec-test-idem-1',
+    };
+    const orderRes = await fetch(`${authenticatedServer.baseUrl}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': 'sec-test-idem-1' },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(orderRes.status, 503);
+    assert.deepEqual(await orderRes.json(), {
+      error: 'We could not save your order. Please try again later.',
+    });
+
+    const replayRes = await fetch(`${authenticatedServer.baseUrl}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': 'sec-test-idem-1' },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(replayRes.status, 503);
+  } finally {
+    await authenticatedServer.close();
+  }
+});
+
+test('POST /api/orders rejects online payment methods while checkout is COD-only', async () => {
   const app = express();
   app.use(express.json());
   app.use('/api/orders', orderRouter);
 
   const srv = await startTestServer(app);
   try {
-    const badRes = await fetch(`${srv.baseUrl}/api/orders`, {
+    const response = await fetch(`${srv.baseUrl}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: [], subtotal: 0 }),
-    });
-    assert.equal(badRes.status, 400);
-
-    // Client sends price=1000 qty=2, but attempts to spoof total=1
-    const orderRes = await fetch(`${srv.baseUrl}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': 'sec-test-idem-1' },
       body: JSON.stringify({
-        items: [{ product: { id: 'p_1', price: 1000 }, quantity: 2 }],
-        subtotal: 1,
-        total: 1,
-        deliveryAddress: 'Dhaka, Bangladesh',
+        items: [{ product: { id: 'cod-test-product', price: 100 }, quantity: 1 }],
+        paymentMethod: 'Mobile Wallet (bKash/Nagad/Rocket)',
       }),
     });
-    assert.equal(orderRes.status, 201);
-    const data = (await orderRes.json()) as {
-      order: { id: string; subtotal: number; deliveryFee: number; tax: number; total: number };
-    };
-    assert.equal(data.order.subtotal, 2000);
-    assert.equal(data.order.deliveryFee, 60);
-    assert.equal(data.order.tax, 100);
-    assert.equal(data.order.total, 2160);
 
-    // Repeat with same idempotency key returns identical order without creating duplicate
-    const replayRes = await fetch(`${srv.baseUrl}/api/orders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': 'sec-test-idem-1' },
-      body: JSON.stringify({
-        items: [{ product: { id: 'p_1', price: 1000 }, quantity: 2 }],
-        deliveryAddress: 'Dhaka, Bangladesh',
-      }),
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: 'Only Cash on Delivery is currently available for orders.',
     });
-    assert.equal(replayRes.status, 200);
-    const replayData = (await replayRes.json()) as { order: { id: string } };
-    assert.equal(replayData.order.id, data.order.id);
   } finally {
     await srv.close();
   }

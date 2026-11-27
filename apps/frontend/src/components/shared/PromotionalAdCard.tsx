@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
+import { Button } from '@/components/shared/Button';
 
 export interface AdCardData {
   id: string;
@@ -136,14 +137,16 @@ export const PromotionalAdCard: React.FC<PromotionalAdCardProps> = ({
           <span>{isBn ? 'স্পন্সরড অফার' : 'Sponsored offer'}</span>
           <Zap className="h-3.5 w-3.5 text-amber-500" />
         </span>
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="md"
           onClick={() => onCtaClick?.(ad.id)}
-          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[var(--pm-accent)] px-4 text-xs font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)] cursor-pointer"
+          className="text-xs font-bold"
         >
           <span>{isBn ? ad.ctaBn : ad.ctaEn}</span>
           <ArrowRight className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     </SponsoredFeedCard>
   );

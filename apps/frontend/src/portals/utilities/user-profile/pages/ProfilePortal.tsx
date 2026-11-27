@@ -8,61 +8,73 @@ import {
   Order, 
   ServiceBooking,
 } from '@/types';
-import { ShieldCheck, Edit3, Wrench, Eye, Briefcase, GraduationCap, MapPin, Image as ImageIcon } from 'lucide-react';
+import { ShieldCheck, Wrench, Eye, Briefcase, GraduationCap, MapPin, Image as ImageIcon } from 'lucide-react';
 import { FeedPostCard } from '@/features/social';
-import { SpendingAnalyticsDashboard } from '@/portals/utilities/user-profile/components/SpendingAnalyticsDashboard';
-import { SavedAddressesPage } from '@/portals/utilities/user-profile/components/account';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth, syncAuthenticatedProfile, updateFirebaseIdentityProfile, uploadProfileAvatarAsset } from '@/features/auth';
-import { PortalTab } from '@/types';
-import { SettingsSectionId } from '@/portals/utilities/settings-center';
-import { OrdersPortal } from '@/portals/utilities/orders-hub';
 import { BarChart2 } from 'lucide-react';
+import { ProfileHeader } from '@/portals/utilities/user-profile/components/ProfileHeader';
 
 interface ProfilePortalProps {
   currentUser: UserType;
-  onUpdateUser: (updatedUser: UserType) => void;
   posts: SocialPost[];
+  savedPostIds: string[];
   orders: Order[];
   bookings: ServiceBooking[];
   onReact: (postId: string, reaction: any) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (item: any) => void;
   commerceItems: any[];
 }
 
-type ProfileTab = 'posts' | 'about' | 'photos' | 'bookings' | 'saved' | 'analytics';
+type ProfileTab = 'posts' | 'about' | 'photos' | 'bookings' | 'analytics';
+
+const SpendingAnalyticsDashboard = React.lazy(() =>
+  import('@/portals/utilities/user-profile/components/SpendingAnalyticsDashboard').then((module) => ({
+    default: module.SpendingAnalyticsDashboard,
+  }))
+);
+
+interface ProfileSectionBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}
+
+class ProfileSectionBoundary extends React.Component<
+  ProfileSectionBoundaryProps,
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('Profile insights failed to load:', error);
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
 
 export const ProfilePortal: React.FC<ProfilePortalProps> = ({
   currentUser,
-  onUpdateUser,
   posts,
+  savedPostIds,
   orders,
   bookings,
   onReact,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart,
   commerceItems,
 }) => {
   const { language } = useLanguage();
-  const { firebaseUser, refetchProfile } = useAuth();
   const isBn = language === 'bn';
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(currentUser.name);
-  const [location, setLocation] = useState(currentUser.location);
-  const [avatar, setAvatar] = useState(currentUser.avatar);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!isEditing) {
-      setName(currentUser.name);
-      setLocation(currentUser.location);
-      setAvatar(currentUser.avatar);
-    }
-  }, [currentUser.id, currentUser.name, currentUser.location, currentUser.avatar, isEditing]);
   
   const userPosts = posts.filter(p => p.authorId === currentUser.id || p.authorName === currentUser.name);
   const userPhotos = userPosts.filter((post) => Boolean(post.mediaUrl));
@@ -71,51 +83,8 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
     { id: 'about', label: isBn ? 'পরিচিতি' : 'About' },
     { id: 'photos', label: isBn ? `ছবি (${userPhotos.length})` : `Photos (${userPhotos.length})` },
     { id: 'bookings', label: isBn ? `বুকিং (${bookings.length})` : `Bookings (${bookings.length})` },
-    { id: 'saved', label: isBn ? 'ঠিকানা' : 'Addresses' },
     { id: 'analytics', label: isBn ? 'ইনসাইটস' : 'Insights' },
   ];
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileSaveError(null);
-
-    let nextAvatar = avatar;
-    try {
-      if (avatarFile && firebaseUser) {
-        nextAvatar = (await uploadProfileAvatarAsset(avatarFile, firebaseUser.uid)) || avatar;
-      }
-
-      if (firebaseUser) {
-        await updateFirebaseIdentityProfile({
-          name,
-          handle: currentUser.handle,
-          role: currentUser.role,
-          avatar: nextAvatar,
-          location,
-        });
-        await syncAuthenticatedProfile({
-          name,
-          handle: currentUser.handle,
-          avatar: nextAvatar,
-          location,
-          phone: currentUser.phone,
-        }).catch((err) => console.warn('Supabase profile sync warning:', err));
-        await refetchProfile().catch(() => {});
-      }
-
-      onUpdateUser({
-      ...currentUser,
-      name,
-      location,
-      avatar: nextAvatar,
-      });
-      setAvatar(nextAvatar);
-      setAvatarFile(null);
-      setIsEditing(false);
-    } catch (error) {
-      setProfileSaveError(error instanceof Error ? error.message : 'Profile update failed.');
-    }
-  };
 
   return (
     <div className="space-y-4 pb-24 sm:space-y-5">
@@ -136,23 +105,13 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
           <span>{currentUser.profession}</span>
         )}
         actions={(
-          <>
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-accent)] px-4 text-sm font-bold text-[var(--pm-accent-fg)] hover:bg-[var(--pm-accent-hover)]"
-            >
-              <Edit3 className="h-4 w-4" />
-              <span>{isBn ? 'প্রোফাইল সম্পাদনা' : 'Edit profile'}</span>
-            </button>
-            <Link
-              to={`/u/${encodeURIComponent(normalizeHandle(currentUser.vendorProfile?.handle || currentUser.vendorProfile?.storeName || currentUser.handle || currentUser.name))}`}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
-            >
-              <Eye className="h-4 w-4" />
-              <span>{isBn ? 'পাবলিক প্রোফাইল' : 'View public profile'}</span>
-            </Link>
-          </>
+          <Link
+            to={`/u/${encodeURIComponent(normalizeHandle(currentUser.vendorProfile?.handle || currentUser.vendorProfile?.storeName || currentUser.handle || currentUser.name))}`}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+          >
+            <Eye className="h-4 w-4" />
+            <span>{isBn ? 'পাবলিক প্রোফাইল' : 'View public profile'}</span>
+          </Link>
         )}
         stats={(
           <div className="flex min-h-12 items-center gap-4 text-sm text-[var(--pm-muted)]">
@@ -224,13 +183,6 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                   ))}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="mt-4 min-h-10 w-full rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
-              >
-                {isBn ? 'প্রোফাইল সম্পাদনা' : 'Edit profile'}
-              </button>
             </section>
 
             {userPhotos.length > 0 && (
@@ -270,8 +222,10 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
                   key={post.id}
                   post={post}
                   currentUser={currentUser}
+                  isSaved={savedPostIds.includes(post.id)}
                   onReact={onReact}
                   onAddComment={onAddComment}
+                  onToggleSave={onToggleSavedPost}
                   onAddToCart={onAddToCart}
                   commerceItems={commerceItems}
                 />
@@ -295,15 +249,8 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
 
       {activeTab === 'about' && (
         <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-5 sm:p-6">
-          <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="mb-5">
             <h2 className="text-xl font-bold text-[var(--pm-text)]">{isBn ? 'পরিচিতি' : 'About'}</h2>
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="min-h-10 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
-            >
-              {isBn ? 'প্রোফাইল সম্পাদনা' : 'Edit profile'}
-            </button>
           </div>
           <p className="max-w-3xl text-sm leading-6 text-[var(--pm-muted)]">
             {currentUser.bio || (isBn ? 'এখনও কোনো পরিচিতি যোগ করা হয়নি।' : 'No introduction added yet.')}
@@ -372,7 +319,41 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
 
       {/* Tab Content 1: Recharts Spending & Order History Analytics */}
       {activeTab === 'analytics' && (
-        <SpendingAnalyticsDashboard orders={orders} />
+        <ProfileSectionBoundary
+          fallback={(
+            <section role="alert" className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-6 text-center">
+              <BarChart2 className="mx-auto h-8 w-8 text-[var(--pm-muted)]" />
+              <h2 className="mt-3 text-base font-semibold text-[var(--pm-text)]">
+                {isBn ? 'ইনসাইটস লোড করা যায়নি' : 'Insights could not be loaded'}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--pm-muted)]">
+                {isBn ? 'আপনার প্রোফাইলের অন্য অংশগুলো ব্যবহার করতে পারবেন।' : 'Your profile is still available while this section is unavailable.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('posts')}
+                className="mt-4 min-h-10 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+              >
+                {isBn ? 'প্রোফাইলে ফিরুন' : 'Back to profile'}
+              </button>
+            </section>
+          )}
+        >
+          <React.Suspense
+            fallback={(
+              <div role="status" aria-label={isBn ? 'ইনসাইটস লোড হচ্ছে' : 'Loading insights'} className="space-y-4">
+                <span className="sr-only">{isBn ? 'ইনসাইটস লোড হচ্ছে' : 'Loading insights'}</span>
+                <div className="h-28 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="h-64 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                  <div className="h-64 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                </div>
+              </div>
+            )}
+          >
+            <SpendingAnalyticsDashboard orders={orders} />
+          </React.Suspense>
+        </ProfileSectionBoundary>
       )}
 
       {activeTab === 'bookings' && (
@@ -401,82 +382,6 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
               <p className="text-[var(--pm-muted)] text-sm font-medium">No service bookings yet. Explore Nearby Services!</p>
             </div>
           )}
-        </div>
-      )}
-
-      {activeTab === 'saved' && (
-        <SavedAddressesPage />
-      )}
-
-      {/* Edit Profile Modal */}
-      {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-fadeIn">
-          <form onSubmit={handleSaveProfile} className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--pm-border)]">
-              <h3 className="text-base font-bold text-[var(--pm-text)]">Edit Profile</h3>
-              <button type="button" onClick={() => setIsEditing(false)} className="text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer">✕</button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Display Name</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Location</label>
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Profile Photo</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--pm-accent-soft)] file:px-2 file:py-1 file:text-xs file:font-bold"
-                />
-                <p className="mt-1 text-[10px] text-[var(--pm-muted)]">JPG, PNG বা WebP · Firebase Storage configured থাকলে cloud-এ সংরক্ষিত হবে</p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Avatar Image URL (fallback)</label>
-                <input
-                  type="text"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-            </div>
-
-            {profileSaveError && (
-              <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
-                {profileSaveError}
-              </p>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="submit"
-                className="px-6 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs shadow-md transition-colors cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
-          </form>
         </div>
       )}
 

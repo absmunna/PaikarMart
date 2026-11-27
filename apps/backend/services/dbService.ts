@@ -81,12 +81,27 @@ export async function resolveOrderUuidByOrderKey(orderKey?: string): Promise<str
       if (!error && data?.id) return data.id;
     }
 
-    const { data, error } = await client
+    let { data, error } = await client
       .from('orders')
       .select('id')
       .eq('idempotency_key', trimmed)
       .maybeSingle();
     if (!error && data?.id) return data.id;
+    if (error) {
+      console.warn('Supabase order idempotency lookup notice:', error.message);
+      return null;
+    }
+
+    ({ data, error } = await client
+      .from('orders')
+      .select('id')
+      .eq('public_order_id', trimmed)
+      .maybeSingle());
+    if (error) {
+      console.warn('Supabase public order ID lookup notice:', error.message);
+      return null;
+    }
+    if (data?.id) return data.id;
   } catch (err: any) {
     console.warn('Supabase order UUID lookup notice:', err?.message || err);
   }
@@ -119,7 +134,7 @@ export function mapDbOrderRow(row: Record<string, any>, resolvedCustomerAuthUid?
   const status = String(row.status || 'confirmed') as 'confirmed' | 'preparing' | 'in_transit' | 'delivered';
   const stepMap: Record<string, number> = { confirmed: 1, preparing: 2, in_transit: 3, delivered: 4 };
   return {
-    id: String(row.idempotency_key || row.id),
+    id: String(row.public_order_id || row.idempotency_key || row.id),
     dbUuid: String(row.id),
     idempotencyKey: row.idempotency_key ? String(row.idempotency_key) : undefined,
     customerProfileId: String(row.customer_id),
@@ -172,10 +187,16 @@ export async function findStoredOrderByIdOrKey(orderIdOrKey: string) {
   const trimmed = orderIdOrKey.trim();
   if (!trimmed) return null;
   try {
-    const query = isUuidString(trimmed)
+    let { data, error } = isUuidString(trimmed)
       ? client.from('orders').select('*').or(`id.eq.${trimmed},idempotency_key.eq.${trimmed}`).maybeSingle()
       : client.from('orders').select('*').eq('idempotency_key', trimmed).maybeSingle();
-    const { data, error } = await query;
+    if (!error && !data && !isUuidString(trimmed)) {
+      ({ data, error } = await client.from('orders').select('*').eq('public_order_id', trimmed).maybeSingle());
+    }
+    if (error) {
+      console.warn('Supabase single order lookup notice:', error.message);
+      return null;
+    }
     if (!error && data) {
       let customerAuthUid: string | undefined;
       if (data.customer_id) {
@@ -222,7 +243,8 @@ export async function insertStoredOrder(order: any): Promise<boolean> {
       const customerUuid = await resolveProfileUuidByAuthUid(order.customerId);
       if (!customerUuid) return false;
       const { error } = await client.from('orders').insert({
-        idempotency_key: order.idempotencyKey || order.id || null,
+        public_order_id: order.id || null,
+        idempotency_key: order.idempotencyKey || null,
         customer_id: customerUuid,
         subtotal: order.subtotal || 0,
         delivery_fee: order.deliveryFee || 0,
@@ -258,6 +280,7 @@ export async function upsertStoredShipmentWaybill(shipment: {
   courierPartner: string;
   status: string;
   deliveryOtp: string;
+  assignedCourierProfileId?: string;
   pickupLocation: string;
   dropLocation: string;
   shippingFee: number;
@@ -270,24 +293,25 @@ export async function upsertStoredShipmentWaybill(shipment: {
     const orderUuid = await resolveOrderUuidByOrderKey(shipment.orderId);
     if (!orderUuid) return false;
 
+    const waybill = {
+      order_id: orderUuid,
+      tracking_number: shipment.trackingNumber,
+      courier_partner: shipment.courierPartner,
+      status: shipment.status,
+      delivery_otp: shipment.deliveryOtp,
+      ...(shipment.assignedCourierProfileId
+        ? { assigned_courier_profile_id: shipment.assignedCourierProfileId }
+        : {}),
+      pickup_location: shipment.pickupLocation,
+      drop_location: shipment.dropLocation,
+      shipping_fee_bdt: Number(shipment.shippingFee || 60),
+      pod_verified_at: shipment.podReceipt?.verifiedAt || null,
+      checkpoints: shipment.checkpoints || [],
+      updated_at: shipment.updatedAt || new Date().toISOString(),
+    };
     const { error } = await supabaseAdmin
       .from('shipment_waybills')
-      .upsert(
-        {
-          order_id: orderUuid,
-          tracking_number: shipment.trackingNumber,
-          courier_partner: shipment.courierPartner,
-          status: shipment.status,
-          delivery_otp: shipment.deliveryOtp,
-          pickup_location: shipment.pickupLocation,
-          drop_location: shipment.dropLocation,
-          shipping_fee_bdt: Number(shipment.shippingFee || 60),
-          pod_verified_at: shipment.podReceipt?.verifiedAt || null,
-          checkpoints: shipment.checkpoints || [],
-          updated_at: shipment.updatedAt || new Date().toISOString(),
-        },
-        { onConflict: 'order_id' }
-      );
+      .upsert(waybill, { onConflict: 'order_id' });
     if (error) {
       console.warn('Supabase waybill upsert notice:', error.message);
       return false;
@@ -296,6 +320,131 @@ export async function upsertStoredShipmentWaybill(shipment: {
   } catch (err: any) {
     console.warn('Supabase waybill upsert fallback to memory:', err?.message || err);
     return false;
+  }
+}
+
+export type ShipmentAuthorizationLookup =
+  | {
+      status: 'ok';
+      orderOwnerProfileId: string;
+      assignedCourierProfileId?: string;
+      hasStoredShipment: boolean;
+    }
+  | { status: 'not-found' }
+  | { status: 'unavailable' };
+
+export async function getStoredShipmentAuthorization(
+  orderKey: string
+): Promise<ShipmentAuthorizationLookup> {
+  if (!supabaseAdmin || !orderKey.trim()) {
+    return { status: 'unavailable' };
+  }
+
+  try {
+    const cleanKey = orderKey.trim();
+    let order: { id: string; customer_id: string } | null = null;
+
+    if (isUuidString(cleanKey)) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('id, customer_id')
+        .eq('id', cleanKey)
+        .maybeSingle();
+      if (error) {
+        console.warn('Supabase shipment owner lookup notice:', error.message);
+        return { status: 'unavailable' };
+      }
+      order = data;
+    }
+
+    if (!order) {
+      let { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('id, customer_id')
+        .eq('idempotency_key', cleanKey)
+        .maybeSingle();
+      if (error) {
+        console.warn('Supabase shipment owner lookup notice:', error.message);
+        return { status: 'unavailable' };
+      }
+      order = data;
+    }
+
+    if (!order) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('id, customer_id')
+        .eq('public_order_id', cleanKey)
+        .maybeSingle();
+      if (error) {
+        console.warn('Supabase shipment owner lookup notice:', error.message);
+        return { status: 'unavailable' };
+      }
+      order = data;
+    }
+
+    if (!order?.id || !order.customer_id) return { status: 'not-found' };
+
+    const { data: shipment, error: shipmentError } = await supabaseAdmin
+      .from('shipment_waybills')
+      .select('assigned_courier_profile_id')
+      .eq('order_id', order.id)
+      .maybeSingle();
+    if (shipmentError) {
+      console.warn('Supabase assigned courier lookup notice:', shipmentError.message);
+      return { status: 'unavailable' };
+    }
+
+    return {
+      status: 'ok',
+      orderOwnerProfileId: String(order.customer_id),
+      assignedCourierProfileId: shipment?.assigned_courier_profile_id
+        ? String(shipment.assigned_courier_profile_id)
+        : undefined,
+      hasStoredShipment: Boolean(shipment)
+    };
+  } catch (error) {
+    console.warn('Supabase shipment authorization lookup unavailable:', error);
+    return { status: 'unavailable' };
+  }
+}
+
+export type CourierProfileLookup =
+  | { status: 'ok'; profileId: string }
+  | { status: 'not-found' }
+  | { status: 'unavailable' };
+
+export async function resolveCourierProfileIdByAuthUid(
+  authUid: string
+): Promise<CourierProfileLookup> {
+  if (!supabaseAdmin || !authUid.trim()) {
+    return { status: 'unavailable' };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, active_roles')
+      .eq('auth_uid', authUid)
+      .maybeSingle();
+    if (error) {
+      console.warn('Supabase courier profile lookup notice:', error.message);
+      return { status: 'unavailable' };
+    }
+    if (!data?.id) return { status: 'not-found' };
+
+    const roles = [
+      ...(data.role ? [String(data.role)] : []),
+      ...(Array.isArray(data.active_roles) ? data.active_roles.map(String) : [])
+    ];
+    if (!roles.some((role) => role === 'driver' || role === 'logistics')) {
+      return { status: 'not-found' };
+    }
+
+    return { status: 'ok', profileId: String(data.id) };
+  } catch (error) {
+    console.warn('Supabase courier profile lookup unavailable:', error);
+    return { status: 'unavailable' };
   }
 }
 

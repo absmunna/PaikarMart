@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { PortalTab, SettingsSectionId, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { LocationPreferences } from '@/portals/utilities/settings-center/components/LocationPreferences';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
@@ -56,21 +56,21 @@ export type { SettingsSectionId };
 
 interface SettingsPortalProps {
   initialSection?: SettingsSectionId;
-  onSelectTab?: (tab: PortalTab) => void;
   currentUser?: User;
+  onSelectTab?: (tab: PortalTab) => void;
   onUpdateUser?: (updated: User) => void;
   onClose?: () => void;
 }
 
 export const SettingsPortal: React.FC<SettingsPortalProps> = ({
   initialSection = 'account_profile',
-  onSelectTab,
   currentUser,
+  onSelectTab,
   onUpdateUser,
   onClose
 }) => {
   const { language, setLanguage, t } = useLanguage();
-  const { themeMode, setThemeMode, accentColor, setAccentColor } = useTheme();
+  const { themeMode, setThemeMode, accentColor, setAccentColor, presets } = useTheme();
   const isBn = language === 'bn';
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection);
@@ -128,7 +128,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
         {
           id: 'about',
           label: isBn ? 'অ্যাপ সম্পর্কিত তথ্য' : 'About Platform & Policies',
-          desc: isBn ? 'ভার্সন, টার্মস অব সার্ভিস এবং নিরাপত্তা নীতিমালা' : 'App build version, terms, privacy & license',
+          desc: isBn ? 'অ্যাপের তথ্য ও নীতিমালার অবস্থা' : 'App information and policy availability',
           icon: Info,
           accentColor: 'text-amber-500 bg-amber-500/10 dark:bg-amber-500/20',
         },
@@ -142,14 +142,14 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
         {
           id: 'account_profile',
           label: isBn ? 'ব্যক্তিগত তথ্য ও প্রোফাইল' : 'Personal Profile',
-          desc: isBn ? 'নাম, ইউজারনেম, ইমেল, মোবাইল নম্বর ও বায়ো' : 'Name, handle, email, phone & avatar',
+          desc: isBn ? 'নাম, ইউজারনেম, ইমেল ও যোগাযোগের তথ্য' : 'Name, username and contact details',
           icon: UserIcon,
           accentColor: 'text-sky-500 bg-sky-500/10 dark:bg-sky-500/20',
         },
         {
           id: 'account_security',
           label: isBn ? 'পাসওয়ার্ড ও ২-ফ্যাক্টর নিরাপত্তা' : 'Login & Security',
-          desc: isBn ? 'পাসওয়ার্ড পরিবর্তন, ২FA এবং সক্রিয় লগইন সেশন' : 'Password updates, 2FA & active device sessions',
+          desc: isBn ? 'পাসওয়ার্ড, যাচাইকরণ ও ডিভাইস অ্যাক্সেস' : 'Password, verification & device access',
           icon: ShieldCheck,
           accentColor: 'text-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/20',
         },
@@ -193,7 +193,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
           label: isBn ? 'ট্রেড লাইসেন্স ও ট্যাক্স (KYC)' : 'Business KYC & Tax',
           desc: isBn ? 'ট্রেড লাইসেন্স নম্বর, ই-টিন ও ভ্যাট বিআইএন রেজিস্ট্রেশন' : 'Trade license, e-TIN, BIN VAT certificate verification',
           icon: FileCheck2,
-          badge: isBn ? 'ভেরিফাইড' : 'VERIFIED',
+          badge: currentUser?.vendorProfile?.verified ? (isBn ? 'ভেরিফাইড' : 'VERIFIED') : undefined,
           accentColor: 'text-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20',
         },
         {
@@ -221,8 +221,11 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
     },
   ];
 
-  // Flat list for searching
-  const allItems = navGroups.flatMap(g => g.items.map(item => ({ ...item, group: g.title })));
+  const activeGroup = navGroups.find((group) => group.items.some((item) => item.id === activeSection));
+  const visibleGroups = activeGroup ? [activeGroup] : [navGroups[0]];
+  const allItems = visibleGroups.flatMap((group) =>
+    group.items.map((item) => ({ ...item, group: group.title }))
+  );
   const filteredItems = searchQuery.trim()
     ? allItems.filter(item => 
         item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -236,20 +239,20 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
     setMobileDetailView(true);
   };
 
-  const currentItem = allItems.find(i => i.id === activeSection) || navGroups[0].items[0];
+  const currentItem = allItems.find((item) => item.id === activeSection) || visibleGroups[0].items[0];
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[var(--pm-bg)] text-[var(--pm-text)] pb-16">
-      {/* Top Banner Header */}
-      <div className="bg-[var(--pm-surface)] border-b border-[var(--pm-border)] sticky top-16 z-20 backdrop-blur-md">
+    <div className="min-h-[calc(100vh-4rem)] bg-[var(--pm-bg)] text-[var(--pm-text)] pb-24 md:pb-16">
+      <div className="hidden md:block bg-[var(--pm-surface)] border-b border-[var(--pm-border)] sticky top-16 z-20 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
             {onClose ? (
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 -ml-2 rounded-xl text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
+                className="hidden md:inline-flex min-w-11 min-h-11 p-2 -ml-2 rounded-xl text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]"
                 title={isBn ? 'ফিরে যান' : 'Go back'}
+                aria-label={isBn ? 'ফিরে যান' : 'Go back'}
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -257,57 +260,26 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectTab('feed')}
-                className="p-2 -ml-2 rounded-xl text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
+                className="hidden md:inline-flex min-w-11 min-h-11 p-2 -ml-2 rounded-xl text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]"
                 title={isBn ? 'হোমে ফিরে যান' : 'Back to Home'}
+                aria-label={isBn ? 'হোমে ফিরে যান' : 'Back to Home'}
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
             ) : null}
 
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase tracking-wider text-[var(--pm-accent)] bg-[var(--pm-accent-soft)] px-2 py-0.5 rounded-full border border-[var(--pm-accent-border)]">
-                  {isBn ? 'মডেল ১ • ইউনিফাইড সেটিংস' : 'Model 1 • Unified Portal'}
-                </span>
-                <span className="text-xs text-[var(--pm-muted)] font-medium hidden sm:inline">•</span>
-                <span className="text-xs text-[var(--pm-muted)] hidden sm:inline">
-                  {isBn ? 'সেন্ট্রালাইজড কনফিগারেশন' : 'Centralized Settings Hub'}
-                </span>
-              </div>
-              <h1 className="text-lg sm:text-xl font-black text-[var(--pm-text)] tracking-tight flex items-center gap-2">
-                {isBn ? 'সেটিংস ও প্রেফারেন্স পোর্টাল' : 'Settings & Preferences Portal'}
+              <h1 className="text-lg sm:text-xl font-bold text-[var(--pm-text)] tracking-tight">
+                {isBn ? 'সেটিংস' : 'Settings'}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Quick Switch to User Profile or Vendor Dash */}
-            {onSelectTab && (
-              <div className="hidden sm:flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectTab('profile')}
-                  className="px-3 py-1.5 rounded-xl border border-[var(--pm-border)] bg-[var(--pm-card)] hover:bg-[var(--pm-card-hover)] text-xs font-bold text-[var(--pm-text)] transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <UserIcon className="w-3.5 h-3.5" />
-                  <span>{isBn ? 'প্রোফাইল' : 'Profile'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectTab('vendor-dash')}
-                  className="px-3 py-1.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>{isBn ? 'মার্চেন্ট ড্যাশবোর্ড' : 'Vendor Hub'}</span>
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-start">
           
           {/* =======================
@@ -328,7 +300,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                     {currentUser.name}
                   </h4>
                   <p className="text-xs text-[var(--pm-muted)] font-mono truncate">
-                    @{currentUser.handle}
+                    @{currentUser.handle?.replace(/^@+/, '')}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] capitalize">
@@ -410,16 +382,16 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
             ) : (
               /* Grouped List */
               <div className="space-y-4">
-                {navGroups.map(group => (
+                {visibleGroups.map((group) => (
                   <div
                     key={group.id}
                     className="p-3 sm:p-4 rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-1"
                   >
                     <div className="px-3 py-1 mb-1">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-[var(--pm-text)]">
+                      <h3 className="text-sm font-bold text-[var(--pm-text)]">
                         {group.title}
                       </h3>
-                      <p className="text-[10px] text-[var(--pm-muted)] truncate">
+                      <p className="text-xs text-[var(--pm-muted)]">
                         {group.description}
                       </p>
                     </div>
@@ -456,7 +428,7 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <p className={`text-[10px] truncate ${isActive ? 'opacity-80' : 'text-[var(--pm-muted)]'}`}>
+                                <p className={`text-[11px] leading-4 line-clamp-2 ${isActive ? 'opacity-80' : 'text-[var(--pm-muted)]'}`}>
                                   {item.desc}
                                 </p>
                               </div>
@@ -501,12 +473,6 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                 <span className="font-bold text-[var(--pm-text)]">{currentItem.label}</span>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-[var(--pm-muted)]">
-                  {isBn ? 'অটো-সিঙ্ক সক্রিয়' : 'Instant Cloud Sync'}
-                </span>
-                <div className="w-2 h-2 rounded-full bg-[var(--pm-success)] animate-pulse" />
-              </div>
             </div>
 
             {/* Dynamic Content View based on activeSection */}
@@ -519,26 +485,27 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                       {isBn ? 'ডিসপ্লে থিম ও ভিজ্যুয়াল স্টাইল' : 'Appearance & Visual Theme'}
                     </h3>
                     <p className="text-xs text-[var(--pm-muted)]">
-                      {isBn ? 'আপনার পছন্দের থিম নির্বাচন করুন — এক ক্লিকেই পুরো অ্যাপ ও সাইডবার বদলে যাবে' : 'Select any studio theme token to transform the entire app, header, and sidebar'}
+                      {isBn ? 'PaikarMart-এর চেহারা বেছে নিন। পরে যেকোনো সময় বদলাতে পারবেন।' : 'Choose how PaikarMart looks. You can change it anytime.'}
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      { id: 'light' as ThemeMode, label: isBn ? 'ক্লিন লাইট (Light)' : 'Clean Light', desc: isBn ? 'উজ্জ্বল ও পরিষ্কার দিনকালীন ভিউ' : 'Crisp and bright daylight appearance', icon: Sun, swatchBg: '#f1f5f9', swatchAccent: '#2563eb' },
-                      { id: 'nakshiLight' as ThemeMode, label: isBn ? 'নকশী লাইট (Nakshi)' : 'Nakshi Light', desc: isBn ? 'বাংলার উষ্ণ সোনালি ঐতিহ্যবাহী আবহ' : 'Warm saffron cream heritage canvas', icon: Sparkles, swatchBg: '#fffbeb', swatchAccent: '#b45309' },
-                      { id: 'greenField' as ThemeMode, label: isBn ? 'সবুজ প্রান্তর (Green Field)' : 'Green Field', desc: isBn ? 'সবুজ বাংলার গভীর পান্না হাই-কনট্রাস্ট' : 'Deep emerald soil & mint contrast', icon: Sparkles, swatchBg: '#021a12', swatchAccent: '#10b981' },
-                      { id: 'deepDark' as ThemeMode, label: isBn ? 'ডিপ ডার্ক (Deep Dark)' : 'Deep Dark', desc: isBn ? 'গভীর ওলেড কালো ও অ্যাম্বার অ্যাকসেন্ট' : 'Obsidian OLED with vibrant orange', icon: Moon, swatchBg: '#07080b', swatchAccent: '#ff7a00' },
-                      { id: 'dark' as ThemeMode, label: isBn ? 'ডার্ক মোড (Dark)' : 'Midnight Slate', desc: isBn ? 'চোখের আরামদায়ক ক্লাসিক নাইট ভিউ' : 'Comfortable for low-light environments', icon: Moon, swatchBg: '#020617', swatchAccent: '#3b82f6' },
-                      { id: 'system' as ThemeMode, label: isBn ? 'সিস্টেম অটো (System)' : 'System Default', desc: isBn ? 'ডিভাইসের ওএস সেটিং অনুসরণ করবে' : 'Automatically syncs with OS theme', icon: Laptop, swatchBg: '#334155', swatchAccent: '#0ea5e9' },
-                    ].map((mode) => {
-                      const Icon = mode.icon;
-                      const isSelected = themeMode === mode.id;
+                    {presets.map((preset) => {
+                      const Icon =
+                        preset.id === 'light'
+                          ? Sun
+                          : preset.id === 'system'
+                            ? Laptop
+                            : preset.id === 'nakshiLight' || preset.id === 'greenField'
+                              ? Sparkles
+                              : Moon;
+                      const isSelected = themeMode === preset.id;
                       return (
                         <button
-                          key={mode.id}
+                          key={preset.id}
                           type="button"
-                          onClick={() => setThemeMode(mode.id)}
+                          onClick={() => setThemeMode(preset.id)}
+                          aria-pressed={isSelected}
                           className={`p-4 rounded-3xl border text-left transition-all cursor-pointer relative ${
                             isSelected
                               ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] ring-2 ring-[var(--pm-accent-border)] shadow-md'
@@ -548,21 +515,25 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                           <div className="flex items-center justify-between mb-3">
                             <div
                               className="p-2.5 rounded-2xl w-fit border border-black/10 shadow-xs"
-                              style={{ backgroundColor: mode.swatchBg, color: mode.swatchAccent }}
+                              style={{ backgroundColor: preset.bgHex, color: preset.accentHex }}
                             >
                               <Icon className="w-5 h-5" />
                             </div>
                             <span
                               className="w-4 h-4 rounded-full border border-white/50 shadow-xs"
-                              style={{ backgroundColor: mode.swatchAccent }}
+                              style={{ backgroundColor: preset.accentHex }}
                             />
                           </div>
-                          <p className="text-sm font-black text-[var(--pm-text)]">{mode.label}</p>
-                          <p className="text-xs text-[var(--pm-muted)] mt-1">{mode.desc}</p>
+                          <p className="text-sm font-black text-[var(--pm-text)]">
+                            {isBn ? preset.nameBn : preset.nameEn}
+                          </p>
+                          <p className="text-xs text-[var(--pm-muted)] mt-1">
+                            {isBn ? preset.descBn : preset.descEn}
+                          </p>
                           {isSelected && (
                             <div
                               className="absolute top-3 right-3 p-1 rounded-full text-white"
-                              style={{ backgroundColor: mode.swatchAccent }}
+                              style={{ backgroundColor: preset.accentHex }}
                             >
                               <Check className="w-3.5 h-3.5" />
                             </div>
@@ -574,13 +545,13 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
 
                   <div className="p-5 rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-3">
                     <h4 className="text-xs font-black uppercase tracking-wider text-[var(--pm-text)]">
-                      {isBn ? 'ভিজ্যুয়াল অ্যাকসেন্ট ও কালার প্যালেট' : 'Accent Color Palette'}
+                      {isBn ? 'অ্যাকসেন্ট রং' : 'Accent color'}
                     </h4>
                     <p className="text-xs text-[var(--pm-muted)]">
-                      {isBn ? 'বাটন, হাইলাইট এবং সক্রিয় ট্যাবের প্রধান ব্র্যান্ড কালার' : 'Primary color applied to buttons, badges and focus rings'}
+                      {isBn ? 'বাটন ও হাইলাইটের জন্য সবুজ বা সোনালি রং বেছে নিন।' : 'Choose a green or mango-gold accent for buttons and highlights.'}
                     </p>
                     <div className="flex items-center gap-3 pt-1">
-                      {['#2563eb', '#ff7a00', '#10b981', '#b45309', '#e11d48'].map((col) => (
+                      {['#4dbb80', '#087a55', '#54c98b', '#f2c14e', '#885700'].map((col) => (
                         <button
                           key={col}
                           type="button"
@@ -688,45 +659,40 @@ export const SettingsPortal: React.FC<SettingsPortalProps> = ({
                 <div className="space-y-6 animate-fadeIn">
                   <div>
                     <h3 className="text-lg font-black text-[var(--pm-text)]">
-                      {isBn ? 'অ্যাপ্লিকেশন সম্পর্কিত তথ্য' : 'About Platform & Policies'}
+                      {isBn ? 'PaikarMart সম্পর্কে' : 'About PaikarMart'}
                     </h3>
                     <p className="text-xs text-[var(--pm-muted)]">
-                      {isBn ? 'সংস্করণ, সিস্টেম আর্কিটেকচার এবং লাইসেন্স বিবরণ' : 'Build version, privacy standards, and architectural overview'}
+                      {isBn ? 'অ্যাপের তথ্য ও নীতিমালার অবস্থা' : 'App information and policy availability'}
                     </p>
                   </div>
 
                   <div className="p-6 rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-2xl bg-[var(--pm-accent)] flex items-center justify-center text-[var(--pm-accent-fg)] font-black text-xl shadow-md">
-                        S
+                        P
                       </div>
                       <div>
                         <h4 className="text-base font-black text-[var(--pm-text)]">
-                          SuperApp Bangladesh Ecosystem
+                          PaikarMart
                         </h4>
-                        <p className="text-xs text-[var(--pm-muted)]">v2.4.0 (Unified Enterprise Build 2026)</p>
                       </div>
                     </div>
 
                     <p className="text-xs text-[var(--pm-muted)] leading-relaxed">
                       {isBn
-                        ? 'সুপারঅ্যাপ প্ল্যাটফর্মটিতে সোশ্যাল ফিড, ই-কমার্স ট্রেডিং হাব, লোকাল সার্ভিস ও রাইড বুকিং এবং মার্চেন্ট ড্যাশবোর্ড একসাথে একীভূত করা হয়েছে।'
-                        : 'A multi-vertical omnichannel application bridging social commerce, address-based local discovery, on-demand services, and merchant tooling.'}
+                        ? 'স্থানীয় কেনাকাটা, কমিউনিটি, সেবা ও সেলার টুলস PaikarMart-এ এক জায়গায় পাওয়া যায়।'
+                        : 'PaikarMart brings local shopping, community, services and seller tools into one place.'}
                     </p>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-[var(--pm-border)] text-xs">
-                      <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                        <span className="text-[10px] text-[var(--pm-muted)] block font-mono">FRAMEWORK</span>
-                        <span className="font-bold text-[var(--pm-text)]">React 18 + Vite</span>
-                      </div>
-                      <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                        <span className="text-[10px] text-[var(--pm-muted)] block font-mono">STYLING</span>
-                        <span className="font-bold text-[var(--pm-text)]">Tailwind CSS 4.0</span>
-                      </div>
-                      <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                        <span className="text-[10px] text-[var(--pm-muted)] block font-mono">DATABASE</span>
-                        <span className="font-bold text-[var(--pm-text)]">Cloud Synced</span>
-                      </div>
+                    <div className="space-y-2 border-t border-[var(--pm-border)] pt-3">
+                      <h5 className="text-sm font-bold text-[var(--pm-text)]">
+                        {isBn ? 'নীতিমালা' : 'Policies'}
+                      </h5>
+                      <p className="text-xs leading-relaxed text-[var(--pm-muted)]">
+                        {isBn
+                          ? 'গোপনীয়তা ও ব্যবহারের নীতিমালা এই প্রিভিউতে এখনো প্রকাশিত হয়নি।'
+                          : 'Privacy and usage policies are not published in this preview yet.'}
+                      </p>
                     </div>
                   </div>
                 </div>

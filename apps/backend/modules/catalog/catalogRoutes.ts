@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
 import { resolveProfileUuidByAuthUid, supabaseAdmin } from '../../services/dbService.js';
 import { logger } from '../../services/logger.js';
+import { verifyCatalogProduct } from './catalogVerificationService.js';
 
 export const catalogRouter = Router();
 
@@ -722,4 +723,9 @@ catalogRouter.post('/submissions/:id/review', requireFirebaseAuth, requireRole([
   }
 
   res.json({ success: true, decision, submission: sub, masterProduct });
+});
+
+catalogRouter.post('/verify-product', requireFirebaseAuth, async (req: Request, res: Response) => {
+  const { title, brand, category, description, price } = req.body || {};
+  res.json(await verifyCatalogProduct({ title, brand, category, description, price }));
 });

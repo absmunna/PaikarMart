@@ -24,7 +24,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 interface UserGuidePortalProps {
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
   isVendor?: boolean;
 }
 
@@ -209,7 +208,6 @@ const GUIDE_ITEMS: GuideCardItem[] = [
 
 export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
   onSelectTab,
-  onOpenVendorModal,
   isVendor,
 }) => {
   const { language, toggleLanguage } = useLanguage();
@@ -243,7 +241,6 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
     { tab: 'orders', labelEn: 'Orders Hub', labelBn: 'অর্ডারস হাব', icon: CheckCircle2 },
     { tab: 'wallet', labelEn: 'Wallet & Escrow', labelBn: 'ওয়ালেট ও এসক্রো', icon: Wallet },
     { tab: 'messages', labelEn: 'Messages & Quotes', labelBn: 'মেসেজ ও কোটেশন', icon: MessageSquare },
-    { tab: 'settings', labelEn: 'Settings Center', labelBn: 'সেটিংস সেন্টার', icon: MapPin },
   ];
 
   return (
@@ -398,16 +395,19 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                   if (item.isVendorOnboarding) {
                     if (isVendor) {
                       onSelectTab('vendor-dash');
-                    } else if (onOpenVendorModal) {
-                      onOpenVendorModal();
                     }
                   } else if (item.targetTab) {
                     onSelectTab(item.targetTab);
                   }
                 }}
-                className="w-full py-3 px-4 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-xs font-black uppercase tracking-wider flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer"
+                disabled={Boolean(item.isVendorOnboarding && !isVendor)}
+                className="w-full py-3 px-4 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-xs font-black uppercase tracking-wider flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-[var(--pm-surface)] disabled:hover:text-[var(--pm-text)] disabled:hover:border-[var(--pm-border)] disabled:active:scale-100"
               >
-                <span>{isBn ? item.actionLabelBn : item.actionLabelEn}</span>
+                <span>
+                  {item.isVendorOnboarding && !isVendor
+                    ? isBn ? 'সাইডবারে আমার ব্যবসা খুলুন' : 'Open My Business in the sidebar'
+                    : isBn ? item.actionLabelBn : item.actionLabelEn}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

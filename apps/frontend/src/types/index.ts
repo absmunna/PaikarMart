@@ -460,6 +460,7 @@ export interface ProductVariantOption {
   id: string;
   label: string;
   values: string[];
+  swatches?: Record<string, string>;
 }
 
 export interface ProductVariantOffer {

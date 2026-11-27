@@ -64,6 +64,7 @@ export interface ShipmentRecord {
   trackingNumber: string;
   status: ShipmentStatus;
   deliveryOtp: string;
+  assignedCourierProfileId?: string;
   checkpoints: ShipmentCheckpoint[];
   rider: CourierRider;
   estimatedDelivery: string;
@@ -74,6 +75,53 @@ export interface ShipmentRecord {
   shippingFee: number;
   podReceipt?: PodReceipt;
   updatedAt: string;
+}
+
+export type PublicShipmentRecord = Pick<
+  ShipmentRecord,
+  | 'id'
+  | 'orderId'
+  | 'courierPartner'
+  | 'trackingNumber'
+  | 'status'
+  | 'checkpoints'
+  | 'estimatedDelivery'
+  | 'etaText'
+  | 'updatedAt'
+>;
+
+export function toPublicShipmentRecord(shipment: ShipmentRecord): PublicShipmentRecord {
+  const {
+    id,
+    orderId,
+    courierPartner,
+    trackingNumber,
+    status,
+    checkpoints,
+    estimatedDelivery,
+    etaText,
+    updatedAt
+  } = shipment;
+
+  return {
+    id,
+    orderId,
+    courierPartner,
+    trackingNumber,
+    status,
+    checkpoints,
+    estimatedDelivery,
+    etaText,
+    updatedAt
+  };
+}
+
+export function toOrderOwnerShipmentRecord(
+  shipment: ShipmentRecord
+): Omit<ShipmentRecord, 'assignedCourierProfileId'> {
+  const ownerShipment = { ...shipment };
+  delete ownerShipment.assignedCourierProfileId;
+  return ownerShipment;
 }
 
 export interface FleetVehicle {
@@ -442,6 +490,9 @@ function mapStoredWaybillToShipmentRecord(row: any): ShipmentRecord {
     trackingNumber: String(row.tracking_number),
     status,
     deliveryOtp: String(row.delivery_otp || '0000'),
+    assignedCourierProfileId: row.assigned_courier_profile_id
+      ? String(row.assigned_courier_profile_id)
+      : undefined,
     checkpoints,
     rider: {
       id: 'rider_408',
@@ -513,8 +564,25 @@ export async function findShipmentPersistent(key: string): Promise<ShipmentRecor
   return mapped;
 }
 
-export function assignCourierToShipment(orderId: string, partner: CourierPartner): ShipmentRecord {
+export async function loadShipmentPersistent(orderKey: string): Promise<ShipmentRecord | undefined> {
+  const row = await findStoredShipmentWaybill(orderKey);
+  if (!row) return undefined;
+
+  const mapped = mapStoredWaybillToShipmentRecord(row);
+  mapped.orderId = orderKey.trim();
+  shipmentStore.set(mapped.orderId, mapped);
+  return mapped;
+}
+
+export function assignCourierToShipment(
+  orderId: string,
+  partner: CourierPartner,
+  assignedCourierProfileId?: string
+): ShipmentRecord {
   const shp = getOrCreateShipment(orderId, { courierPartner: partner });
+  if (assignedCourierProfileId) {
+    shp.assignedCourierProfileId = assignedCourierProfileId;
+  }
   const suffix = shp.trackingNumber.split('-').pop() || '100200';
   shp.courierPartner = partner;
   shp.trackingNumber = `${PARTNER_PREFIX[partner]}-2026-${suffix}`;
@@ -529,6 +597,45 @@ export function assignCourierToShipment(orderId: string, partner: CourierPartner
   });
   void upsertStoredShipmentWaybill(shp);
   return shp;
+}
+
+export function canVerifyShipmentPodForProfile(
+  actorProfileId: string | undefined,
+  orderOwnerProfileId: string,
+  assignedCourierProfileId: string | undefined,
+  isPrivileged: boolean
+): boolean {
+  return Boolean(
+    isPrivileged ||
+      (actorProfileId &&
+        (actorProfileId === orderOwnerProfileId ||
+          actorProfileId === assignedCourierProfileId))
+  );
+}
+
+export function canAccessShipmentOutboundPayload(
+  actorProfileId: string | undefined,
+  assignedCourierProfileId: string | undefined,
+  isPrivileged: boolean
+): boolean {
+  return Boolean(
+    isPrivileged ||
+      (actorProfileId &&
+        assignedCourierProfileId &&
+        actorProfileId === assignedCourierProfileId)
+  );
+}
+
+export function canUpdateShipmentCheckpoint(
+  actorProfileId: string | undefined,
+  assignedCourierProfileId: string | undefined,
+  isPrivileged: boolean
+): boolean {
+  return canAccessShipmentOutboundPayload(
+    actorProfileId,
+    assignedCourierProfileId,
+    isPrivileged
+  );
 }
 
 export function appendShipmentCheckpoint(
@@ -607,7 +714,7 @@ export async function verifyShipmentPod(
   if (cleanOtp !== shp.deliveryOtp) {
     return {
       ok: false,
-      error: `Invalid Delivery OTP. Ask recipient for the 4-digit code (${shp.deliveryOtp} on waybill).`
+      error: 'Invalid Delivery OTP.'
     };
   }
 

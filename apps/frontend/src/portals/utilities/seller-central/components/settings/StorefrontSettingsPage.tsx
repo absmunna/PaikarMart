@@ -3,7 +3,7 @@ import { Store, Camera, Tag, Mail, Phone, MapPin, Check, Image as ImageIcon } fr
 import { AdministrativeArea, VendorCategory } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AdministrativeAreaFields } from '@/components/shared/AdministrativeAreaFields';
-import { vendorApiClient } from '@/features/vendors/vendorApiClient';
+import { vendorApiClient } from '@/features/vendors';
 
 export const StorefrontSettingsPage: React.FC = () => {
   const { language } = useLanguage();

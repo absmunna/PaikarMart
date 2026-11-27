@@ -19,6 +19,7 @@ import { CommerceItem } from '@/types';
 import { BulkTierPricingTable } from '@/features/b2b';
 import { useProductComparison } from '@/features/marketplace/hooks/useProductComparison';
 import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
+import { CardActionBar, CardActionButton, ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface WholesaleProductCardProps {
   product: CommerceItem;
@@ -71,9 +72,9 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
   };
 
   return (
-    <div className="bg-[var(--pm-card)] rounded-2xl border border-[var(--pm-border)] hover:border-[var(--pm-border-strong)] transition-all flex flex-col overflow-hidden shadow-xs hover:shadow-md">
+    <ContentCard className="transition-all flex flex-col hover:border-[var(--pm-border-strong)] hover:shadow-md">
       {/* Product Image & Supplier Header */}
-      <div className="relative aspect-4/3 bg-[var(--pm-surface)] overflow-hidden group">
+      <ContentCardMedia className="group aspect-[4/3]">
         <img
           src={product.imageUrl}
           alt={product.title}
@@ -96,50 +97,31 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
             <div className="px-2.5 py-1 rounded-lg bg-[var(--pm-success)] text-[11px] font-bold text-white shadow-xs font-mono tabular-nums">
               MOQ: {moq} pcs
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleWishlist(product);
-              }}
-              aria-pressed={wishlisted}
-              aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
-              title={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
-              className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                wishlisted
-                  ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
-                  : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-rose-500 hover:text-rose-500'
-              }`}
-            >
-              <Heart className={`w-4 h-4 ${wishlisted ? 'fill-white' : ''}`} />
-            </button>
           </div>
         </div>
 
-        {/* Quick Compare & Sample Actions */}
-        <button
-          type="button"
-          onClick={() => toggleCompare(product)}
-          aria-pressed={compared}
-          className={`absolute bottom-2.5 left-2.5 min-h-10 px-3 py-2 rounded-lg border shadow-xs text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
-            compared
-              ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
-              : 'pm-glass text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
-          }`}
-        >
-          {compared ? <Check className="w-3.5 h-3.5" /> : <Scale className="w-3.5 h-3.5 text-[var(--pm-accent)]" />}
-          {compared ? 'Compared' : 'Compare'}
-        </button>
+      </ContentCardMedia>
 
-        <button
-          type="button"
+      <CardActionBar label="Wholesale product actions">
+        <CardActionButton
+          icon={Heart}
+          label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
+          active={wishlisted}
+          activeTone="danger"
+          onClick={() => toggleWishlist(product)}
+        />
+        <CardActionButton
+          icon={compared ? Check : Scale}
+          label={compared ? 'Remove from compare' : 'Add to compare'}
+          active={compared}
+          onClick={() => toggleCompare(product)}
+        />
+        <CardActionButton
+          icon={PackageCheck}
+          label="Request a sample"
           onClick={() => onRequestSample(product)}
-          className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-lg pm-glass text-[11px] font-semibold text-[var(--pm-text)] border border-[var(--pm-border)] shadow-xs flex items-center gap-1 transition-colors cursor-pointer"
-        >
-          <PackageCheck className="w-3 h-3 text-[var(--pm-accent)]" />
-          Sample Unit
-        </button>
-      </div>
+        />
+      </CardActionBar>
 
       {/* Content Area */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
@@ -269,6 +251,6 @@ export const WholesaleProductCard: React.FC<WholesaleProductCardProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </ContentCard>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Sparkles, ArrowRight } from 'lucide-react';
 import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
+import { Button } from '@/components/shared/Button';
 
 export interface BannerSlide {
   id: string;
@@ -259,14 +260,16 @@ export const PortalBannerCarousel: React.FC<PortalBannerCarouselProps> = ({
               {isBn ? currentSlide.descBn : currentSlide.descEn}
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="lg"
             onClick={() => onCtaClick?.(currentSlide.id)}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--pm-accent)] px-4 text-xs font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)] cursor-pointer"
+            className="text-xs font-bold"
           >
             <span>{isBn ? currentSlide.ctaBn : currentSlide.ctaEn}</span>
             <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
         {slides.length > 1 && (
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--pm-border)] pt-3">
@@ -292,22 +295,24 @@ export const PortalBannerCarousel: React.FC<PortalBannerCarouselProps> = ({
               <span className="mr-1 text-[11px] font-medium text-[var(--pm-muted)]">
                 {currentIndex + 1}/{slides.length}
               </span>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={handlePrev}
                 aria-label="Previous slide"
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--pm-muted)] transition-colors hover:bg-[var(--pm-card)] hover:text-[var(--pm-text)] cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={handleNext}
                 aria-label="Next slide"
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--pm-muted)] transition-colors hover:bg-[var(--pm-card)] hover:text-[var(--pm-text)] cursor-pointer"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         )}

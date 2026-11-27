@@ -138,7 +138,7 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
                 required
                 value={trackingKey}
                 onChange={(e) => setTrackingKey(e.target.value)}
-                placeholder={isBn ? 'ট্র্যাকিং নম্বর বা অর্ডার আইডি দিন (যেমন: PKM-XXXXXX)' : 'Enter tracking # or Order ID (e.g. PKM-123456)'}
+                placeholder={isBn ? 'ট্র্যাকিং নম্বর বা অর্ডার আইডি দিন (যেমন: PKM-A1B2C3D4E5F60718293A)' : 'Enter tracking # or Order ID (e.g. PKM-A1B2C3D4E5F60718293A)'}
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs font-mono font-bold border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none text-[var(--pm-text)]"
               />
             </div>

@@ -10,6 +10,7 @@ import {
   LogisticsQuoteRequest,
   LogisticsVehicleClass,
   PodVerificationPayload,
+  PublicShipmentRecord,
   ReturnPickupRecord,
   RideDispatchRecord,
   ShipmentRecord,
@@ -85,15 +86,20 @@ export const logisticsOrderApiClient = {
   },
 
   async fetchShipment(orderId: string, dropLocation?: string): Promise<ShipmentRecord | null> {
+    const authorizedOrder = await safeFetchJson<{ shipment: ShipmentRecord }>(
+      `/api/orders/${encodeURIComponent(orderId)}`
+    );
+    if (authorizedOrder?.shipment) return authorizedOrder.shipment;
+
     const q = dropLocation ? `?drop=${encodeURIComponent(dropLocation)}` : '';
-    const res = await safeFetchJson<{ success: boolean; shipment: ShipmentRecord }>(
+    const res = await safeFetchJson<{ success: boolean; shipment: PublicShipmentRecord }>(
       `/api/logistics/shipments/${encodeURIComponent(orderId)}${q}`
     );
     return res?.shipment || null;
   },
 
   async lookupWaybill(trackingOrOrderId: string): Promise<ShipmentRecord | null> {
-    const res = await safeFetchJson<{ success: boolean; shipment: ShipmentRecord }>(
+    const res = await safeFetchJson<{ success: boolean; shipment: PublicShipmentRecord }>(
       `/api/logistics/shipments/${encodeURIComponent(trackingOrOrderId.trim())}`
     );
     return res?.shipment || null;
@@ -177,12 +183,16 @@ export const logisticsOrderApiClient = {
     }
   },
 
-  async assignCourier(orderId: string, courierPartner: CourierPartner): Promise<ShipmentRecord | null> {
+  async assignCourier(
+    orderId: string,
+    courierPartner: CourierPartner,
+    assignedCourierUid?: string
+  ): Promise<ShipmentRecord | null> {
     const res = await safeFetchJson<{ success: boolean; shipment: ShipmentRecord }>(
       `/api/logistics/shipments/${encodeURIComponent(orderId)}/assign-courier`,
       {
         method: 'POST',
-        body: JSON.stringify({ courierPartner })
+        body: JSON.stringify({ courierPartner, assignedCourierUid })
       }
     );
     return res?.shipment || null;

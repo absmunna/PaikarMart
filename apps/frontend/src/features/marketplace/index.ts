@@ -1,5 +1,6 @@
 export * from './types';
 export * from './components/CommerceProductCard';
+export * from './components/ProductCardActionRow';
 export * from './components/CartCheckoutDrawer';
 export * from './components/OtherSellersModal';
 export * from './components/AccountConversionPopup';
@@ -15,6 +16,7 @@ export * from './components/ProductComparisonModal';
 export * from './hooks/useProductComparison';
 export * from './hooks/useWishlist';
 export * from './hooks/useCartStore';
+export * from './hooks/useCatalogStore';
 export * from './services/retailApiClient';
 export * from './services/catalogApiClient';
 export * from './services/masterCatalogFallback';

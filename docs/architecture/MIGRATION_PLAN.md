@@ -1,8 +1,28 @@
 # MIGRATION PLAN (PHASE 2 — TARGET ARCHITECTURE MAPPING)
 
-**Rule:** Migrate **one module at a time** after Phase 2 approval and safe branch initialization (`refactor/modular-architecture` branched from `main` @ `657cda65bb6c7577a1faa6633fad46bd9de2353e`). Never delete a file until zero active imports or dynamic references remain and all checks pass.
+**Status:** Approved for phased implementation. Courier-assignment migration is approved for staging preparation only; production application remains gated on staging and backup verification.
+**Source baseline:** [`documents/ARCHITECTURE_AND_MODULARITY.md`](../../documents/ARCHITECTURE_AND_MODULARITY.md).
+**Rule:** Preserve routes, API contracts, auth, data, integrations, UI behavior, and deployment configuration. Migrate one module at a time.
 
----
+## Approved no-billing deployment targets
+
+| Layer | Selected target | Constraint |
+|---|---|---|
+| Frontend | Vercel Free | Keep the current frontend build/output and API rewrite compatible; do not add paid Vercel products. |
+| Backend | Render Free | Keep the existing Express service and start/build commands; do not upgrade or provision paid services. |
+| Relational database | Supabase Free PostgreSQL | Use SQL features available on the Free plan; preserve existing data/RLS and require approval before schema migrations. |
+| Firebase | Spark plan, with no billing account | Use only Firebase capabilities that work without enabling billing. Do not require Blaze-only products or trigger billing activation. |
+
+Vercel serves the frontend and proxies API requests to Render. Firebase Hosting and Cloud Run are not selected deployment targets. Check each Firebase product's current Spark eligibility before using it; if a required feature needs billing, stop and request an alternative decision rather than enabling billing or silently switching providers. Free-plan limits and terms must be verified before production rollout.
+
+## 1. Safety baseline
+
+1. The audit observed `main` at `657cda65bb6c7577a1faa6633fad46bd9de2353e` with 57 modified and 6 untracked pre-existing entries.
+2. Preserve pending work before any branch operation. The original workspace and audit documents are backed up in commit `6f5757e816c70592691cfc72e671bb1f114a1f51`.
+3. `refactor/modular-architecture` has now been synchronized with upstream `main` at `58cd980a86764f392fc85d5709ba0e41da467d14`; `main` itself was not changed.
+4. Record a recoverable baseline of the existing database schema and deployment configuration before any migration.
+5. Address P0 items in the audit before structural moves. Do not run live financial tests against production.
+6. Preserve old URLs and `/api/v1` aliases throughout every change. Add or update tests before removing any compatibility surface.
 
 ## 1. Execution Sequence Overview
 
@@ -52,3 +72,25 @@
 - **Zero Broken URLs:** Any future portal path adjustments must retain `<Navigate replace />` aliases in `apps/frontend/src/app/router/routeManifest.tsx`.
 - **Additive Database Migrations Only:** New tables/columns/RPCs live in `supabase/migrations/` and are appended compatibly to `supabase/schema.sql` — zero destructive `DROP TABLE` or breaking renames.
 - **Per-Step Verification Gate:** Every migrated module (`M1..M17`) must pass `npm run lint`, `npx tsc -p apps/backend/tsconfig.json --noEmit`, `npm run test:security`, and `npm run build` before moving to the next module, recorded immediately in `IMPLEMENTATION_LOG.md`.
+
+## 4. Recommended implementation order after approval
+
+1. **Foundation and release blockers:** secure OTP/POD, make wallet/escrow operations atomic, correct payment success/error semantics, and add tests.
+2. **Durable domain state:** persist orders, payment sessions, shipment state, and idempotency; ensure server-authoritative pricing.
+3. **Schema governance:** SQL/Prisma/live-schema diff, migration baseline, backward-compatible migrations and RLS verification.
+4. **Backend modularization:** extract inline `server.ts` routes; introduce domain repositories/services while retaining all existing API paths and aliases.
+5. **Frontend contract alignment:** selectively consolidate shared DTOs and cross-cutting location logic, retaining facade exports.
+6. **Portal/component cleanup:** only remove or relocate code after usage/dynamic-reference verification and focused route/UI checks.
+7. **Build/deployment gates:** repair and stage-test production publish workflow for the selected Vercel/Render topology and add backend checks to CI.
+
+For each step: capture the source files and imports; make one focused change; add a failing-before test; run the smallest focused tests, TypeScript checks, frontend/backend builds, and route/API checks; record rollback details in `IMPLEMENTATION_LOG.md`. Do not apply a production DB migration until staging validation and explicit approval.
+
+## 5. Approval and execution status
+
+- The user approved the migration order and priority of P0 safety fixes.
+- The user selected `documents/ARCHITECTURE_AND_MODULARITY.md` as the canonical architecture document; do not create or maintain a second specification.
+- Existing work was preserved in the backup commit above before implementation.
+- The user confirmed the no-billing targets above. Do not configure Firebase Hosting or enable Firebase billing.
+- The user approved adding courier assignment and POD authorization using a nullable profile reference. The migration is authored at `supabase/migrations/20261126_add_shipment_courier_assignment.sql` and has not been applied to any database.
+- Before applying it, capture/verify the live schema, test the additive migration and RLS policy in a staging Supabase Free project, and deploy the migration before the dependent backend code. Production application is not authorized by the staging approval.
+- Database and production deployment changes remain gated on schema/configuration backup, staging verification, and separate approval.

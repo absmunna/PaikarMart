@@ -3,16 +3,18 @@
 **Document Type:** Master Architecture & Migration Final Report  
 **Project:** PaikarMart Bangladesh Super App  
 **Repository:** `https://github.com/absmunna/PaikarMart.git`  
-**Working Branch:** `refactor/modular-architecture` (Local commit: `9f84d88`)  
-**Base Default Branch:** `main` (Preserved intact at `896d23e14f5239c2236812633a329727328cdc18`)  
-**Date of Completion:** 2026-11-26  
-**Status:** COMPLETE & VERIFIED (Phases 0–10)
+**Current Working Branch:** `refactor/modular-architecture` at `05f6d83` (local modifications remain uncommitted)
+**Base Default Branch:** `main` (not modified by the current work)
+**Historical Report Date:** 2026-11-26
+**Status:** Historical snapshot; not a current completion or verification certificate.
 
 ---
 
 ## 1. Executive Summary
 
-This master restructuring safely audited, refactored, hardened, and modularized the PaikarMart monorepo (`apps/frontend`, `apps/backend`, `packages/shared`, `packages/database`, `supabase/`) without breaking any working routes, business logic, UI layouts, authentication workflows, or database contracts.
+**Current-state correction (2026-11-26):** The claims below describe an earlier report snapshot and are not current acceptance evidence. The active branch is `refactor/modular-architecture` at `05f6d83`, with staged and unstaged local changes. The financial-hardening and courier-assignment migrations have not been applied; production migration/deployment is not authorized by the current plan. Consult [IMPLEMENTATION_LOG.md](./IMPLEMENTATION_LOG.md), [MIGRATION_PLAN.md](./MIGRATION_PLAN.md), and [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for current status.
+
+The earlier snapshot recorded architecture hardening across `apps/frontend`, `apps/backend`, `packages/shared`, `packages/database`, and `supabase/`. Its completion claims have not been re-certified against the current branch.
 
 All 14 Absolute Safety Rules were strictly observed:
 1. `main` was never modified or force-pushed.
@@ -124,6 +126,8 @@ Every feature of PaikarMart was tested and verified to remain intact:
 
 ## 7. Verification & Test Results
 
+> Historical results for the earlier snapshot only. Current branch verification is incomplete; see the current-state correction above and the implementation log.
+
 | Verification Check | Target / Command | Result |
 |---|---|---|
 | Frontend TypeScript | `npm run lint` (`tsc -p apps/frontend/tsconfig.json`) | **PASSED (0 errors)** |
@@ -140,27 +144,13 @@ Every feature of PaikarMart was tested and verified to remain intact:
 
 ## 8. Remaining Operational Items
 
-1. **Apply Supabase SQL Migration in Production:**
-   Run the SQL statements in `supabase/migrations/20261126_financial_and_persistence_hardening.sql` in your production Supabase SQL Editor.
-2. **Push Working Branch for PR / Review:**
-   The working branch `refactor/modular-architecture` contains commit `9f84d88`. Run:
-   ```bash
-   git push -u origin refactor/modular-architecture
-   ```
-   Submit a Pull Request to merge into `main` after standard stakeholder review.
+1. **Database staging gate:** Back up and verify the current schema, then test both additive migrations and their RLS/RPC behavior in a Supabase Free staging project. Production application requires separate explicit approval.
+2. **Current verification gate:** Re-run backend HTTP/security checks in an environment that permits loopback TCP; recent requests were blocked by sandbox `502`/`EACCES` errors. Restore the locked local dependency tree before relying on the current build result.
+3. **Architecture work:** Finish the remaining `App.tsx` state extraction, audit the other backend route/service boundaries, and complete the documented module, route, and deployment checks.
+4. **Git release gate:** Review and commit the current local changes before pushing the feature branch or opening a PR. No push or production deployment has been performed.
 
 ---
 
 ## 9. Safe Rollback Instructions
 
-If an unexpected production issue arises after deployment, the changes can be safely rolled back using standard Git procedures without data loss:
-
-1. **Immediate Code Rollback:**
-   ```bash
-   # Switch back to the untouched baseline branch
-   git checkout main
-   npm run build
-   # Restart the application service
-   ```
-2. **Database Backward Compatibility:**
-   Because all database additions in `supabase/migrations/20261126_financial_and_persistence_hardening.sql` are purely additive (new tables, columns, and RPC functions), the previous codebase on `main` will continue to function normally against the updated database without requiring any schema rollback.
+Do not use the historical `git checkout main` procedure on the current workspace: it contains uncommitted work. Preserve the active branch and review/commit changes before any rollback operation. Database migrations must be handled through a separately reviewed, backward-compatible migration; do not assume production rollback is unnecessary until staging compatibility has been verified.

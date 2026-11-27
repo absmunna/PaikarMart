@@ -7,13 +7,9 @@ import {
   ServiceBooking, 
   VendorProfile,
 } from '@/types';
-import { 
-  INITIAL_COMMERCE_ITEMS, 
-  INITIAL_ORDERS
-} from '@/data/mockData';
-import { clearStoredData, loadStoredData, saveStoredData } from '@/lib/supabase';
+import { saveStoredData } from '@/lib/supabase';
 
-import { useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 
 // Layout & Shared Chrome via Design System
 import {
@@ -38,28 +34,29 @@ import {
   ProductComparisonModal,
   ProductComparisonProvider,
   WishlistProvider,
-  fetchCatalogResult,
   useCartStore,
+  useCatalogStore,
   type PortalFilterType
 } from '@/features/marketplace';
-import { fetchSocialFeedResult, useSocialFeedStore } from '@/features/social';
-import { WalletModal } from '@/portals/utilities/wallet/components/WalletModal';
+import { useSocialFeedStore } from '@/features/social';
 import { NotificationsModal } from '@/portals/utilities/notifications-center/components/NotificationsModal';
 import { MessagingCenterModal } from '@/features/messaging';
 import { SuperAdminControlModal } from '@/features/governance';
-import { MultiRoleOnboardingModal } from '@/features/vendors';
 import { PwaInstallBanner } from '@/features/pwa/PwaInstallBanner';
 import { VoiceSearchModal } from '@/features/ai-voice/VoiceSearchModal';
-import { RfqAndForecastingModal } from '@/components/shared/RfqAndForecastingModal';
 import { useNotificationsStore } from '@/features/notifications/useNotificationsStore';
+import { useOrdersStore } from '@/features/orders';
+import { useBookingsStore } from '@/features/services';
+import { MultiRoleOnboardingModal } from '@/features/vendors';
 
 // Application Bootstrap, Routing, Contexts & Shared Hooks
 import { AppProviders } from '@/app/providers/AppProviders';
 import { PORTAL_TAB_ROUTES, resolveTabFromPath, ROUTE_PATHS } from '@/app/router/routeIds';
+import { getComingSoonFeature } from '@/app/router/featureAvailability';
 import { AppRouteManifest } from '@/app/router/routeManifest';
+import { usePrimaryViewportRefresh } from '@/app/hooks/usePrimaryViewportRefresh';
 import { useTheme, useLanguage, useLocationSettings, useAuth } from '@/contexts';
 import type { SettingsSectionId } from '@/types';
-import { SettingsModal } from '@/portals/utilities/settings-center/components/SettingsModal';
 import { useGlobalOverlayScrollLock } from '@/shared/hooks/useBodyScrollLock';
 import {
   loadPersistedNavState,
@@ -80,6 +77,10 @@ function AppInner() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const isProductDetailsRoute = Boolean(
+    matchPath(ROUTE_PATHS.PRODUCT_DETAILS, location.pathname) ||
+    matchPath(ROUTE_PATHS.PRODUCT_DETAILS_LEGACY, location.pathname)
+  );
 
   // Navigation & Modal States derived from Route
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
@@ -105,7 +106,10 @@ function AppInner() {
     initialNavRef.current = loadPersistedNavState();
   }
   const restoredRootRoute = React.useMemo(
-    () => resolveRestorableGuestPath(initialNavRef.current),
+    () => {
+      const restoredPath = resolveRestorableGuestPath(initialNavRef.current);
+      return getComingSoonFeature(restoredPath) ? ROUTE_PATHS.MARKETPLACE_HUB : restoredPath;
+    },
     []
   );
 
@@ -115,15 +119,13 @@ function AppInner() {
   const [isHubOpen, setIsHubOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
   const [isCloudGuideOpen, setIsCloudGuideOpen] = useState(false);
-  const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
-  const [isRfqModalOpen, setIsRfqModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isVendorOnboardingOpen, setIsVendorOnboardingOpen] = useState(false);
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login');
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => initialNavRef.current!.searchQuery);
@@ -168,12 +170,17 @@ function AppInner() {
     handleClearAllNotifications,
   } = useNotificationsStore(Boolean(firebaseUser));
 
+  const { orders, addOrder, updateOrder } = useOrdersStore();
+
   const {
     posts,
-    mergeServerPosts,
+    savedPostIds,
+    isFeedLoading,
+    refreshServerPosts,
     handleCreatePost,
     handleReactToPost,
     handleAddComment,
+    handleToggleSavedPost,
   } = useSocialFeedStore({
     currentUser,
     onPostCreated: () => {
@@ -231,123 +238,59 @@ function AppInner() {
     navigate('/settings');
   };
 
+  const handleOpenVendorOnboarding = () => {
+    if (!firebaseUser) {
+      handleOpenAuthModal('login');
+      return;
+    }
+    setIsVendorOnboardingOpen(true);
+  };
+
+  const handleCompleteVendorOnboarding = (vendorProfile: VendorProfile) => {
+    const isApproved = vendorProfile.kycStatus
+      ? vendorProfile.kycStatus === 'approved'
+      : vendorProfile.verified;
+    setCurrentUser((user) => {
+      const vendorProfiles = [
+        ...(user.vendorProfiles || []).filter((profile) => profile.id !== vendorProfile.id),
+        vendorProfile,
+      ];
+      return {
+        ...user,
+        role: isApproved && user.role === 'consumer' ? 'vendor' : user.role,
+        kycStatus: vendorProfile.kycStatus || (isApproved ? 'approved' : 'submitted'),
+        trustLevel: vendorProfile.trustLevel || (isApproved ? 5 : 4),
+        vendorProfile,
+        vendorProfiles,
+        activeVendorId: vendorProfile.id,
+        isVendor: isApproved,
+      };
+    });
+  };
+
   useEffect(() => {
     const handleQuota = () => setQuotaExceeded(true);
     window.addEventListener('gmp-quota-exceeded', handleQuota);
     return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
   }, []);
 
-  // Catalog state hydrated from backend Supabase API
-  const [commerceItems, setCommerceItems] = useState<CommerceItem[]>([]);
-  const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(true);
-  const [isFeedLoading, setIsFeedLoading] = useState<boolean>(true);
-  const [pullDistance, setPullDistance] = useState<number>(0);
-  const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
-  const pullStartYRef = useRef<number | null>(null);
-  const PULL_THRESHOLD = 72;
+  const {
+    commerceItems,
+    isCatalogLoading,
+    catalogNotice,
+    refreshCatalog,
+    addCommerceItem,
+  } = useCatalogStore();
+  const {
+    pullDistance,
+    isPullRefreshing,
+    pullThreshold,
+    handleViewportTouchStart,
+    handleViewportTouchMove,
+    handleViewportTouchEnd,
+  } = usePrimaryViewportRefresh({ refreshCatalog, refreshServerPosts });
 
-  const refreshPrimaryViewportData = useCallback(async (signal?: AbortSignal) => {
-    setIsCatalogLoading(true);
-    setIsFeedLoading(true);
-    try {
-      const [catalogResult, feedResult] = await Promise.all([
-        fetchCatalogResult(signal),
-        fetchSocialFeedResult(signal),
-      ]);
-      if (signal?.aborted) return;
-
-      if (catalogResult.source === 'unconfigured') {
-        setCommerceItems(loadStoredData('COMMERCE', INITIAL_COMMERCE_ITEMS));
-      } else {
-        if (catalogResult.products.length === 0) {
-          clearStoredData('COMMERCE');
-        }
-        setCommerceItems(catalogResult.products);
-      }
-
-      if (feedResult.posts.length > 0) {
-        mergeServerPosts(feedResult.posts);
-      }
-    } finally {
-      if (!signal?.aborted) {
-        setIsCatalogLoading(false);
-        setIsFeedLoading(false);
-      }
-    }
-  }, [mergeServerPosts]);
-
-  // Supabase is the authoritative product catalog & live feed source.
-  useEffect(() => {
-    const controller = new AbortController();
-    void refreshPrimaryViewportData(controller.signal);
-    return () => controller.abort();
-  }, [refreshPrimaryViewportData]);
-
-  const triggerPullRefresh = useCallback(async () => {
-    if (isPullRefreshing) return;
-    setIsPullRefreshing(true);
-    setPullDistance(56);
-    try {
-      await Promise.all([
-        refreshPrimaryViewportData(),
-        new Promise((resolve) => setTimeout(resolve, 500)),
-      ]);
-    } finally {
-      setIsPullRefreshing(false);
-      setPullDistance(0);
-    }
-  }, [isPullRefreshing, refreshPrimaryViewportData]);
-
-  const handleViewportTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
-    if (window.scrollY <= 2 && !isPullRefreshing && e.touches.length === 1) {
-      pullStartYRef.current = e.touches[0].clientY;
-    } else {
-      pullStartYRef.current = null;
-    }
-  }, [isPullRefreshing]);
-
-  const handleViewportTouchMove = useCallback((e: React.TouchEvent<HTMLElement>) => {
-    if (pullStartYRef.current === null || isPullRefreshing) return;
-    const delta = e.touches[0].clientY - pullStartYRef.current;
-    if (delta > 0 && window.scrollY <= 2) {
-      const damped = Math.min(110, Math.round(delta * 0.5));
-      setPullDistance(damped);
-    } else if (delta <= 0) {
-      setPullDistance(0);
-    }
-  }, [isPullRefreshing]);
-
-  const handleViewportTouchEnd = useCallback(() => {
-    if (pullStartYRef.current === null) return;
-    pullStartYRef.current = null;
-    if (pullDistance >= PULL_THRESHOLD) {
-      void triggerPullRefresh();
-    } else {
-      setPullDistance(0);
-    }
-  }, [pullDistance, triggerPullRefresh]);
-
-  const [orders, setOrders] = useState<Order[]>(() => 
-    loadStoredData('ORDERS', INITIAL_ORDERS)
-  );
-
-  const [bookings, setBookings] = useState<ServiceBooking[]>(() => 
-    loadStoredData('BOOKINGS', [])
-  );
-
-  useEffect(() => {
-    if (commerceItems.length > 0) {
-      saveStoredData('COMMERCE', commerceItems);
-    }
-  }, [commerceItems]);
-
-  useEffect(() => {
-    saveStoredData('ORDERS', orders);
-  }, [orders]);
-
-  useEffect(() => {
-    saveStoredData('BOOKINGS', bookings);
-  }, [bookings]);
+  const { bookings, addBooking } = useBookingsStore();
 
   useEffect(() => {
     saveStoredData('USER', currentUser);
@@ -381,7 +324,7 @@ function AppInner() {
   ]);
 
   const handleOrderPlaced = (newOrder: Order) => {
-    setOrders([newOrder, ...orders]);
+    addOrder(newOrder);
     addNotification(
       'order',
       'Order Confirmed! 📦',
@@ -392,7 +335,7 @@ function AppInner() {
   };
 
   const handleUpdateOrder = (updatedOrder: Order) => {
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    updateOrder(updatedOrder);
   };
 
   // Booking Handler for Services
@@ -402,35 +345,13 @@ function AppInner() {
       status: 'scheduled',
       ...bookingData
     };
-    setBookings([newBooking, ...bookings]);
+    addBooking(newBooking);
     addNotification(
       'booking',
       'Service Booked! 🔧',
       `Booked ${bookingData.serviceTitle} with ${bookingData.providerName} for ${bookingData.date}.`,
       'services'
     );
-  };
-
-  // Vendor Onboarding & Management Handlers
-  const handleCompleteVendorOnboarding = (profile: VendorProfile) => {
-    const isApproved = profile.kycStatus ? profile.kycStatus === 'approved' : profile.verified;
-    setCurrentUser(prev => ({
-      ...prev,
-      role: isApproved && prev.role === 'consumer' ? 'vendor' : prev.role,
-      isVendor: isApproved,
-      kycStatus: profile.kycStatus || (isApproved ? 'approved' : 'submitted'),
-      trustLevel: profile.trustLevel || (isApproved ? 5 : 4),
-      vendorProfile: profile
-    }));
-    addNotification(
-      'system',
-      isApproved ? 'Seller Central Activated' : 'Merchant KYC Submitted',
-      isApproved
-        ? `${profile.storeName} is verified and ready for listings & payouts.`
-        : `${profile.storeName} application is queued for governance verification.`,
-      'vendor-dash'
-    );
-    setCurrentTab('vendor-dash');
   };
 
   const handleAddNewProduct = (newProductData: Omit<CommerceItem, 'id' | 'rating' | 'reviewsCount'>) => {
@@ -440,7 +361,7 @@ function AppInner() {
       reviewsCount: 1,
       ...newProductData
     };
-    setCommerceItems([newItem, ...commerceItems]);
+    addCommerceItem(newItem);
   };
 
   const handleCreatePromoPost = (product: CommerceItem) => {
@@ -471,7 +392,7 @@ function AppInner() {
       handleOpenAuthModal('login');
       return false;
     }
-    setIsWalletOpen(true);
+    navigate(ROUTE_PATHS.WALLET);
     addNotification(
       'system',
       'Use Verified Wallet & Escrow',
@@ -522,7 +443,7 @@ function AppInner() {
         onSelectTab={setCurrentTab}
         onOpenHub={() => setCurrentTab('explore')}
         onOpenCart={() => setIsCartOpen(true)}
-        onOpenWallet={() => setIsWalletOpen(true)}
+        onOpenWallet={() => navigate(ROUTE_PATHS.WALLET)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         onOpenLocationModal={() => setIsLocationModalOpen(true)}
         onUpdateLocation={(newLocation, coords) => {
@@ -540,25 +461,23 @@ function AppInner() {
         }}
         unreadNotificationsCount={unreadNotificationsCount}
         onOpenSidebar={() => setIsSidebarOpen(true)}
-        onOpenVendorModal={() => setIsVendorModalOpen(true)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
         cartCount={cartCount}
         currentUser={currentUser}
         isDarkMode={isDark}
         onToggleDarkMode={toggleTheme}
-        onOpenSettings={() => handleOpenSettingsPortal('account_profile')}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
         onOpenAuthModal={handleOpenAuthModal}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
-        onOpenRfqModal={() => setIsRfqModalOpen(true)}
+        onOpenRfqModal={() => navigate(ROUTE_PATHS.DEMAND)}
         commerceItems={commerceItems}
         posts={posts}
       />
 
       {/* 2. Main Viewport: 3-Column Facebook Layout (Routing managed inside Center Column) */}
-      <div className="max-w-7xl mx-auto w-full max-w-full px-3 sm:px-4 lg:px-6 pt-3 pb-24 md:pb-8 flex-1 flex justify-center gap-4 lg:gap-6 overflow-x-clip">
+      <div className={`${isProductDetailsRoute ? 'max-w-none' : 'max-w-7xl'} mx-auto w-full px-3 sm:px-4 lg:px-6 pt-4 md:pt-6 pb-24 md:pb-8 flex-1 flex justify-center gap-4 lg:gap-6 overflow-x-clip`}>
           <ScrollToTop />
           
           {/* Left Column (Desktop Shortcuts & Portal Switcher) */}
@@ -566,17 +485,11 @@ function AppInner() {
             currentTab={currentTab}
             onSelectTab={setCurrentTab}
             currentUser={currentUser}
-            onOpenVendorModal={() => setIsVendorModalOpen(true)}
+            onOpenVendorModal={handleOpenVendorOnboarding}
+            onOpenSellerInventory={() => navigate(ROUTE_PATHS.SELLER_INVENTORY)}
             onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
-            onOpenHub={() => setCurrentTab('explore')}
-            onOpenWallet={() => setIsWalletOpen(true)}
-            onOpenNotifications={() => setIsNotificationsOpen(true)}
-            onOpenSettings={() => handleOpenSettingsPortal('account_profile')}
             onOpenSettingsPortal={handleOpenSettingsPortal}
             onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
-            onOpenCart={() => setIsCartOpen(true)}
-            cartCount={cartCount}
-            unreadNotificationsCount={unreadNotificationsCount}
             onOpenLocationModal={() => setIsLocationModalOpen(true)}
             onOpenAuthModal={handleOpenAuthModal}
             onQuickFilter={(query, targetTab) => {
@@ -590,43 +503,45 @@ function AppInner() {
             onTouchStart={handleViewportTouchStart}
             onTouchMove={handleViewportTouchMove}
             onTouchEnd={handleViewportTouchEnd}
-            className="w-full max-w-2xl flex-1 space-y-6 pb-12 relative"
+            className={`w-full ${isProductDetailsRoute ? 'max-w-none' : 'max-w-2xl space-y-4 md:space-y-6'} flex-1 pb-12 relative`}
           >
             {/* Pull-to-Refresh Visual Indicator */}
-            <div
-              aria-live="polite"
-              style={{
-                height: pullDistance > 0 || isPullRefreshing ? `${Math.max(44, pullDistance)}px` : '0px',
-                opacity: pullDistance > 8 || isPullRefreshing ? 1 : 0,
-              }}
-              className="overflow-hidden transition-all duration-200 ease-out flex items-center justify-center"
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-sm text-xs font-semibold text-[var(--pm-text)]">
-                {isPullRefreshing ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 text-[var(--pm-accent)] animate-spin" />
-                    <span>{isBn ? 'নতুন ডেটা আপডেট হচ্ছে...' : 'Refreshing live feed & catalog...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowDown
-                      className={`w-3.5 h-3.5 text-[var(--pm-accent)] transition-transform duration-150 ${
-                        pullDistance >= PULL_THRESHOLD ? 'rotate-180' : ''
-                      }`}
-                    />
-                    <span>
-                      {pullDistance >= PULL_THRESHOLD
-                        ? isBn
-                          ? 'রিফ্রেশ করতে ছেড়ে দিন'
-                          : 'Release to refresh'
-                        : isBn
-                        ? 'রিফ্রেশ করতে নিচে টানুন'
-                        : 'Pull down to refresh'}
-                    </span>
-                  </>
-                )}
+            {(pullDistance > 0 || isPullRefreshing) && (
+              <div
+                aria-live="polite"
+                style={{
+                  height: `${Math.max(44, pullDistance)}px`,
+                  opacity: pullDistance > 8 || isPullRefreshing ? 1 : 0,
+                }}
+                className="overflow-hidden transition-all duration-200 ease-out flex items-center justify-center"
+              >
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-sm text-xs font-semibold text-[var(--pm-text)]">
+                  {isPullRefreshing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 text-[var(--pm-accent)] animate-spin" />
+                      <span>{isBn ? 'নতুন ডেটা আপডেট হচ্ছে...' : 'Refreshing live feed & catalog...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown
+                        className={`w-3.5 h-3.5 text-[var(--pm-accent)] transition-transform duration-150 ${
+                          pullDistance >= pullThreshold ? 'rotate-180' : ''
+                        }`}
+                      />
+                      <span>
+                        {pullDistance >= pullThreshold
+                          ? isBn
+                            ? 'রিফ্রেশ করতে ছেড়ে দিন'
+                            : 'Release to refresh'
+                          : isBn
+                          ? 'রিফ্রেশ করতে নিচে টানুন'
+                          : 'Pull down to refresh'}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
             
             {/* Marketplace browsing owns this shared category rail; other portals provide their own filters. */}
             {shouldShowMarketplaceCategoryBar && (
@@ -657,9 +572,11 @@ function AppInner() {
             currentUser={currentUser}
             setCurrentUser={setCurrentUser}
             posts={posts}
+            savedPostIds={savedPostIds}
             filteredPosts={filteredPosts}
             commerceItems={commerceItems}
             isCatalogLoading={isCatalogLoading}
+            catalogNotice={catalogNotice}
             isFeedLoading={isFeedLoading}
             orders={orders}
             bookings={bookings}
@@ -675,16 +592,15 @@ function AppInner() {
             initialSettingsSection={initialSettingsSection}
             setCurrentTab={setCurrentTab}
             navigate={navigate}
-            onOpenVendorModal={() => setIsVendorModalOpen(true)}
             onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
-            onOpenWallet={() => setIsWalletOpen(true)}
+            onOpenWallet={() => navigate(ROUTE_PATHS.WALLET)}
             onOpenNotifications={() => setIsNotificationsOpen(true)}
             onOpenAuthModal={handleOpenAuthModal}
-            onOpenSettingsPortal={handleOpenSettingsPortal}
             onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
             onCreatePost={handleCreatePost}
             onReactToPost={handleReactToPost}
             onAddComment={handleAddComment}
+            onToggleSavedPost={handleToggleSavedPost}
             onAddToCart={handleAddToCart}
             onBuyNow={handleBuyNow}
             onSelectVoucher={(code) => {
@@ -703,7 +619,7 @@ function AppInner() {
             onOrderPlaced={handleOrderPlaced}
             onUpdateOrder={handleUpdateOrder}
             onReorderOrder={(newOrder) => {
-              setOrders((prev) => [newOrder, ...prev]);
+              addOrder(newOrder);
               addNotification(
                 'order',
                 'Reorder Placed! 📦',
@@ -723,15 +639,17 @@ function AppInner() {
         </main>
 
         {/* Right Column (Desktop Sponsored, Cart Widget, Verified Sellers, AI Trending Topics) */}
-        <DesktopRightSidebar
-          activeOrders={orders}
-          onOpenCart={() => setIsCartOpen(true)}
-          featuredProducts={commerceItems}
-          onAddToCart={(item) => handleAddToCart(item, 1, item.type === 'wholesale')}
-          onOpenStorePortal={(type) => setCurrentTab(type)}
-          posts={posts}
-          onSelectTopic={(topic) => setSearchQuery(topic)}
-        />
+        {!isProductDetailsRoute && (
+          <DesktopRightSidebar
+            activeOrders={orders}
+            onOpenCart={() => setIsCartOpen(true)}
+            featuredProducts={commerceItems}
+            onAddToCart={(item) => handleAddToCart(item, 1, item.type === 'wholesale')}
+            onOpenStorePortal={(type) => setCurrentTab(type)}
+            posts={posts}
+            onSelectTopic={(topic) => setSearchQuery(topic)}
+          />
+        )}
 
       </div>
 
@@ -750,17 +668,8 @@ function AppInner() {
         isOpen={isHubOpen}
         onClose={() => setIsHubOpen(false)}
         onSelectTab={setCurrentTab}
-        onOpenVendorModal={() => setIsVendorModalOpen(true)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
         isVendor={currentUser.isVendor}
-      />
-
-      {/* 5. Multi-Role Multi-Capability 5-Step KYC Onboarding Modal */}
-      <MultiRoleOnboardingModal
-        isOpen={isVendorModalOpen}
-        onClose={() => setIsVendorModalOpen(false)}
-        applicantId={currentUser.id}
-        onCompleteOnboarding={handleCompleteVendorOnboarding}
       />
 
       {/* 6. Unified Cart & Checkout Slide-Over Drawer */}
@@ -788,24 +697,17 @@ function AppInner() {
         onClose={() => setIsSidebarOpen(false)}
         currentUser={currentUser}
         onSelectTab={setCurrentTab}
-        onOpenVendorModal={() => setIsVendorModalOpen(true)}
+        onOpenVendorModal={handleOpenVendorOnboarding}
+        onOpenSellerInventory={() => navigate(ROUTE_PATHS.SELLER_INVENTORY)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
-        onOpenWallet={() => setIsWalletOpen(true)}
-        onOpenNotifications={() => setIsNotificationsOpen(true)}
-        onOpenSettings={() => handleOpenSettingsPortal('account_profile')}
         onOpenSettingsPortal={handleOpenSettingsPortal}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
-        onOpenCart={() => setIsCartOpen(true)}
-        cartCount={cartCount}
-        unreadNotificationsCount={unreadNotificationsCount}
         onOpenLocationModal={() => setIsLocationModalOpen(true)}
         onOpenAuthModal={handleOpenAuthModal}
         onQuickFilter={(query, targetTab) => {
           if (targetTab) setCurrentTab(targetTab);
           if (query) setSearchQuery(query);
         }}
-        isDarkMode={isDark}
-        onToggleDarkMode={toggleTheme}
       />
 
       {/* 10. Real-Time Notifications Center */}
@@ -833,11 +735,6 @@ function AppInner() {
         }}
       />
 
-      {/* 12. Centralized Modular Settings Modal (Theme, Language, Location Radar) */}
-      <SettingsModal
-        onOpenLocationModal={() => setIsLocationModalOpen(true)}
-      />
-
       {/* 13. Global Messaging Center Modal */}
       <MessagingCenterModal
         isOpen={isMessagingOpen}
@@ -860,15 +757,14 @@ function AppInner() {
         initialTab={authModalTab}
       />
 
-      {/* 16. Quick Wallet & Escrow Modal */}
-      <WalletModal
-        isOpen={isWalletOpen}
-        onClose={() => setIsWalletOpen(false)}
-        currentUser={currentUser}
-        onUpdateUser={setCurrentUser}
+      <MultiRoleOnboardingModal
+        isOpen={isVendorOnboardingOpen}
+        onClose={() => setIsVendorOnboardingOpen(false)}
+        applicantId={firebaseUser?.uid}
+        onCompleteOnboarding={handleCompleteVendorOnboarding}
       />
 
-      {/* 17. Side-by-Side Product Comparison Floating Tray & Modal */}
+      {/* Side-by-side product comparison */}
       <CompareTrayBar />
       <ProductComparisonModal onAddToCart={handleAddToCart} />
 
@@ -882,12 +778,6 @@ function AppInner() {
         onSearchApplied={(q) => setSearchQuery(q)}
       />
 
-      {/* Option 4: AI Demand Forecasting & Bulk RFQ Modal */}
-      <RfqAndForecastingModal
-        isOpen={isRfqModalOpen}
-        onClose={() => setIsRfqModalOpen(false)}
-        currentUser={currentUser}
-      />
     </div>
       </ProductComparisonProvider>
     </WishlistProvider>

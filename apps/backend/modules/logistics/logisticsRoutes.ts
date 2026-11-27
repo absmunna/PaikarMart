@@ -7,14 +7,19 @@ import {
   CourierPartner,
   createLogisticsDispatch,
   createReturnPickup,
+  canAccessShipmentOutboundPayload,
+  canUpdateShipmentCheckpoint,
+  canVerifyShipmentPodForProfile,
   findShipmentPersistent,
   getNearbyFleetVehicles,
   getOrCreateShipment,
   listLogisticsDispatches,
   listReturnPickups,
   listShipmentsPersistent,
+  loadShipmentPersistent,
   registerFleetVehicle,
   ShipmentStatus,
+  toPublicShipmentRecord,
   toggleFleetVehicleAvailability,
   verifyShipmentPod
 } from './logisticsService.js';
@@ -27,8 +32,13 @@ import {
 import { evaluateStoreGeofence, rankHyperlocalProviders } from './distanceEngine.js';
 import { LogisticsVehicleClass, VEHICLE_TARIFF_TABLE } from './tariffConfig.js';
 import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
+import { podVerificationRateLimiter } from '../../middleware/rateLimit.js';
 import { backendEnv, isCourierWebhookConfigured } from '../../config/env.js';
-import { upsertStoredShipmentWaybill } from '../../services/dbService.js';
+import {
+  getStoredShipmentAuthorization,
+  resolveCourierProfileIdByAuthUid,
+  upsertStoredShipmentWaybill
+} from '../../services/dbService.js';
 
 export const logisticsRouter = Router();
 
@@ -123,7 +133,7 @@ logisticsRouter.get('/shipments', requireFirebaseAuth, async (_req: Request, res
   const shipments = await listShipmentsPersistent();
   res.json({
     success: true,
-    shipments
+    shipments: shipments.map(toPublicShipmentRecord)
   });
 });
 
@@ -138,20 +148,59 @@ logisticsRouter.get('/shipments/:orderId', async (req: Request, res: Response) =
 
   res.json({
     success: true,
-    shipment
+    shipment: toPublicShipmentRecord(shipment)
   });
 });
 
 // GET /api/logistics/shipments/:orderId/outbound-payload
-logisticsRouter.get('/shipments/:orderId/outbound-payload', requireFirebaseAuth, async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const shipment = (await findShipmentPersistent(orderId)) || getOrCreateShipment(orderId);
-  res.json({
-    success: true,
-    partner: shipment.courierPartner,
-    payload: buildOutboundCourierPayload(shipment)
-  });
-});
+logisticsRouter.get(
+  '/shipments/:orderId/outbound-payload',
+  requireFirebaseAuth,
+  async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const auth = res.locals.auth;
+    const access = await getStoredShipmentAuthorization(orderId);
+    if (access.status === 'unavailable') {
+      res.status(503).json({ error: 'Shipment authorization is temporarily unavailable.' });
+      return;
+    }
+    if (access.status === 'not-found') {
+      res.status(404).json({ error: 'Shipment not found.' });
+      return;
+    }
+    if (!access.hasStoredShipment) {
+      res.status(404).json({ error: 'Persisted shipment not found.' });
+      return;
+    }
+
+    const roles = [auth?.role, ...(auth?.roles || [])];
+    const isLogisticsOrAdmin = roles.some(
+      (role: string | undefined) =>
+        role === 'logistics' || role === 'admin' || role === 'super_admin'
+    );
+    if (
+      !canAccessShipmentOutboundPayload(
+        auth?.profileId,
+        access.assignedCourierProfileId,
+        isLogisticsOrAdmin
+      )
+    ) {
+      res.status(403).json({ error: 'Not authorized to access this courier payload.' });
+      return;
+    }
+
+    const shipment = await loadShipmentPersistent(orderId);
+    if (!shipment) {
+      res.status(503).json({ error: 'Persisted shipment data is temporarily unavailable.' });
+      return;
+    }
+    res.json({
+      success: true,
+      partner: shipment.courierPartner,
+      payload: buildOutboundCourierPayload(shipment)
+    });
+  }
+);
 
 // POST /api/logistics/webhooks/:partner (Signed external courier status updates)
 logisticsRouter.post('/webhooks/:partner', async (req: Request, res: Response) => {
@@ -226,74 +275,164 @@ logisticsRouter.post('/webhooks/:partner', async (req: Request, res: Response) =
     partner,
     mappedStatus,
     persisted,
-    shipment: updated
+    shipment: toPublicShipmentRecord(updated)
   });
 });
 
 // POST /api/logistics/shipments/:orderId/checkpoint
-logisticsRouter.post('/shipments/:orderId/checkpoint', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const { status, message, location } = req.body as {
-    status?: ShipmentStatus;
-    message?: string;
-    location?: string;
-  };
+logisticsRouter.post(
+  '/shipments/:orderId/checkpoint',
+  requireFirebaseAuth,
+  requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']),
+  async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const { status, message, location } = req.body as {
+      status?: ShipmentStatus;
+      message?: string;
+      location?: string;
+    };
 
-  const validStatuses: ShipmentStatus[] = [
-    'PENDING',
-    'PICKUP_ASSIGNED',
-    'IN_TRANSIT',
-    'OUT_FOR_DELIVERY',
-    'DELIVERED',
-    'RETURN_REQUESTED',
-    'CANCELLED'
-  ];
+    const validStatuses: ShipmentStatus[] = [
+      'PENDING',
+      'PICKUP_ASSIGNED',
+      'IN_TRANSIT',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+      'RETURN_REQUESTED',
+      'CANCELLED'
+    ];
 
-  const targetStatus: ShipmentStatus =
-    status && validStatuses.includes(status) ? status : 'IN_TRANSIT';
+    const targetStatus: ShipmentStatus =
+      status && validStatuses.includes(status) ? status : 'IN_TRANSIT';
 
-  const updated = appendShipmentCheckpoint(orderId, targetStatus, message, location);
-  res.json({
-    success: true,
-    shipment: updated
-  });
-});
+    const auth = res.locals.auth;
+    const access = await getStoredShipmentAuthorization(orderId);
+    if (access.status === 'unavailable') {
+      res.status(503).json({ error: 'Shipment authorization is temporarily unavailable.' });
+      return;
+    }
+    if (access.status === 'not-found' || !access.hasStoredShipment) {
+      res.status(404).json({ error: 'Shipment not found.' });
+      return;
+    }
+
+    const roles = [auth?.role, ...(auth?.roles || [])];
+    const isLogisticsOrAdmin = roles.some(
+      (role: string | undefined) =>
+        role === 'logistics' || role === 'admin' || role === 'super_admin'
+    );
+    if (
+      !canUpdateShipmentCheckpoint(
+        auth?.profileId,
+        access.assignedCourierProfileId,
+        isLogisticsOrAdmin
+      )
+    ) {
+      res.status(403).json({ error: 'Not authorized to update this shipment.' });
+      return;
+    }
+
+    const shipment = await loadShipmentPersistent(orderId);
+    if (!shipment) {
+      res.status(503).json({ error: 'Persisted shipment data is temporarily unavailable.' });
+      return;
+    }
+
+    const updated = appendShipmentCheckpoint(orderId, targetStatus, message, location);
+    if (!(await upsertStoredShipmentWaybill(updated))) {
+      res.status(503).json({ error: 'Shipment checkpoint could not be saved.' });
+      return;
+    }
+    res.json({
+      success: true,
+      shipment: toPublicShipmentRecord(updated)
+    });
+  }
+);
 
 // POST /api/logistics/shipments/:orderId/verify-pod
-logisticsRouter.post('/shipments/:orderId/verify-pod', requireFirebaseAuth, async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const { otp, recipientName, photoDataUrl, signatureDataUrl } = req.body;
+logisticsRouter.post(
+  '/shipments/:orderId/verify-pod',
+  requireFirebaseAuth,
+  podVerificationRateLimiter,
+  async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const { otp, recipientName, photoDataUrl, signatureDataUrl } = req.body;
 
-  if (!otp) {
-    res.status(400).json({ error: '4-digit recipient Delivery OTP is required.' });
-    return;
-  }
+    if (!otp) {
+      res.status(400).json({ error: '4-digit recipient Delivery OTP is required.' });
+      return;
+    }
 
-  const result = await verifyShipmentPod(orderId, {
-    otp: String(otp),
-    recipientName,
-    photoDataUrl,
-    signatureDataUrl,
-    userId: res.locals.auth.uid,
-    isPrivileged: isPrivilegedRole(res.locals.auth)
+    const auth = res.locals.auth;
+    const access = await getStoredShipmentAuthorization(orderId);
+    if (access.status === 'unavailable') {
+      res.status(503).json({ error: 'Shipment authorization is temporarily unavailable.' });
+      return;
+    }
+    if (access.status === 'not-found') {
+      res.status(404).json({ error: 'Shipment not found.' });
+      return;
+    }
+    if (!access.hasStoredShipment) {
+      res.status(404).json({ error: 'Persisted shipment not found.' });
+      return;
+    }
+
+    const authRoles = [auth?.role, ...(auth?.roles || [])];
+    const isAdmin = authRoles.some(
+      (role: string | undefined) => role === 'admin' || role === 'super_admin'
+    );
+    if (
+      !canVerifyShipmentPodForProfile(
+        auth?.profileId,
+        access.orderOwnerProfileId,
+        access.assignedCourierProfileId,
+        isAdmin
+      )
+    ) {
+      res.status(403).json({ error: 'Not authorized to verify this shipment.' });
+      return;
+    }
+
+    if (!(await loadShipmentPersistent(orderId))) {
+      res.status(503).json({ error: 'Persisted shipment data is temporarily unavailable.' });
+      return;
+    }
+
+    const result = await verifyShipmentPod(orderId, {
+      otp: String(otp),
+      recipientName,
+      photoDataUrl,
+      signatureDataUrl,
+      userId: auth.uid,
+      isPrivileged: isAdmin
+    });
+
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    if (!result.shipment) {
+      res.status(500).json({ error: 'POD verification completed without shipment data.' });
+      return;
+    }
+
+    res.json({
+      success: true,
+      shipment: toPublicShipmentRecord(result.shipment),
+      escrowReleased: result.escrowReleased
+    });
   });
-
-  if (!result.ok) {
-    res.status(400).json({ error: result.error });
-    return;
-  }
-
-  res.json({
-    success: true,
-    shipment: result.shipment,
-    escrowReleased: result.escrowReleased
-  });
-});
 
 // POST /api/logistics/shipments/:orderId/assign-courier
-logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), (req: Request, res: Response) => {
+logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, requireRole(['vendor', 'driver', 'logistics', 'moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   const { orderId } = req.params;
-  const { courierPartner } = req.body as { courierPartner?: CourierPartner };
+  const { courierPartner, assignedCourierUid } = req.body as {
+    courierPartner?: CourierPartner;
+    assignedCourierUid?: string;
+  };
   const validPartners: CourierPartner[] = ['PaikarForce', 'Steadfast', 'Pathao', 'RedX'];
 
   if (!courierPartner || !validPartners.includes(courierPartner)) {
@@ -301,10 +440,58 @@ logisticsRouter.post('/shipments/:orderId/assign-courier', requireFirebaseAuth, 
     return;
   }
 
-  const shipment = assignCourierToShipment(orderId, courierPartner);
+  let assignedCourierProfileId: string | undefined;
+  if (assignedCourierUid !== undefined) {
+    const courierUid = typeof assignedCourierUid === 'string' ? assignedCourierUid.trim() : '';
+    if (!courierUid || courierUid.length > 128) {
+      res.status(400).json({ error: 'A valid courier account ID is required.' });
+      return;
+    }
+
+    const auth = res.locals.auth;
+    const roles = [auth?.role, ...(auth?.roles || [])];
+    const canAssignCourier = roles.some(
+      (role: string | undefined) => role === 'admin' || role === 'super_admin' || role === 'logistics'
+    );
+    if (!canAssignCourier) {
+      res.status(403).json({ error: 'Only logistics staff can assign a courier account.' });
+      return;
+    }
+
+    const access = await getStoredShipmentAuthorization(orderId);
+    if (access.status === 'unavailable') {
+      res.status(503).json({ error: 'Shipment authorization is temporarily unavailable.' });
+      return;
+    }
+    if (access.status === 'not-found') {
+      res.status(404).json({ error: 'Shipment not found.' });
+      return;
+    }
+
+    const courierLookup = await resolveCourierProfileIdByAuthUid(courierUid);
+    if (courierLookup.status === 'unavailable') {
+      res.status(503).json({ error: 'Courier account validation is temporarily unavailable.' });
+      return;
+    }
+    if (courierLookup.status === 'not-found') {
+      res.status(400).json({ error: 'Courier account must have an active driver or logistics role.' });
+      return;
+    }
+    assignedCourierProfileId = courierLookup.profileId;
+  }
+
+  const shipment = assignCourierToShipment(orderId, courierPartner, assignedCourierProfileId);
+  if (assignedCourierProfileId) {
+    const persisted = await upsertStoredShipmentWaybill(shipment);
+    if (!persisted) {
+      res.status(503).json({ error: 'Courier assignment could not be saved.' });
+      return;
+    }
+  }
+
   res.json({
     success: true,
-    shipment
+    shipment: toPublicShipmentRecord(shipment)
   });
 });
 

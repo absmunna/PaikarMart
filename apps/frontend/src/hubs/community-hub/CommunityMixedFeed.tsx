@@ -18,6 +18,7 @@ const COMMUNITY_ICONS: Record<string, React.ComponentType<{ className?: string }
 interface CommunityMixedFeedProps {
   currentUser: User;
   posts: SocialPost[];
+  savedPostIds: string[];
   commerceItems: CommerceItem[];
   isLoading?: boolean;
   onCreatePost: (
@@ -31,24 +32,25 @@ interface CommunityMixedFeedProps {
   ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (item: CommerceItem) => void;
   onDeductBalance: (amount: number) => boolean;
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
 }
 
 export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
   currentUser,
   posts,
+  savedPostIds,
   commerceItems,
   isLoading = false,
   onCreatePost,
   onReactToPost,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart,
   onDeductBalance,
   onSelectTab,
-  onOpenVendorModal,
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -142,7 +144,6 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
         <DemandBoardPortal
           currentUser={currentUser}
           onSelectTab={onSelectTab}
-          onOpenVendorModal={onOpenVendorModal}
         />
       ) : activeRegisteredPortal?.id === 'creator-studio' ? (
         <CreatorPortal
@@ -183,11 +184,13 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
           <SocialPortal
             currentUser={currentUser}
             posts={posts}
+            savedPostIds={savedPostIds}
             commerceItems={commerceItems}
             isLoading={isLoading}
             onCreatePost={onCreatePost}
             onReactToPost={onReactToPost}
             onAddComment={onAddComment}
+            onToggleSavedPost={onToggleSavedPost}
             onAddToCart={onAddToCart}
           />
         </div>

@@ -21,6 +21,7 @@ import {
 import { CommerceItem, User, ServiceBooking, PortalTab } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLocationSettings } from '@/contexts/LocationContext';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { computeLocalGeofenceMeta } from '@/features/logistics';
 import { ServiceBookingModal } from '@/features/services';
 import { ROUTE_PATHS } from '@/app/router/routeIds';
@@ -281,19 +282,15 @@ export const NearbyRadarPortal: React.FC<NearbyRadarPortalProps> = ({
         </div>
 
         {filteredPlaces.length === 0 ? (
-          <div className="py-16 text-center rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] p-6 space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-[var(--pm-surface)] text-[var(--pm-muted)] flex items-center justify-center mx-auto">
-              <MapPin className="w-6 h-6" />
-            </div>
-            <h4 className="text-sm font-bold text-[var(--pm-text)]">
-              {isBn ? 'এই ঠিকানার এলাকায় কোনো আউটলেট পাওয়া যায়নি' : 'No outlets found in this area'}
-            </h4>
-            <p className="text-xs text-[var(--pm-muted)] max-w-sm mx-auto">
-              {isBn
+          <EmptyState
+            icon={MapPin}
+            title={isBn ? 'এই ঠিকানার এলাকায় কোনো আউটলেট পাওয়া যায়নি' : 'No outlets found in this area'}
+            description={
+              isBn
                 ? 'অন্য উপজেলা বা জেলা বেছে নিন, অথবা লোকেশন নির্বাচন করে ঠিকানাটি আপডেট করুন।'
-                : 'Choose another upazila or district, or update your address from the location picker.'}
-            </p>
-          </div>
+                : 'Choose another upazila or district, or update your address from the location picker.'
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredPlaces.map((place) => (

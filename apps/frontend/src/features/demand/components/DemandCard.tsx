@@ -13,6 +13,8 @@ import {
   Tag
 } from 'lucide-react';
 import { DemandRequest } from '@/features/demand/types/demandTypes';
+import { ContentCard } from '@/components/shared/CardPrimitives';
+import { Badge } from '@/components/shared/Badge';
 
 interface DemandCardProps {
   demand: DemandRequest;
@@ -52,21 +54,21 @@ export const DemandCard: React.FC<DemandCardProps> = ({
   const getUrgencyBadge = () => {
     if (demand.urgency === 'urgent') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 animate-pulse">
+        <Badge tone="danger" size="sm" className="font-black animate-pulse">
           <Clock className="w-2.5 h-2.5" />
           {isBn ? 'জরুরি' : 'Urgent'}
-        </span>
+        </Badge>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--pm-surface)] text-[var(--pm-muted)] border border-[var(--pm-border)]">
+      <Badge tone="neutral" size="sm" className="font-bold">
         {isBn ? 'স্ট্যান্ডার্ড' : 'Standard'}
-      </span>
+      </Badge>
     );
   };
 
   return (
-    <div className="rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] p-4 sm:p-5 shadow-xs hover:shadow-md transition-all space-y-3.5 group hover:border-[var(--pm-accent)]/40">
+    <ContentCard className="p-4 sm:p-5 shadow-xs hover:shadow-md transition-all space-y-3.5 group hover:border-[var(--pm-accent)]/40">
       {/* Top Header: Buyer & Domain Badge */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -184,6 +186,6 @@ export const DemandCard: React.FC<DemandCardProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ContentCard>
   );
 };

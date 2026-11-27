@@ -20,61 +20,61 @@ export const THEME_PRESETS: ThemePresetMeta[] = [
     id: 'light',
     nameEn: 'Clean Light',
     nameBn: 'ক্লিন লাইট',
-    descEn: 'Crisp slate daylight studio view',
-    descBn: 'উজ্জ্বল ও পরিষ্কার দিনকালীন ভিউ',
+    descEn: 'Leaf-tinted daylight with market-green accents',
+    descBn: 'সবুজ আভা ও বাজারি সবুজ অ্যাকসেন্টের দিনের থিম',
     isDark: false,
-    bgHex: '#f1f5f9',
+    bgHex: '#f2f6f2',
     surfaceHex: '#ffffff',
-    accentHex: '#2563eb',
-    textHex: '#0f172a',
+    accentHex: '#087a55',
+    textHex: '#16271e',
   },
   {
     id: 'nakshiLight',
     nameEn: 'Nakshi Light',
     nameBn: 'নকশী লাইট',
-    descEn: 'Warm heritage saffron & cream canvas',
-    descBn: 'বাংলার ঐতিহ্যবাহী উষ্ণ সোনালি আবহ',
+    descEn: 'Soft heritage cream with market-green actions',
+    descBn: 'হালকা ঐতিহ্যবাহী ক্রিম রঙে বাজারি সবুজের ছোঁয়া',
     isDark: false,
     bgHex: '#fffbeb',
     surfaceHex: '#fef3c7',
-    accentHex: '#b45309',
-    textHex: '#78350f',
+    accentHex: '#087a55',
+    textHex: '#26392f',
   },
   {
     id: 'greenField',
     nameEn: 'Green Field',
     nameBn: 'সবুজ প্রান্তর',
-    descEn: 'Deep emerald soil & mint high-contrast',
+    descEn: 'Deep field greens with bright leaf accents',
     descBn: 'সবুজ বাংলার গভীর পান্না থিম',
     isDark: true,
     bgHex: '#021a12',
     surfaceHex: '#052e22',
-    accentHex: '#10b981',
+    accentHex: '#54c98b',
     textHex: '#ecfdf5',
   },
   {
     id: 'deepDark',
     nameEn: 'Deep Dark',
     nameBn: 'ডিপ ডার্ক',
-    descEn: 'Obsidian OLED canvas with amber accent',
-    descBn: 'গভীর ওলেড কালো ও অ্যাম্বার অ্যাকসেন্ট',
+    descEn: 'Near-black forest canvas with leaf-green actions',
+    descBn: 'গভীর বন-সবুজ পটভূমিতে উজ্জ্বল পাতার অ্যাকসেন্ট',
     isDark: true,
-    bgHex: '#07080b',
-    surfaceHex: '#0d0f14',
-    accentHex: '#ff7a00',
-    textHex: '#f5f6f8',
+    bgHex: '#050c08',
+    surfaceHex: '#0b1610',
+    accentHex: '#54c98b',
+    textHex: '#f3f7f3',
   },
   {
     id: 'dark',
-    nameEn: 'Midnight Slate',
-    nameBn: 'মিডনাইট ডার্ক',
-    descEn: 'Classic slate dark interface',
-    descBn: 'চোখের আরামদায়ক ক্লাসিক নাইট মোড',
+    nameEn: 'Forest Midnight',
+    nameBn: 'সবুজ মধ্যরাত',
+    descEn: 'Deep forest surfaces with mint-green accents',
+    descBn: 'গভীর সবুজ সারফেস ও মিন্ট সবুজ অ্যাকসেন্ট',
     isDark: true,
-    bgHex: '#020617',
-    surfaceHex: '#0f172a',
-    accentHex: '#3b82f6',
-    textHex: '#f8fafc',
+    bgHex: '#071811',
+    surfaceHex: '#10271e',
+    accentHex: '#4dbb80',
+    textHex: '#edf5ef',
   },
   {
     id: 'system',
@@ -83,10 +83,10 @@ export const THEME_PRESETS: ThemePresetMeta[] = [
     descEn: 'Matches device OS light/dark state',
     descBn: 'ডিভাইসের ওএস সেটিং অনুসরণ করবে',
     isDark: false,
-    bgHex: '#1e293b',
-    surfaceHex: '#334155',
-    accentHex: '#0ea5e9',
-    textHex: '#f8fafc',
+    bgHex: '#f2f6f2',
+    surfaceHex: '#ffffff',
+    accentHex: '#087a55',
+    textHex: '#16271e',
   },
 ];
 
@@ -106,7 +106,29 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'paikarmart_theme_mode';
 const ACCENT_STORAGE_KEY = 'paikarmart_accent_color';
-const DEFAULT_ACCENT = '#2563eb';
+const DEFAULT_ACCENT = '#4dbb80';
+const LEGACY_PRESET_ACCENTS = ['#2563eb', '#3b82f6', '#ff7a00', '#b45309', '#10b981', '#0ea5e9'];
+
+function getInitialAccentColor(): string {
+  try {
+    const storedAccent = localStorage.getItem(ACCENT_STORAGE_KEY);
+    if (storedAccent && !LEGACY_PRESET_ACCENTS.includes(storedAccent.toLowerCase())) {
+      return storedAccent;
+    }
+
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+    const themeMode = storedTheme && VALID_THEMES.includes(storedTheme) ? storedTheme : 'dark';
+    const systemIsDark =
+      typeof window === 'undefined'
+        ? true
+        : window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true;
+    const effectiveTheme = themeMode === 'system' ? (systemIsDark ? 'dark' : 'light') : themeMode;
+
+    return THEME_PRESETS.find((preset) => preset.id === effectiveTheme)?.accentHex ?? DEFAULT_ACCENT;
+  } catch {
+    return DEFAULT_ACCENT;
+  }
+}
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
@@ -119,13 +141,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 'dark';
   });
 
-  const [accentColor, setAccentColorState] = useState<string>(() => {
-    try {
-      return localStorage.getItem(ACCENT_STORAGE_KEY) || DEFAULT_ACCENT;
-    } catch {
-      return DEFAULT_ACCENT;
-    }
-  });
+  const [accentColor, setAccentColorState] = useState<string>(getInitialAccentColor);
 
   const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
