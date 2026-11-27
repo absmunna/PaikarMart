@@ -5,7 +5,6 @@ import {
   MapPin,
   RotateCcw,
   Search,
-  Sliders,
   ShieldCheck,
   Briefcase,
   CheckCircle2,
@@ -21,13 +20,14 @@ import {
 import { APIProvider, AdvancedMarker, Map, Pin } from '@vis.gl/react-google-maps';
 import { CommerceItem, ServiceBooking, User } from '@/types';
 import { ServiceBookingModal, ServiceCard } from '@/features/services';
+import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
 import { useLocationSettings } from '@/contexts';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
   computeLocalGeofenceMeta,
-  logisticsOrderApiClient,
   type ComputedHyperlocalMeta,
 } from '@/features/logistics';
+import { formatAdministrativeArea, getListingAdministrativeArea, matchesAdministrativeArea } from '@/utils/administrativeArea';
 
 export interface ServicePortalBaseProps {
   items: CommerceItem[];
@@ -73,7 +73,7 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
   onUpdateBookingStatus,
   onAddServiceItem,
 }) => {
-  const { activeLocation, coordinates, radarRadiusKm, setRadarRadiusKm, detectLiveLocation, isLocating } =
+  const { activeLocation, activeArea, coordinates, detectLiveLocation, isLocating } =
     useLocationSettings();
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -88,7 +88,6 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery);
   const [activeFilter, setActiveFilter] = useState<'all' | 'physical' | 'digital'>('all');
   const [openOnly, setOpenOnly] = useState(false);
-  const [serverMetaMap, setServerMetaMap] = useState<Record<string, ComputedHyperlocalMeta>>({});
   const [isOnlineProvider, setIsOnlineProvider] = useState(true);
   const [localBookings, setLocalBookings] = useState<ServiceBooking[]>(bookings);
 
@@ -114,54 +113,12 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
   const localMetaMap = useMemo(() => {
     const map: Record<string, ComputedHyperlocalMeta> = {};
     domainItems.forEach((item, idx) => {
-      map[item.id] = computeLocalGeofenceMeta(item, coordinates, radarRadiusKm, idx);
+      map[item.id] = computeLocalGeofenceMeta(item, coordinates, 20, idx);
     });
     return map;
-  }, [domainItems, coordinates, radarRadiusKm]);
+  }, [domainItems, coordinates]);
 
-  useEffect(() => {
-    if (domainItems.length === 0) return;
-    let active = true;
-
-    const providers = domainItems.map((item) => {
-      const m = localMetaMap[item.id];
-      return {
-        id: item.id,
-        lat: m.coordinates.lat,
-        lng: m.coordinates.lng,
-        prepMinutes: item.prepMinutes ?? 15,
-        isOpen: item.isOpen ?? true,
-      };
-    });
-
-    void logisticsOrderApiClient
-      .rankHyperlocalProviders({
-        buyerLat: coordinates.lat,
-        buyerLng: coordinates.lng,
-        radiusKm: radarRadiusKm,
-        providers,
-      })
-      .then((ranked) => {
-        if (!active || !ranked) return;
-        const next: Record<string, ComputedHyperlocalMeta> = {};
-        ranked.forEach((entry) => {
-          const base = localMetaMap[entry.id];
-          if (base) {
-            next[entry.id] = { ...base, ...entry };
-          }
-        });
-        setServerMetaMap(next);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [coordinates.lat, coordinates.lng, radarRadiusKm, domainItems, localMetaMap]);
-
-  const effectiveMetaMap = useMemo(
-    () => ({ ...localMetaMap, ...serverMetaMap }),
-    [localMetaMap, serverMetaMap]
-  );
+  const effectiveMetaMap = localMetaMap;
 
   const filteredServices = useMemo(() => {
     const subQuery = (externalSubCategory || 'all').trim().toLowerCase();
@@ -173,7 +130,10 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
         if (activeFilter === 'digital' && item.subCategory !== 'digital') return false;
         if (activeFilter === 'physical' && item.subCategory === 'digital') return false;
         if (openOnly && meta && !meta.isOpen) return false;
-        if (activeFilter !== 'digital' && meta && !meta.withinRadius) return false;
+        if (
+          item.subCategory !== 'digital' &&
+          !matchesAdministrativeArea(activeArea, getListingAdministrativeArea(item))
+        ) return false;
 
         if (subQuery && subQuery !== 'all') {
           const haystack = `${item.title} ${item.description || ''} ${item.category || ''} ${item.subCategory || ''} ${item.badge || ''}`.toLowerCase();
@@ -186,12 +146,8 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
         }
         return true;
       })
-      .sort((a, b) => {
-        const da = effectiveMetaMap[a.id]?.distanceKm ?? 999;
-        const db = effectiveMetaMap[b.id]?.distanceKm ?? 999;
-        return da - db;
-      });
-  }, [domainItems, effectiveMetaMap, activeFilter, openOnly, externalSubCategory, searchQuery]);
+      .sort((a, b) => b.rating - a.rating);
+  }, [domainItems, effectiveMetaMap, activeArea, activeFilter, openOnly, externalSubCategory, searchQuery]);
 
   const handleUpdateStatus = (bookingId: string, newStatus: 'scheduled' | 'in_progress' | 'completed') => {
     if (onUpdateBookingStatus) {
@@ -543,30 +499,17 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
       ) : (
         /* ================= CUSTOMER BROWSE & BOOK VIEW ================= */
         <div className="space-y-6 animate-fadeIn">
-          {/* Offer Notification Banner */}
-          <section className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-900 to-teal-800 px-4 py-3 text-white shadow-sm">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold text-emerald-200">{isBn ? 'সার্ভিস অফার' : 'Service promotion'}</p>
-              <p className="truncate text-sm font-black">
-                {isBn ? 'ওয়ালেট অ্যাডভান্স পেমেন্টে ৫% সাশ্রয়' : 'Save 5% instantly with advance wallet payment'}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1 text-[10px] font-bold">5% OFF</span>
-          </section>
-
-          {/* Hyperlocal Radar Header & GPS Control */}
+          {/* Service area and GPS controls */}
           <div className="px-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-[var(--pm-text)]">
-                  {isBn ? 'কাছাকাছি ভেরিফাইড প্রোভাইডার' : 'Nearby Verified Providers'}
-                </h2>
-                <span className="text-xs font-bold text-[var(--pm-success)]">
-                  · {radarRadiusKm} km {isBn ? 'জিওফেন্স সক্রিয়' : 'Geofence Active'}
-                </span>
-              </div>
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-[var(--pm-text)]">
+                {isBn ? 'আপনার এলাকার ভেরিফাইড প্রোভাইডার' : 'Verified providers in your area'}
+              </h2>
               <p className="text-xs text-[var(--pm-muted)]">
-                {isBn ? 'হাব:' : 'Hub:'} <span className="font-bold text-[var(--pm-text)]">{activeLocation}</span>
+                {isBn ? 'নির্বাচিত এলাকা:' : 'Selected area:'}{' '}
+                <span className="font-bold text-[var(--pm-text)]">
+                  {formatAdministrativeArea(activeArea, isBn) || activeLocation}
+                </span>
               </p>
             </div>
 
@@ -581,53 +524,15 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
             </button>
           </div>
 
-          {/* Geofence Controls & Radius Slider */}
-          <div className="p-4 rounded-2xl bg-[var(--pm-card)] border border-[var(--pm-border)] space-y-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-[var(--pm-text)]">
-                <Sliders className="w-4 h-4 text-[var(--pm-accent)]" />
-                <span>{isBn ? 'হাইপারলোকাল রাডার:' : 'Hyperlocal Geofence Radius:'}</span>
-                <span className="font-mono text-[var(--pm-accent)]">{radarRadiusKm} km</span>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {[2, 5, 10, 20].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setRadarRadiusKm(preset)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold cursor-pointer transition-colors ${
-                      radarRadiusKm === preset
-                        ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
-                        : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] border border-[var(--pm-border)]'
-                    }`}
-                  >
-                    {preset}km
-                  </button>
-                ))}
-                <label className="ml-2 flex items-center gap-1.5 text-xs font-bold text-[var(--pm-muted)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={openOnly}
-                    onChange={(e) => setOpenOnly(e.target.checked)}
-                    className="accent-emerald-600 rounded"
-                  />
-                  <span>{isBn ? 'শুধু খোলা' : 'Open Only'}</span>
-                </label>
-              </div>
-            </div>
-
+          <label className="flex w-fit items-center gap-2 text-xs font-bold text-[var(--pm-text)] cursor-pointer">
             <input
-              type="range"
-              min={1}
-              max={20}
-              step={1}
-              value={radarRadiusKm}
-              onChange={(e) => setRadarRadiusKm(Number(e.target.value))}
-              className="w-full accent-emerald-600 cursor-pointer"
-              aria-label="Hyperlocal service radar radius in kilometers"
+              type="checkbox"
+              checked={openOnly}
+              onChange={(e) => setOpenOnly(e.target.checked)}
+              className="accent-emerald-600 rounded"
             />
-          </div>
+            <span>{isBn ? 'শুধু খোলা প্রোভাইডার' : 'Open providers only'}</span>
+          </label>
 
           {/* Search & Filter Bar */}
           <div className="bg-[var(--pm-bg)] py-1 flex flex-col sm:flex-row gap-3">
@@ -667,7 +572,7 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
                   key={`${coordinates.lat.toFixed(3)}-${coordinates.lng.toFixed(3)}`}
                   internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
                   defaultCenter={coordinates}
-                  defaultZoom={radarRadiusKm <= 5 ? 13 : radarRadiusKm <= 12 ? 12 : 11}
+                  defaultZoom={11}
                   mapId="DEMO_MAP_ID"
                   className="w-full h-full"
                   gestureHandling="greedy"
@@ -679,7 +584,7 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
                       <AdvancedMarker
                         key={service.id}
                         position={pos}
-                        title={`${service.title} (${effectiveMetaMap[service.id]?.distanceKm ?? 0} km)`}
+                        title={`${service.title} · ${formatAdministrativeArea(getListingAdministrativeArea(service), isBn)}`}
                         onClick={() => setSelectedService(service)}
                       >
                         <Pin background="#059669" glyphColor="#ffffff" borderColor="#047857" />
@@ -692,10 +597,11 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
               <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 space-y-2 bg-gradient-to-br from-emerald-950 to-slate-900 text-white">
                 <MapPin className="w-8 h-8 text-emerald-400" />
                 <h3 className="text-sm font-bold">
-                  Hyperlocal Geofence Radar · {activeLocation}
+                  {isBn ? 'স্থানীয় সেবার এলাকা · ' : 'Local service coverage · '}
+                  {formatAdministrativeArea(activeArea, isBn) || activeLocation}
                 </h3>
                 <p className="text-xs text-emerald-200/80">
-                  Showing {filteredServices.length} verified providers within {radarRadiusKm} km radius
+                  Showing {filteredServices.length} verified providers serving this area
                 </p>
               </div>
             )}
@@ -731,16 +637,9 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
             {filteredServices.length === 0 ? (
               <div className="p-8 rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] text-center space-y-3 shadow-sm">
                 <p className="text-sm font-bold text-[var(--pm-text)]">
-                  {isBn ? `${radarRadiusKm} কিমি-এর মধ্যে কোনো প্রোভাইডার পাওয়া যায়নি।` : `No providers matched within ${radarRadiusKm} km.`}
+                  {isBn ? 'এই ঠিকানার এলাকায় কোনো প্রোভাইডার পাওয়া যায়নি।' : 'No providers serve this selected area yet.'}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRadarRadiusKm(Math.min(20, radarRadiusKm + 5))}
-                    className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer transition-colors shadow-sm"
-                  >
-                    {isBn ? `রাডার ${Math.min(20, radarRadiusKm + 5)} কিমি করুন` : `Expand Radar to ${Math.min(20, radarRadiusKm + 5)} km`}
-                  </button>
                   {onResetChildPortal && (
                     <button
                       type="button"
@@ -754,13 +653,33 @@ export const ServiceCategoryPortal: React.FC<ServiceCategoryPortalProps> = ({
                 </div>
               </div>
             ) : (
-              filteredServices.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  hyperlocalMeta={effectiveMetaMap[service.id]}
-                  onClick={setSelectedService}
-                />
+              filteredServices.map((service, index) => (
+                <React.Fragment key={service.id}>
+                  <ServiceCard
+                    service={service}
+                    hyperlocalMeta={effectiveMetaMap[service.id]}
+                    onClick={setSelectedService}
+                  />
+                  {(index === 1 || (filteredServices.length === 1 && index === 0)) && (
+                    <SponsoredFeedCard label={isBn ? 'ওয়ালেট পেমেন্ট অফার' : 'Wallet payment offer'}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-black text-[var(--pm-text)]">
+                            {isBn ? 'আগাম ওয়ালেট পেমেন্টে ৫% সাশ্রয়' : 'Save 5% with advance wallet payment'}
+                          </h3>
+                          <p className="text-sm leading-relaxed text-[var(--pm-muted)]">
+                            {isBn
+                              ? 'নির্বাচিত সার্ভিস বুকিংয়ে নিরাপদ ওয়ালেট পেমেন্ট করে ছাড় নিন।'
+                              : 'Book an eligible service with secure wallet payment and get the offer.'}
+                          </p>
+                        </div>
+                        <span className="w-fit shrink-0 rounded-full bg-[var(--pm-accent-soft)] px-3 py-1.5 text-xs font-black text-[var(--pm-accent)]">
+                          5% OFF
+                        </span>
+                      </div>
+                    </SponsoredFeedCard>
+                  )}
+                </React.Fragment>
               ))
             )}
           </div>

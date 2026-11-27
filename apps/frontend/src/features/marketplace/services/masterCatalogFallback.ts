@@ -19,8 +19,7 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
     category: 'Electronics',
     description: 'A17 Pro powered iPhone with a pro camera system, titanium design, and USB-C connectivity.',
     canonicalImages: [
-      '/src/assets/images/paikarmart_iphone_15_pro_max_1794490099283.jpg',
-      '/src/assets/images/paikarmart_samsung_phone_1794489802379.jpg'
+      '/src/assets/images/paikarmart_iphone_15_pro_max_1794490099283.jpg'
     ],
     specifications: { Storage: '256 GB', Display: '6.7-inch OLED', Connectivity: '5G / USB-C' },
     isVerified: true,
@@ -36,8 +35,8 @@ export const INITIAL_MASTER_PRODUCTS: MasterProduct[] = [
     category: 'Electronics',
     description: 'Flagship smartphone featuring Galaxy AI, Snapdragon 8 Gen 3 Processor, 200MP Quad Telephoto Camera, and built-in S-Pen.',
     canonicalImages: [
-      'https://images.unsplash.com/photo-1707246210664-28a962a7a72d?auto=format&fit=crop&w=800&h=600&q=80',
-      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&h=600&q=80'
+      'https://upload.wikimedia.org/wikipedia/commons/f/fa/Samsung_Galaxy_S24_Ultra_with_retail_box%2C_front.jpg',
+      'https://upload.wikimedia.org/wikipedia/commons/b/b7/Samsung_Galaxy_S24_Ultra_Backside.jpg'
     ],
     specifications: {
       'Display': '6.8-inch Dynamic AMOLED 2X 120Hz',
@@ -261,9 +260,7 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
     deliveryEta: 'Same Day Express',
     proximityDistance: '1.2 km',
     location: 'Gulshan 2, Dhaka',
-    sellerRealPhotos: [
-      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&q=80'
-    ],
+    sellerRealPhotos: [],
     isActive: true,
     createdAt: '2026-02-01'
   },
@@ -281,9 +278,7 @@ export const INITIAL_SELLER_LISTINGS: SellerListing[] = [
     deliveryEta: '1-2 Hours',
     proximityDistance: '0.5 km',
     location: 'Bashundhara City, Dhaka',
-    sellerRealPhotos: [
-      'https://images.unsplash.com/photo-1580910051074-3eb694886505?auto=format&fit=crop&w=600&q=80'
-    ],
+    sellerRealPhotos: [],
     isActive: true,
     createdAt: '2026-02-05'
   },

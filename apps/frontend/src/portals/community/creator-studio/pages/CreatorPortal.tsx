@@ -6,6 +6,8 @@ import {
 import { CommerceItem, CreatorContent, User } from '@/types';
 import { INITIAL_CREATOR_POSTS } from '@/data/mockData';
 import { AdMobBanner } from '@/design-system/components';
+import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { CreatorContentCard } from '@/portals/community/creator-studio/components/CreatorContentCard';
 import { IndustryNewsPanel } from '@/portals/community/creator-studio/components/IndustryNewsPanel';
 
@@ -22,6 +24,8 @@ export const CreatorPortal: React.FC<CreatorPortalProps> = ({
   commerceItems = [],
   onAddToCart,
 }) => {
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
   const [posts, setPosts] = useState<CreatorContent[]>(INITIAL_CREATOR_POSTS);
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'news'>('all');
 
@@ -38,39 +42,57 @@ export const CreatorPortal: React.FC<CreatorPortalProps> = ({
     }
   };
 
-  return (
-    <div className="space-y-4 sm:space-y-6 animate-fadeIn pb-20">
-      
-      {/* OTT Style Banner */}
-      <div className="bg-slate-900 rounded-2xl sm:rounded-3xl p-4 sm:p-8 text-white shadow-xl relative overflow-hidden aspect-[4/3] sm:aspect-auto sm:min-h-[300px] flex items-end">
-        <img 
-          src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&h=600&q=80" 
-          className="absolute inset-0 w-full h-full object-cover opacity-60"
-          alt="OTT Hero"
+  const featuredSeriesCard = (
+    <SponsoredFeedCard label={isBn ? 'পাইকামার্ট অরিজিনাল সিরিজ' : 'PaikarMart original series'}>
+      <div className="overflow-hidden rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)]">
+        <img
+          src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&h=600&q=80"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          decoding="async"
+          className="aspect-[16/7] w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-        
-        <div className="relative z-10 space-y-2.5 sm:space-y-4 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600 text-white text-[10px] font-black uppercase tracking-widest animate-pulse">
-            <Video className="w-3 h-3" />
-            <span>PaikarMart Original</span>
+        <div className="space-y-2 p-4 sm:p-5">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[var(--pm-accent-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--pm-accent)]">
+            <Video className="h-3.5 w-3.5" />
+            <span>{isBn ? 'বিজনেস মাস্টারক্লাস' : 'Business masterclass'}</span>
           </div>
-          <h1 className="text-2xl sm:text-5xl font-black tracking-tight leading-tight">Mastering Global Wholesale Logistics</h1>
-          <p className="text-sm text-slate-300 line-clamp-2">Exclusive 12-part series on importing from East-Asia and navigating local trade laws.</p>
-          <button className="px-6 py-3 rounded-2xl bg-white text-slate-950 font-bold text-sm flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-[0.98]">
-            <Play className="w-4 h-4 fill-slate-950" />
-            <span>Watch Trailer</span>
-          </button>
+          <h2 className="text-base font-black leading-tight text-[var(--pm-text)] sm:text-lg">
+            {isBn ? 'গ্লোবাল হোলসেল লজিস্টিকস শিখুন' : 'Mastering global wholesale logistics'}
+          </h2>
+          <p className="text-sm leading-relaxed text-[var(--pm-muted)]">
+            {isBn
+              ? 'ইমপোর্ট, ট্রেড আইন এবং আন্তর্জাতিক সোর্সিং নিয়ে ১২ পর্বের সিরিজ।'
+              : 'A 12-part series on importing, trade regulations, and international sourcing.'}
+          </p>
         </div>
       </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setActiveTab('video')}
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--pm-accent)] px-4 text-xs font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)] cursor-pointer"
+        >
+          <Play className="h-3.5 w-3.5 fill-current" />
+          <span>{isBn ? 'ভিডিও দেখুন' : 'Explore videos'}</span>
+        </button>
+      </div>
+    </SponsoredFeedCard>
+  );
+
+  return (
+    <div className="space-y-4 sm:space-y-6 animate-fadeIn pb-20">
 
       {/* Tab Switcher */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2">
         {(['all', 'video', 'news'] as const).map(tab => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+            aria-pressed={activeTab === tab}
+            className={`min-h-10 px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
               activeTab === tab
                 ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-lg'
                 : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border border-[var(--pm-border)] hover:text-[var(--pm-text)]'
@@ -89,19 +111,22 @@ export const CreatorPortal: React.FC<CreatorPortalProps> = ({
               ? commerceItems[idx % commerceItems.length]
               : undefined;
             return (
-              <CreatorContentCard
-                key={post.id}
-                post={post}
-                linkedProduct={linkedProduct}
-                onUnlock={handleUnlock}
-                onAddToCart={onAddToCart}
-              />
+              <React.Fragment key={post.id}>
+                <CreatorContentCard
+                  post={post}
+                  linkedProduct={linkedProduct}
+                  onUnlock={handleUnlock}
+                  onAddToCart={onAddToCart}
+                />
+                {idx === 1 && featuredSeriesCard}
+                {idx === 3 && <AdMobBanner />}
+              </React.Fragment>
             );
           })}
+          {visiblePosts.length > 0 && visiblePosts.length < 2 && featuredSeriesCard}
+          {visiblePosts.length > 0 && visiblePosts.length < 4 && <AdMobBanner />}
         </div>
       )}
-
-      <AdMobBanner />
 
       {/* Industry News Section */}
       <IndustryNewsPanel />

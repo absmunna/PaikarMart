@@ -7,22 +7,22 @@ import {
   X,
   ArrowLeft,
   LogIn,
-  Settings as SettingsIcon,
   Heart,
   Mic,
 } from 'lucide-react';
 import { PortalTab, User } from '@/types';
 import { TopNavLocationMenu } from '@/components/layout/TopNavLocationMenu';
-import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
+import { Button, IconButton } from '@/components/shared/Button';
 
 export type MobileHeaderConfig =
   | { mode: 'feed' }
-  | { mode: 'commerce'; placeholder: string }
+  | { mode: 'commerce'; placeholder: string; showBack?: boolean }
   | {
       mode: 'detail';
       title: string;
       subtitle: string;
-      action: 'cart' | 'notifications' | 'settings' | 'close' | 'location';
+      action: 'cart' | 'notifications' | 'close' | 'location' | 'none';
+      showBack?: boolean;
     };
 
 interface TopNavMobileBarProps {
@@ -40,7 +40,6 @@ interface TopNavMobileBarProps {
   onSelectTab: (tab: PortalTab) => void;
   onOpenCart: () => void;
   onOpenNotifications: () => void;
-  onOpenSettings?: () => void;
   onOpenAuthModal?: (tab?: 'login' | 'register') => void;
   onOpenLocationModal?: () => void;
   onUpdateLocation?: (newLocation: string, coordinates?: { lat: number; lng: number }) => void;
@@ -69,7 +68,6 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
   onSelectTab,
   onOpenCart,
   onOpenNotifications,
-  onOpenSettings,
   onOpenAuthModal,
   onOpenLocationModal,
   onUpdateLocation,
@@ -82,6 +80,8 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
   onMobileBack,
   renderDropdown,
 }) => {
+  const showBackButton = mobileConfig.mode !== 'feed' && mobileConfig.showBack !== false;
+
   return (
     <div ref={containerRef} className="flex md:hidden flex-col w-full relative">
       {/* MODE 1: FEED / HOME */}
@@ -89,14 +89,15 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
         <>
           <div className="h-14 px-3 flex items-center justify-between gap-2 w-full">
             <div className="flex items-center gap-2 min-w-0">
-              <button
-                type="button"
+              <IconButton
+                label={isBn ? 'মেনু খুলুন' : 'Open menu'}
+                size="icon"
+                variant="secondary"
                 onClick={onOpenSidebar}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[var(--pm-text)] active:scale-95 transition-all shrink-0 cursor-pointer"
-                aria-label={isBn ? 'মেনু খুলুন' : 'Open menu'}
+                className="active:scale-95"
               >
                 <Menu className="w-5 h-5" />
-              </button>
+              </IconButton>
               <button
                 type="button"
                 onClick={() => onSelectTab('feed')}
@@ -113,26 +114,24 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={onToggleMobileSearch}
-                className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all active:scale-95 cursor-pointer ${
-                  isMobileSearchOpen || searchQuery
-                    ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-[var(--pm-accent)]'
-                    : 'bg-[var(--pm-surface)] text-[var(--pm-text)] border-[var(--pm-border)]'
-                }`}
+              <IconButton
+                label="Search"
                 title={isBn ? 'সার্চ করুন' : 'Search'}
-                aria-label="Search"
+                size="icon-sm"
+                variant={isMobileSearchOpen || searchQuery ? 'primary' : 'secondary'}
+                onClick={onToggleMobileSearch}
+                className="active:scale-95"
               >
                 <Search className="w-4 h-4" />
-              </button>
+              </IconButton>
 
-              <button
-                type="button"
-                onClick={() => onSelectTab('wishlist')}
-                className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+              <IconButton
+                label="Wishlist"
                 title={isBn ? 'উইশলিস্ট' : 'Wishlist'}
-                aria-label="Wishlist"
+                size="icon-sm"
+                variant="secondary"
+                onClick={() => onSelectTab('wishlist')}
+                className="relative active:scale-95"
               >
                 <Heart className={`w-4 h-4 ${wishlistCount > 0 ? 'text-rose-500 fill-rose-500' : ''}`} />
                 {wishlistCount > 0 && (
@@ -140,14 +139,15 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                     {wishlistCount > 99 ? '99+' : wishlistCount}
                   </span>
                 )}
-              </button>
+              </IconButton>
 
-              <button
-                type="button"
-                onClick={onOpenCart}
-                className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+              <IconButton
+                label="Cart"
                 title={isBn ? 'কার্ট' : 'Cart'}
-                aria-label="Cart"
+                size="icon-sm"
+                variant="secondary"
+                onClick={onOpenCart}
+                className="relative active:scale-95"
               >
                 <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
@@ -155,38 +155,22 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                     {cartCount > 99 ? '99+' : cartCount}
                   </span>
                 )}
-              </button>
+              </IconButton>
 
               {!hasFirebaseUser && onOpenAuthModal ? (
-                <button
+                <Button
                   type="button"
+                  variant="primary"
+                  size="sm"
                   onClick={() => onOpenAuthModal('login')}
-                  className="h-9 px-2.5 flex items-center justify-center gap-1 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="gap-1 font-bold shadow-xs active:scale-95"
                   title={isBn ? 'লগইন' : 'Login'}
                   aria-label="Login"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>{isBn ? 'লগইন' : 'Login'}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onSelectTab('profile')}
-                  className="relative w-9 h-9 flex items-center justify-center rounded-xl active:scale-95 group cursor-pointer shrink-0"
-                  title={isBn ? 'প্রোফাইল' : 'Profile'}
-                  aria-label="Profile"
-                >
-                  <img
-                    src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
-                    alt={currentUser.name}
-                    referrerPolicy="no-referrer"
-                    className="w-9 h-9 rounded-xl object-cover ring-2 ring-[var(--pm-border)] shadow-xs"
-                  />
-                  {hasFirebaseUser && (
-                    <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[var(--pm-success)] border-2 border-[var(--pm-card)] rounded-full" />
-                  )}
-                </button>
-              )}
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -246,14 +230,29 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
       {/* MODE 2: MARKETPLACES & COMMERCE */}
       {mobileConfig.mode === 'commerce' && (
         <div className="h-14 px-3 flex items-center justify-between gap-2 w-full">
-          <button
-            type="button"
-            onClick={onMobileBack}
-            className="w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[var(--pm-text)] active:scale-95 transition-all shrink-0 cursor-pointer"
-            aria-label={isBn ? 'ফিরে যান' : 'Go back'}
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+          {showBackButton ? (
+            <IconButton
+              label={isBn ? 'আগের পৃষ্ঠায় ফিরুন' : 'Back to previous page'}
+              title={isBn ? 'আগের পৃষ্ঠায় ফিরুন' : 'Back to previous page'}
+              size="icon"
+              variant="secondary"
+              onClick={onMobileBack}
+              className="min-w-11 shrink-0 active:scale-95"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </IconButton>
+          ) : (
+            <IconButton
+              label={isBn ? 'মেনু খুলুন' : 'Open menu'}
+              title={isBn ? 'মেনু খুলুন' : 'Open menu'}
+              size="icon"
+              variant="secondary"
+              onClick={onOpenSidebar}
+              className="min-w-11 shrink-0 active:scale-95"
+            >
+              <Menu className="w-5 h-5" />
+            </IconButton>
+          )}
 
           <div className="relative flex-1 min-w-0">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--pm-muted)] pointer-events-none" />
@@ -295,12 +294,13 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onSelectTab('wishlist')}
-              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+            <IconButton
+              label="Wishlist"
               title={isBn ? 'উইশলিস্ট' : 'Wishlist'}
-              aria-label="Wishlist"
+              size="icon-sm"
+              variant="secondary"
+              onClick={() => onSelectTab('wishlist')}
+              className="relative active:scale-95"
             >
               <Heart className={`w-4 h-4 ${wishlistCount > 0 ? 'text-rose-500 fill-rose-500' : ''}`} />
               {wishlistCount > 0 && (
@@ -308,14 +308,15 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                   {wishlistCount > 99 ? '99+' : wishlistCount}
                 </span>
               )}
-            </button>
+            </IconButton>
 
-            <button
-              type="button"
-              onClick={onOpenCart}
-              className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+            <IconButton
+              label="Cart"
               title={isBn ? 'কার্ট' : 'Cart'}
-              aria-label="Cart"
+              size="icon-sm"
+              variant="secondary"
+              onClick={onOpenCart}
+              className="relative active:scale-95"
             >
               <ShoppingCart className="w-4 h-4" />
               {cartCount > 0 && (
@@ -323,7 +324,7 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                   {cartCount > 99 ? '99+' : cartCount}
                 </span>
               )}
-            </button>
+            </IconButton>
           </div>
         </div>
       )}
@@ -332,19 +333,23 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
       {mobileConfig.mode === 'detail' && (
         <div className="h-14 px-3 flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <button
-              type="button"
-              onClick={onMobileBack}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[var(--pm-text)] active:scale-95 transition-all shrink-0 cursor-pointer"
-              aria-label={isBn ? 'ফিরে যান' : 'Go back'}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+            {showBackButton && (
+              <IconButton
+                label={isBn ? 'আগের পৃষ্ঠায় ফিরুন' : 'Back to previous page'}
+                title={isBn ? 'আগের পৃষ্ঠায় ফিরুন' : 'Back to previous page'}
+                size="icon"
+                variant="secondary"
+                onClick={onMobileBack}
+                className="min-w-11 shrink-0 active:scale-95"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </IconButton>
+            )}
             <div className="min-w-0 flex-1">
-              <h1 className="text-sm font-black text-[var(--pm-text)] leading-tight truncate">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-[var(--pm-text)] leading-tight truncate">
                 {mobileConfig.title}
               </h1>
-              <p className="text-[11px] text-[var(--pm-muted)] leading-tight truncate">
+              <p className="text-xs sm:text-[13px] text-[var(--pm-muted)] leading-4 truncate">
                 {mobileConfig.subtitle}
               </p>
             </div>
@@ -352,12 +357,13 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
 
           <div className="flex items-center gap-1.5 shrink-0">
             {mobileConfig.action === 'cart' && (
-              <button
-                type="button"
-                onClick={onOpenCart}
-                className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+              <IconButton
+                label="Cart"
                 title={isBn ? 'কার্ট' : 'Cart'}
-                aria-label="Cart"
+                size="icon-sm"
+                variant="secondary"
+                onClick={onOpenCart}
+                className="relative active:scale-95"
               >
                 <ShoppingCart className="w-4 h-4" />
                 {cartCount > 0 && (
@@ -365,16 +371,17 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                     {cartCount > 99 ? '99+' : cartCount}
                   </span>
                 )}
-              </button>
+              </IconButton>
             )}
 
             {mobileConfig.action === 'notifications' && (
-              <button
-                type="button"
-                onClick={onOpenNotifications}
-                className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
+              <IconButton
+                label="Notifications"
                 title={isBn ? 'নোটিফিকেশন' : 'Notifications'}
-                aria-label="Notifications"
+                size="icon-sm"
+                variant="secondary"
+                onClick={onOpenNotifications}
+                className="relative active:scale-95"
               >
                 <Bell className="w-4 h-4" />
                 {unreadNotificationsCount > 0 && (
@@ -382,31 +389,21 @@ export const TopNavMobileBar: React.FC<TopNavMobileBarProps> = ({
                     {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
                   </span>
                 )}
-              </button>
-            )}
-
-            {mobileConfig.action === 'settings' && (
-              <button
-                type="button"
-                onClick={onOpenSettings || (() => onSelectTab('settings'))}
-                className="w-9 h-9 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] text-[var(--pm-text)] border border-[var(--pm-border)] active:scale-95 transition-all cursor-pointer"
-                title={isBn ? 'সেটিংস' : 'Settings'}
-                aria-label="Settings"
-              >
-                <SettingsIcon className="w-4 h-4" />
-              </button>
+              </IconButton>
             )}
 
             {mobileConfig.action === 'close' && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={onMobileBack}
-                className="h-9 px-3 flex items-center justify-center rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-xs font-bold text-[var(--pm-text)] active:scale-95 transition-all cursor-pointer"
+                className="h-9 px-3 text-xs font-bold active:scale-95"
                 aria-label="Close"
               >
                 <X className="w-4 h-4 mr-1" />
                 <span>{isBn ? 'বন্ধ' : 'Close'}</span>
-              </button>
+              </Button>
             )}
 
             {mobileConfig.action === 'location' && (

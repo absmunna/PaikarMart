@@ -5,6 +5,7 @@ import {
   saveGuestCheckoutDraft,
   clearGuestCheckoutDraft,
 } from '@/shared/hooks/useGuestSessionPersistence';
+import { FormInput, FormSelect, FormTextArea } from '@/components/shared/FormControls';
 
 interface GuestCheckoutFormProps {
   onVerify: (data: { name: string; phone: string; email: string; address: string }) => Promise<boolean>;
@@ -21,7 +22,10 @@ interface GuestCheckoutFormProps {
 }
 
 export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, onComplete, disabled = false, disabledMessage }) => {
-  const [formData, setFormData] = useState(() => loadGuestCheckoutDraft());
+  const [formData, setFormData] = useState(() => ({
+    ...loadGuestCheckoutDraft(),
+    paymentMethod: 'Cash on Delivery',
+  }));
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -47,7 +51,7 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
       setError('An account with this phone or email already exists. Please log in.');
     } else {
       clearGuestCheckoutDraft();
-      onComplete(formData);
+      onComplete({ ...formData, paymentMethod: 'Cash on Delivery' });
     }
   };
 
@@ -57,7 +61,7 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
         <label className="text-xs font-bold text-[var(--pm-text)]">Name*</label>
         <div className="relative">
           <User className="absolute left-3 top-3 w-4 h-4 text-[var(--pm-muted)]" />
-          <input required type="text" className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none text-xs" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          <FormInput required type="text" className="w-full pl-10 pr-4 py-2 bg-[var(--pm-input)] text-[var(--pm-text)] text-xs" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
         </div>
       </div>
       
@@ -65,7 +69,7 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
         <label className="text-xs font-bold text-[var(--pm-text)]">Phone Number*</label>
         <div className="relative">
           <Phone className="absolute left-3 top-3 w-4 h-4 text-[var(--pm-muted)]" />
-          <input required type="tel" className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none text-xs" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+          <FormInput required type="tel" className="w-full pl-10 pr-4 py-2 bg-[var(--pm-input)] text-[var(--pm-text)] text-xs" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
         </div>
       </div>
 
@@ -73,7 +77,7 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
         <label className="text-xs font-bold text-[var(--pm-text)]">Email (Optional)</label>
         <div className="relative">
           <Mail className="absolute left-3 top-3 w-4 h-4 text-[var(--pm-muted)]" />
-          <input type="email" className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+          <FormInput type="email" className="w-full pl-10 pr-4 py-2 bg-[var(--pm-input)] text-[var(--pm-text)] text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
         </div>
       </div>
 
@@ -81,15 +85,15 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
         <label className="text-xs font-bold text-[var(--pm-text)]">Delivery Address*</label>
         <div className="relative">
           <MapPin className="absolute left-3 top-3 w-4 h-4 text-[var(--pm-muted)]" />
-          <textarea required className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none text-xs" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+          <FormTextArea required className="w-full pl-10 pr-4 py-2 bg-[var(--pm-input)] text-[var(--pm-text)] text-xs" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
         <div className="space-y-1">
           <label className="text-[10px] font-black uppercase text-[var(--pm-muted)] tracking-wider">Courier (Optional)</label>
-          <select 
-            className="w-full px-3 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] text-xs font-bold border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
+          <FormSelect
+            className="w-full px-3 py-2 bg-[var(--pm-input)] text-[var(--pm-text)] text-xs font-bold"
             value={formData.courier}
             onChange={e => setFormData({...formData, courier: e.target.value})}
           >
@@ -97,21 +101,17 @@ export const GuestCheckoutForm: React.FC<GuestCheckoutFormProps> = ({ onVerify, 
             <option>Steadfast Courier</option>
             <option>RedX Delivery</option>
             <option>Sundarban Courier</option>
-          </select>
+          </FormSelect>
         </div>
 
         <div className="space-y-1">
           <label className="text-[10px] font-black uppercase text-[var(--pm-muted)] tracking-wider">Payment Method</label>
-          <select 
-            className="w-full px-3 py-2 rounded-xl bg-[var(--pm-input)] text-[var(--pm-text)] text-xs font-bold border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-            value={formData.paymentMethod}
-            onChange={e => setFormData({...formData, paymentMethod: e.target.value})}
-          >
-            <option>Cash on Delivery</option>
-            <option>bKash Payment</option>
-            <option>Nagad Payment</option>
-            <option>Rocket Payment</option>
-          </select>
+          <div className="px-3 py-2 rounded-xl bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] text-xs font-bold border border-[var(--pm-accent-border)]">
+            Cash on Delivery
+            <p className="mt-1 text-[11px] font-normal text-[var(--pm-muted)]">
+              Pay the courier when your order arrives. Online payment is temporarily unavailable.
+            </p>
+          </div>
         </div>
       </div>
 

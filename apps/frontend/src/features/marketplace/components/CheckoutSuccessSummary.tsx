@@ -24,6 +24,10 @@ export const CheckoutSuccessSummary: React.FC<CheckoutSuccessSummaryProps> = ({ 
           <span>Order Breakdown</span>
         </div>
         <div className="space-y-1.5 text-xs text-[var(--pm-muted)]">
+          <div className="flex justify-between">
+            <span>Payment</span>
+            <span className="font-bold text-[var(--pm-text)]">Cash on Delivery</span>
+          </div>
           <div className="flex justify-between"><span>Subtotal</span><span>৳{order.subtotal.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Delivery Fee</span><span>৳{order.deliveryFee.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Tax</span><span>৳{order.tax.toFixed(2)}</span></div>

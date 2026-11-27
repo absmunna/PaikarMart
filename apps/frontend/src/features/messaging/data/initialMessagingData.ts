@@ -27,7 +27,7 @@ export const INITIAL_CONVERSATIONS: Conversation[] = [
       id: 'master_samsung_s24_ultra',
       title: 'Samsung Galaxy S24 Ultra (Titanium Series)',
       price: 1299.00,
-      imageUrl: 'https://images.unsplash.com/photo-1707246210664-28a962a7a72d?auto=format&fit=crop&w=300&h=300&q=80',
+      imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Samsung_Galaxy_S24_Ultra_with_retail_box%2C_front.jpg',
       isWholesale: false
     }
   },

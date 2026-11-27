@@ -41,7 +41,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children, onOpenAuthModal 
         <button
           type="button"
           onClick={() => onOpenAuthModal('login')}
-          className="px-6 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs sm:text-sm font-black inline-flex items-center justify-center gap-2 cursor-pointer active-scale shadow-md transition-all"
+          className="min-h-11 px-6 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-xs sm:text-sm font-black inline-flex items-center justify-center gap-2 cursor-pointer active-scale shadow-md transition-all"
         >
           <LogIn className="w-4 h-4 shrink-0" />
           <span>{isBn ? 'লগইন করুন' : 'Sign in'}</span>

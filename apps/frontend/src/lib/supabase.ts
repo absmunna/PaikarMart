@@ -38,6 +38,7 @@ export const supabase: SupabaseClient = createClient(
 
 const STORAGE_KEYS = {
   POSTS: 'paikarmart_posts_v1',
+  SAVED_SOCIAL_POSTS: 'paikarmart_saved_social_posts_v1',
   COMMERCE: 'paikarmart_commerce_v1',
   ORDERS: 'paikarmart_orders_v1',
   BOOKINGS: 'paikarmart_bookings_v1',

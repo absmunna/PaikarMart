@@ -1,594 +1,359 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { isGovernanceRole, normalizeHandle } from '@paikarmart/shared';
+import { normalizeHandle } from '@paikarmart/shared';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 import { 
   User as UserType, 
   SocialPost, 
   Order, 
   ServiceBooking,
-  OrderReview
 } from '@/types';
-import { 
-  MapPin, 
-  ShieldCheck, 
-  Store, 
-  Edit3, 
-  Package, 
-  Clock, 
-  Star, 
-  Heart, 
-  Settings, 
-  DollarSign, 
-  CheckCircle2, 
-  ShoppingBag, 
-  Wrench, 
-  Camera,
-  Truck,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Navigation,
-  LogIn,
-  LogOut,
-  ShieldAlert,
-  UserCheck,
-  Briefcase,
-  GraduationCap,
-  Sparkles
-} from 'lucide-react';
+import { ShieldCheck, Wrench, Eye, Briefcase, GraduationCap, MapPin, Image as ImageIcon } from 'lucide-react';
 import { FeedPostCard } from '@/features/social';
-import { OrderTrackingStepper } from '@/portals/utilities/user-profile/components/OrderTrackingStepper';
-import { OrderReviewModal } from '@/portals/utilities/user-profile/components/OrderReviewModal';
-import { SpendingAnalyticsDashboard } from '@/portals/utilities/user-profile/components/SpendingAnalyticsDashboard';
-import { SavedAddressesPage } from '@/portals/utilities/user-profile/components/account';
-import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useAuth, syncAuthenticatedProfile, updateFirebaseIdentityProfile, uploadProfileAvatarAsset } from '@/features/auth';
-import { PortalTab } from '@/types';
-import { SettingsSectionId } from '@/portals/utilities/settings-center';
-import { OrdersPortal } from '@/portals/utilities/orders-hub';
 import { BarChart2 } from 'lucide-react';
+import { ProfileHeader } from '@/portals/utilities/user-profile/components/ProfileHeader';
 
 interface ProfilePortalProps {
   currentUser: UserType;
-  onUpdateUser: (updatedUser: UserType) => void;
   posts: SocialPost[];
+  savedPostIds: string[];
   orders: Order[];
   bookings: ServiceBooking[];
   onReact: (postId: string, reaction: any) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (item: any) => void;
   commerceItems: any[];
-  onOpenVendorModal: () => void;
-  onOpenWallet: () => void;
-  onUpdateOrder?: (updatedOrder: Order) => void;
-  onSelectTab?: (tab: PortalTab) => void;
-  onOpenSettingsPortal?: (section?: SettingsSectionId) => void;
-  onOpenSuperAdminModal?: () => void;
-  onOpenAuthModal?: (tab?: 'login' | 'register') => void;
+}
+
+type ProfileTab = 'posts' | 'about' | 'photos' | 'bookings' | 'analytics';
+
+const SpendingAnalyticsDashboard = React.lazy(() =>
+  import('@/portals/utilities/user-profile/components/SpendingAnalyticsDashboard').then((module) => ({
+    default: module.SpendingAnalyticsDashboard,
+  }))
+);
+
+interface ProfileSectionBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}
+
+class ProfileSectionBoundary extends React.Component<
+  ProfileSectionBoundaryProps,
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('Profile insights failed to load:', error);
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
 }
 
 export const ProfilePortal: React.FC<ProfilePortalProps> = ({
   currentUser,
-  onUpdateUser,
   posts,
+  savedPostIds,
   orders,
   bookings,
   onReact,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart,
   commerceItems,
-  onOpenVendorModal,
-  onOpenWallet,
-  onUpdateOrder,
-  onSelectTab,
-  onOpenSettingsPortal,
-  onOpenSuperAdminModal,
-  onOpenAuthModal,
 }) => {
-  const { openSettings } = useSettings();
-  const { t, language } = useLanguage();
-  const { firebaseUser, signInWithGoogle, signOut: firebaseSignOut, loading: authLoading, refetchProfile } = useAuth();
+  const { language } = useLanguage();
   const isBn = language === 'bn';
-  const isDeveloperOrSuperAdmin = isGovernanceRole(currentUser.role);
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'posts' | 'orders' | 'bookings' | 'saved'>('analytics');
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(currentUser.name);
-  const [location, setLocation] = useState(currentUser.location);
-  const [avatar, setAvatar] = useState(currentUser.avatar);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!isEditing) {
-      setName(currentUser.name);
-      setLocation(currentUser.location);
-      setAvatar(currentUser.avatar);
-    }
-  }, [currentUser.id, currentUser.name, currentUser.location, currentUser.avatar, isEditing]);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   
-  // Tracking expand state for orders - active orders expanded by default
-  const [expandedTrackingOrders, setExpandedTrackingOrders] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    orders.forEach(o => {
-      if (o.status === 'in_transit' || o.status === 'preparing') {
-        initial[o.id] = true;
-      }
-    });
-    return initial;
-  });
-
-  const [orderFilter, setOrderFilter] = useState<'all' | 'active' | 'delivered'>('all');
-  const [reviewingOrder, setReviewingOrder] = useState<Order | null>(null);
-
-  const toggleTracking = (orderId: string) => {
-    setExpandedTrackingOrders(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
-  };
-
-  const handleSaveOrderReview = (orderId: string, review: OrderReview) => {
-    if (onUpdateOrder) {
-      const orderToUpdate = orders.find(o => o.id === orderId);
-      if (orderToUpdate) {
-        onUpdateOrder({
-          ...orderToUpdate,
-          review
-        });
-      }
-    }
-  };
-
-  const filteredOrders = orders.filter(order => {
-    if (orderFilter === 'active') return order.status !== 'delivered';
-    if (orderFilter === 'delivered') return order.status === 'delivered';
-    return true;
-  });
-
   const userPosts = posts.filter(p => p.authorId === currentUser.id || p.authorName === currentUser.name);
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileSaveError(null);
-
-    let nextAvatar = avatar;
-    try {
-      if (avatarFile && firebaseUser) {
-        nextAvatar = (await uploadProfileAvatarAsset(avatarFile, firebaseUser.uid)) || avatar;
-      }
-
-      if (firebaseUser) {
-        await updateFirebaseIdentityProfile({
-          name,
-          handle: currentUser.handle,
-          role: currentUser.role,
-          avatar: nextAvatar,
-          location,
-        });
-        await syncAuthenticatedProfile({
-          name,
-          handle: currentUser.handle,
-          avatar: nextAvatar,
-          location,
-          phone: currentUser.phone,
-        }).catch((err) => console.warn('Supabase profile sync warning:', err));
-        await refetchProfile().catch(() => {});
-      }
-
-      onUpdateUser({
-      ...currentUser,
-      name,
-      location,
-      avatar: nextAvatar,
-      });
-      setAvatar(nextAvatar);
-      setAvatarFile(null);
-      setIsEditing(false);
-    } catch (error) {
-      setProfileSaveError(error instanceof Error ? error.message : 'Profile update failed.');
-    }
-  };
+  const userPhotos = userPosts.filter((post) => Boolean(post.mediaUrl));
+  const profileTabs: { id: ProfileTab; label: string }[] = [
+    { id: 'posts', label: isBn ? `পোস্ট (${userPosts.length})` : `Posts (${userPosts.length})` },
+    { id: 'about', label: isBn ? 'পরিচিতি' : 'About' },
+    { id: 'photos', label: isBn ? `ছবি (${userPhotos.length})` : `Photos (${userPhotos.length})` },
+    { id: 'bookings', label: isBn ? `বুকিং (${bookings.length})` : `Bookings (${bookings.length})` },
+    { id: 'analytics', label: isBn ? 'ইনসাইটস' : 'Insights' },
+  ];
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fadeIn pb-24">
-      
-      {/* Cover Banner & Avatar Header */}
-      <div className="bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-3xl overflow-hidden shadow-sm">
-        <div className="h-32 sm:h-56 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative">
-          <div className="absolute inset-0 bg-black/10" />
-        </div>
+    <div className="space-y-4 pb-24 sm:space-y-5">
+      <ProfileHeader
+        displayName={currentUser.name}
+        avatar={currentUser.avatar}
+        coverImage={currentUser.coverImage}
+        handle={currentUser.handle.startsWith('@') ? currentUser.handle : `@${currentUser.handle}`}
+        location={currentUser.location}
+        bio={currentUser.bio}
+        verifiedLabel={currentUser.vendorProfile?.verified ? (isBn ? 'ভেরিফাইড বিক্রেতা' : 'Verified seller') : undefined}
+        badge={currentUser.isVendor && !currentUser.vendorProfile?.verified ? (
+          <span className="rounded-full bg-[var(--pm-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--pm-muted)]">
+            {isBn ? 'বিক্রেতা প্রোফাইল' : 'Seller profile'}
+          </span>
+        ) : undefined}
+        secondaryMeta={currentUser.profession && (
+          <span>{currentUser.profession}</span>
+        )}
+        actions={(
+          <Link
+            to={`/u/${encodeURIComponent(normalizeHandle(currentUser.vendorProfile?.handle || currentUser.vendorProfile?.storeName || currentUser.handle || currentUser.name))}`}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+          >
+            <Eye className="h-4 w-4" />
+            <span>{isBn ? 'পাবলিক প্রোফাইল' : 'View public profile'}</span>
+          </Link>
+        )}
+        stats={(
+          <div className="flex min-h-12 items-center gap-4 text-sm text-[var(--pm-muted)]">
+            <span><strong className="text-[var(--pm-text)]">{userPosts.length}</strong> {isBn ? 'পোস্ট' : userPosts.length === 1 ? 'post' : 'posts'}</span>
+            <span><strong className="text-[var(--pm-text)]">{userPhotos.length}</strong> {isBn ? 'ছবি' : 'photos'}</span>
+          </div>
+        )}
+        tabs={(
+          <div className="flex gap-1 overflow-x-auto px-3 no-scrollbar sm:px-6" role="group" aria-label={isBn ? 'প্রোফাইল বিভাগ' : 'Profile sections'}>
+            {profileTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-pressed={activeTab === tab.id}
+                className={`min-h-12 shrink-0 border-b-[3px] px-4 text-sm font-semibold transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-[var(--pm-accent)] text-[var(--pm-accent)]'
+                    : 'border-transparent text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+      />
 
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 relative flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 -mt-12 sm:-mt-20">
-          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4">
-            <div className="relative">
-              <img
-                src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
-                alt={currentUser.name}
-                referrerPolicy="no-referrer"
-              className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover ring-4 ring-[var(--pm-card)] shadow-xl bg-[var(--pm-card)]"
-              />
-              <div className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center ring-2 ring-[var(--pm-card)] shadow-md">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-            </div>
-
-            <div className="text-center sm:text-left space-y-1">
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-[var(--pm-text)]">
-                  {currentUser.name}
-                </h1>
-                {currentUser.isVendor && (
-                  <span className="px-2 py-0.5 rounded-lg bg-[var(--pm-success-soft)] text-[var(--pm-success)] text-[10px] font-black uppercase tracking-wider">
-                    Verified Vendor
-                  </span>
-                )}
-                {isDeveloperOrSuperAdmin && (
-                  <span className="px-2.5 py-0.5 rounded-lg bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border border-[var(--pm-accent-border)] text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                    <ShieldAlert className="w-3 h-3" />
-                    Super Admin
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-[var(--pm-muted)] font-medium">
-                {currentUser.handle || '@alexrivera'} · {currentUser.location} · Trust Level {currentUser.trustLevel ?? (currentUser.isVendor ? 5 : 2)}
+      {activeTab === 'posts' && (
+        <div className="grid gap-4 lg:grid-cols-[minmax(240px,0.85fr)_minmax(0,1.35fr)]">
+          <aside className="space-y-4">
+            <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-4">
+              <h2 className="text-lg font-bold text-[var(--pm-text)]">{isBn ? 'পরিচিতি' : 'Intro'}</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--pm-muted)]">
+                {currentUser.bio || (isBn ? 'এখনও কোনো পরিচিতি যোগ করা হয়নি।' : 'No introduction added yet.')}
               </p>
-
-              {/* Public Unified Profile Info: Profession & Education */}
-              {(currentUser.profession || currentUser.education) && (
-                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-2 pt-1 text-[11px] font-semibold text-[var(--pm-text)]">
-                  {currentUser.profession && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                      <Briefcase className="w-3 h-3 text-blue-500" />
-                      <span>{currentUser.profession}</span>
-                    </span>
-                  )}
-                  {currentUser.education && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-                      <GraduationCap className="w-3 h-3 text-emerald-500" />
-                      <span>{currentUser.education}</span>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Skills Tags */}
+              <div className="mt-4 space-y-3 border-t border-[var(--pm-border)] pt-4 text-sm">
+                {currentUser.location && (
+                  <p className="flex items-center gap-2 text-[var(--pm-text)]">
+                    <MapPin className="h-4 w-4 shrink-0 text-[var(--pm-muted)]" />
+                    <span>{currentUser.location}</span>
+                  </p>
+                )}
+                {currentUser.profession && (
+                  <p className="flex items-center gap-2 text-[var(--pm-text)]">
+                    <Briefcase className="h-4 w-4 shrink-0 text-[var(--pm-muted)]" />
+                    <span>{currentUser.profession}</span>
+                  </p>
+                )}
+                {currentUser.education && (
+                  <p className="flex items-center gap-2 text-[var(--pm-text)]">
+                    <GraduationCap className="h-4 w-4 shrink-0 text-[var(--pm-muted)]" />
+                    <span>{currentUser.education}</span>
+                  </p>
+                )}
+                {currentUser.personalVerification?.status === 'verified' && (
+                  <p className="flex items-center gap-2 text-[var(--pm-text)]">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--pm-accent)]" />
+                    <span>{isBn ? 'পরিচয় যাচাই করা হয়েছে' : 'Identity verified'}</span>
+                  </p>
+                )}
+              </div>
               {currentUser.skills && currentUser.skills.length > 0 && (
-                <div className="flex items-center justify-center sm:justify-start flex-wrap gap-1.5 pt-0.5">
-                  {currentUser.skills.map((skill, sIdx) => (
-                    <span key={sIdx} className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-muted)]">
-                      #{skill}
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--pm-border)] pt-4">
+                  {currentUser.skills.map((skill) => (
+                    <span key={skill} className="rounded-full bg-[var(--pm-surface)] px-3 py-1 text-xs text-[var(--pm-muted)]">
+                      {skill}
                     </span>
                   ))}
                 </div>
               )}
+            </section>
 
-              <div className="flex items-center justify-center sm:justify-start flex-wrap gap-1.5 pt-0.5">
-                {currentUser.personalVerification?.status === 'verified' && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/30">
-                    <ShieldCheck className="w-3 h-3 text-blue-500" />
-                    <span>{isBn ? `নাগরিক ভেরিফাইড (${currentUser.personalVerification.documentType})` : `Verified Citizen (${currentUser.personalVerification.documentType})`}</span>
-                  </span>
-                )}
-                {firebaseUser ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--pm-success)] bg-[var(--pm-success-soft)] px-2 py-0.5 rounded-full border border-[var(--pm-success)]/30">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>Firebase: {firebaseUser.email || 'Authenticated'}</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--pm-warning)] bg-[var(--pm-warning-soft)] px-2 py-0.5 rounded-full border border-[var(--pm-warning)]/30">
-                    <span>Firebase Auth Active</span>
-                  </span>
-                )}
-              </div>
+            {userPhotos.length > 0 && (
+              <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-[var(--pm-text)]">{isBn ? 'ছবি' : 'Photos'}</h2>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('photos')}
+                    className="text-sm font-semibold text-[var(--pm-accent)] hover:underline"
+                  >
+                    {isBn ? 'সব দেখুন' : 'See all'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-1 overflow-hidden rounded-lg">
+                  {userPhotos.slice(0, 6).map((post) => (
+                    <img
+                      key={post.id}
+                      src={safeMediaSrc(post.mediaUrl, DEFAULT_AVATAR_URL)}
+                      alt={isBn ? 'প্রোফাইল পোস্টের ছবি' : 'Profile post'}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover"
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </aside>
+
+          <section className="space-y-4">
+            <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-4">
+              <h2 className="text-lg font-bold text-[var(--pm-text)]">{isBn ? 'পোস্ট' : 'Posts'}</h2>
             </div>
-          </div>
-
-          <div className="flex items-center justify-center flex-wrap gap-1.5 sm:gap-2">
-            {firebaseUser ? (
-              <button
-                onClick={() => firebaseSignOut()}
-                disabled={authLoading}
-                className="px-3 py-1.5 rounded-xl bg-[var(--pm-danger-soft)] hover:opacity-90 text-[var(--pm-danger)] border border-[var(--pm-danger)]/30 font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                title="Sign out from Firebase Auth"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{isBn ? 'লগআউট' : 'Sign Out'}</span>
-              </button>
+            {userPosts.length > 0 ? (
+              userPosts.map((post) => (
+                <FeedPostCard
+                  key={post.id}
+                  post={post}
+                  currentUser={currentUser}
+                  isSaved={savedPostIds.includes(post.id)}
+                  onReact={onReact}
+                  onAddComment={onAddComment}
+                  onToggleSave={onToggleSavedPost}
+                  onAddToCart={onAddToCart}
+                  commerceItems={commerceItems}
+                />
+              ))
             ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onOpenAuthModal ? onOpenAuthModal('login') : signInWithGoogle()}
-                  disabled={authLoading}
-                  className="px-3.5 py-2 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
-                  title="Sign in with Email or Google"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{isBn ? 'লগইন করুন' : 'Sign In'}</span>
-                </button>
-
-                <button
-                  onClick={() => onOpenAuthModal ? onOpenAuthModal('register') : signInWithGoogle()}
-                  disabled={authLoading}
-                  className="px-3.5 py-2 rounded-2xl bg-[var(--pm-success)] hover:opacity-90 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
-                  title="Create new PaikarMart account"
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>{isBn ? 'নতুন একাউন্ট' : 'Register'}</span>
-                </button>
-              </div>
-            )}
-
-            {isDeveloperOrSuperAdmin && onOpenSuperAdminModal && (
-              <button
-                onClick={onOpenSuperAdminModal}
-                className="px-3.5 py-2 rounded-2xl bg-[var(--pm-accent-soft)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-accent)] border border-[var(--pm-accent-border)] font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
-                title="Open Super Admin & Developer Control Center"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Super Admin Center</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-2 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Profile</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (onOpenSettingsPortal) {
-                  onOpenSettingsPortal('account_profile');
-                } else if (onSelectTab) {
-                  onSelectTab('settings');
-                } else {
-                  openSettings();
-                }
-              }}
-              className="px-3.5 py-2 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-              title="Settings (Account, Security, Theme, Language)"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>{t.nav.settings}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (currentUser.isVendor && onSelectTab) {
-                  onSelectTab('vendor-dash');
-                } else {
-                  onOpenVendorModal();
-                }
-              }}
-              className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
-              title={isBn ? 'বিজনেস একাউন্ট, স্টোর সেটিংস ও প্রোডাক্ট ম্যানেজ করুন' : 'My Business account & storefront'}
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>{isBn ? 'আমার ব্যবসা (My Business)' : 'My Business'}</span>
-            </button>
-
-            {currentUser.isVendor ? (
-              <div className="flex items-center gap-2">
+              <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-8 text-center">
+                <p className="text-sm text-[var(--pm-muted)]">
+                  {isBn ? 'আপনার শেয়ার করা পোস্ট এখানে দেখা যাবে।' : 'Posts you share will appear here.'}
+                </p>
                 <Link
-                  to={`/u/${encodeURIComponent(normalizeHandle(currentUser.vendorProfile?.handle || currentUser.vendorProfile?.storeName || currentUser.handle || currentUser.name))}`}
-                  className="px-3.5 py-2 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] font-bold text-xs flex items-center gap-1.5 transition-colors"
+                  to="/portal/social"
+                  className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-[var(--pm-accent)] px-4 text-sm font-bold text-[var(--pm-accent-fg)] hover:bg-[var(--pm-accent-hover)]"
                 >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Public @handle</span>
+                  {isBn ? 'ফিডে যান' : 'Open feed'}
                 </Link>
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Link
-                  to={`/u/${encodeURIComponent(normalizeHandle(currentUser.handle || currentUser.name))}`}
-                  className="px-3.5 py-2 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] font-bold text-xs flex items-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Public @handle</span>
-                </Link>
-                <button
-                  onClick={onOpenVendorModal}
-                  className="px-4 py-2 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Become Seller</span>
-                </button>
-              </div>
             )}
-          </div>
+          </section>
         </div>
-      </div>
+      )}
 
-      {/* Unified Account & Multi-hub Capabilities Showcase */}
-      <div className="bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-3xl p-4 sm:p-5 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--pm-border)] pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-black text-[var(--pm-text)]">
-                {isBn ? 'একক প্রোফাইল · সমন্বিত বিজনেস ও নাগরিক হাব (Unified Profile)' : 'Single Account · Multi-Role Hub Access'}
-              </h3>
-              <p className="text-[11px] text-[var(--pm-muted)]">
-                {isBn
-                  ? 'একটি অ্যাকাউন্টেই কেনাকাটা, নিজের স্টোর পরিচালনা, সার্ভিস প্রদান ও কনটেন্ট তৈরি'
-                  : 'Shop, run your storefront, provide services, and manage content from one account'}
-              </p>
-            </div>
+      {activeTab === 'about' && (
+        <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-5 sm:p-6">
+          <div className="mb-5">
+            <h2 className="text-xl font-bold text-[var(--pm-text)]">{isBn ? 'পরিচিতি' : 'About'}</h2>
           </div>
-          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-[var(--pm-success-soft)] text-[var(--pm-success)] w-fit">
-            {isBn ? 'সক্রিয় ও অনুমোদিত' : 'Active & Verified'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-          <div
-            onClick={() => (currentUser.isVendor && onSelectTab ? onSelectTab('vendor-dash') : onOpenVendorModal())}
-            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <Store className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                {currentUser.vendorProfile?.category || 'Retail/Wholesale'}
-              </span>
-            </div>
-            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
-              {currentUser.vendorProfile?.storeName || (isBn ? 'আমার স্টোর' : 'My Storefront')}
-            </h4>
-            <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'পণ্য মার্কেটপ্লেস ও সেলস ড্যাশবোর্ড' : 'Manage store products & sales'}
-            </p>
-          </div>
-
-          <div
-            onClick={() => onSelectTab && onSelectTab('services')}
-            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <Wrench className="w-4 h-4 text-blue-500" />
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                {isBn ? 'পেশাদার সেবা' : 'Services'}
-              </span>
-            </div>
-            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
-              {isBn ? 'ক্লাস ও মেন্টরিং সার্ভিস' : 'Tutoring & Services'}
-            </h4>
-            <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'বুকিং গ্রহণ ও সেবা প্রদান' : 'Accept on-demand bookings'}
-            </p>
-          </div>
-
-          <div
-            onClick={() => onSelectTab && onSelectTab('creator')}
-            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <Eye className="w-4 h-4 text-purple-500" />
-              <span className="text-[10px] font-bold text-purple-600 bg-purple-500/10 px-1.5 py-0.5 rounded">
-                {isBn ? 'ক্রিয়েটর' : 'Creator'}
-              </span>
-            </div>
-            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
-              {isBn ? 'ভিডিও ও ক্লাস স্টুডিও' : 'Creator Studio'}
-            </h4>
-            <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'ভিডিও ও কোর্স কনটেন্ট' : 'Video lectures & tutorials'}
-            </p>
-          </div>
-
-          <div
-            onClick={() => onOpenSettingsPortal && onOpenSettingsPortal('account_profile')}
-            className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <ShieldCheck className="w-4 h-4 text-amber-500" />
-              <span className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                {isBn ? 'নাগরিক সুবিধা' : 'Citizen Access'}
-              </span>
-            </div>
-            <h4 className="text-xs font-black text-[var(--pm-text)] group-hover:text-[var(--pm-accent)] truncate">
-              {isBn ? 'হোমমেড, নিলাম ও ফ্ল্যাট' : 'Homemade, Bids & Rent'}
-            </h4>
-            <p className="text-[10px] text-[var(--pm-muted)]">
-              {isBn ? 'নাগরিক ভেরিফিকেশন ও পোস্ট' : 'Citizen verification & listings'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Wallet & Stats Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
-        <div 
-          onClick={onOpenWallet}
-          className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-1 cursor-pointer hover:border-[var(--pm-accent)] transition-all group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--pm-muted)] group-hover:text-[var(--pm-accent)]">Wallet Balance</span>
-            <span className="text-[10px] font-bold text-[var(--pm-accent)] bg-[var(--pm-accent-soft)] px-1.5 py-0.5 rounded-md">Manage</span>
-          </div>
-          <p className="text-xl sm:text-2xl font-mono tabular-nums font-black text-[var(--pm-text)]">
-            ৳{currentUser.balance.toLocaleString()}
+          <p className="max-w-3xl text-sm leading-6 text-[var(--pm-muted)]">
+            {currentUser.bio || (isBn ? 'এখনও কোনো পরিচিতি যোগ করা হয়নি।' : 'No introduction added yet.')}
           </p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[var(--pm-muted)]">Total Orders</span>
-          <p className="text-xl sm:text-2xl font-mono font-black text-[var(--pm-text)]">{orders.length}</p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[var(--pm-muted)]">Service Bookings</span>
-          <p className="text-xl sm:text-2xl font-mono font-black text-[var(--pm-text)]">{bookings.length}</p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] shadow-xs space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-widest text-[var(--pm-muted)]">Account Type</span>
-          <p className="text-xl sm:text-2xl font-bold text-[var(--pm-accent)] capitalize">{currentUser.role}</p>
-        </div>
-      </div>
+          <dl className="mt-5 grid gap-4 border-t border-[var(--pm-border)] pt-5 sm:grid-cols-2">
+            {[
+              { label: isBn ? 'অবস্থান' : 'Location', value: currentUser.location },
+              { label: isBn ? 'পেশা' : 'Work', value: currentUser.profession },
+              { label: isBn ? 'শিক্ষা' : 'Education', value: currentUser.education },
+              { label: isBn ? 'অ্যাকাউন্ট' : 'Account type', value: currentUser.role },
+            ].filter((item) => item.value).map((item) => (
+              <div key={item.label}>
+                <dt className="text-xs font-semibold text-[var(--pm-muted)]">{item.label}</dt>
+                <dd className="mt-1 text-sm font-medium text-[var(--pm-text)]">{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+          {currentUser.skills && currentUser.skills.length > 0 && (
+            <div className="mt-5 border-t border-[var(--pm-border)] pt-5">
+              <h3 className="text-sm font-semibold text-[var(--pm-text)]">{isBn ? 'দক্ষতা ও আগ্রহ' : 'Skills & interests'}</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {currentUser.skills.map((skill) => (
+                  <span key={skill} className="rounded-full bg-[var(--pm-surface)] px-3 py-1.5 text-sm text-[var(--pm-muted)]">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar border-b border-[var(--pm-border)] pb-2">
-        {[
-          { id: 'analytics', label: isBn ? 'ব্যয় ও অর্ডার অ্যানালিটিক্স 📊' : 'Spending & Order Analytics 📊' },
-          { id: 'orders', label: isBn ? `আমার অর্ডারগুলো (${orders.length})` : `My Orders (${orders.length})` },
-          { id: 'posts', label: isBn ? 'আমার পোস্ট ও কাজ' : 'My Posts & Activity' },
-          { id: 'bookings', label: isBn ? `সার্ভিস বুকিং (${bookings.length})` : `Service Bookings (${bookings.length})` },
-          { id: 'saved', label: isBn ? 'ডেলিভারি ঠিকানা' : 'Delivery Addresses' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 sm:px-5 py-2 rounded-xl sm:rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === tab.id
-                ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-md'
-                : 'bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {activeTab === 'photos' && (
+        <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-4 sm:p-6">
+          <h2 className="mb-4 text-xl font-bold text-[var(--pm-text)]">{isBn ? 'ছবি' : 'Photos'}</h2>
+          {userPhotos.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {userPhotos.map((post) => (
+                <figure key={post.id} className="overflow-hidden rounded-lg bg-[var(--pm-surface)]">
+                  <img
+                    src={safeMediaSrc(post.mediaUrl, DEFAULT_AVATAR_URL)}
+                    alt={post.content}
+                    loading="lazy"
+                    className="aspect-square w-full object-cover"
+                  />
+                </figure>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-[var(--pm-surface)] px-5 py-10 text-center">
+              <ImageIcon className="mx-auto h-8 w-8 text-[var(--pm-muted)]" />
+              <p className="mt-3 text-sm text-[var(--pm-muted)]">
+                {isBn ? 'এখনও কোনো ছবি শেয়ার করা হয়নি।' : 'No photos shared yet.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('posts')}
+                className="mt-3 text-sm font-semibold text-[var(--pm-accent)] hover:underline"
+              >
+                {isBn ? 'পোস্টে ফিরুন' : 'Back to posts'}
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Tab Content 1: Recharts Spending & Order History Analytics */}
       {activeTab === 'analytics' && (
-        <SpendingAnalyticsDashboard orders={orders} />
-      )}
-
-      {/* Tab Content */}
-      {activeTab === 'posts' && (
-        <div className="space-y-4">
-          {userPosts.length > 0 ? (
-            userPosts.map(post => (
-              <FeedPostCard
-                key={post.id}
-                post={post}
-                currentUser={currentUser}
-                onReact={onReact}
-                onAddComment={onAddComment}
-                onAddToCart={onAddToCart}
-                commerceItems={commerceItems}
-              />
-            ))
-          ) : (
-            <div className="bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-3xl p-12 text-center space-y-3">
-              <p className="text-[var(--pm-muted)] text-sm font-medium">You haven&apos;t posted anything to the social feed yet.</p>
-            </div>
+        <ProfileSectionBoundary
+          fallback={(
+            <section role="alert" className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-6 text-center">
+              <BarChart2 className="mx-auto h-8 w-8 text-[var(--pm-muted)]" />
+              <h2 className="mt-3 text-base font-semibold text-[var(--pm-text)]">
+                {isBn ? 'ইনসাইটস লোড করা যায়নি' : 'Insights could not be loaded'}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--pm-muted)]">
+                {isBn ? 'আপনার প্রোফাইলের অন্য অংশগুলো ব্যবহার করতে পারবেন।' : 'Your profile is still available while this section is unavailable.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('posts')}
+                className="mt-4 min-h-10 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+              >
+                {isBn ? 'প্রোফাইলে ফিরুন' : 'Back to profile'}
+              </button>
+            </section>
           )}
-        </div>
-      )}
-
-      {activeTab === 'orders' && (
-        <OrdersPortal
-          currentUser={currentUser}
-          orders={orders}
-          onUpdateOrder={onUpdateOrder || (() => {})}
-          onSelectTab={onSelectTab || (() => {})}
-          onOpenVendorModal={onOpenVendorModal}
-        />
+        >
+          <React.Suspense
+            fallback={(
+              <div role="status" aria-label={isBn ? 'ইনসাইটস লোড হচ্ছে' : 'Loading insights'} className="space-y-4">
+                <span className="sr-only">{isBn ? 'ইনসাইটস লোড হচ্ছে' : 'Loading insights'}</span>
+                <div className="h-28 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="h-64 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                  <div className="h-64 animate-pulse rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] motion-reduce:animate-none" />
+                </div>
+              </div>
+            )}
+          >
+            <SpendingAnalyticsDashboard orders={orders} />
+          </React.Suspense>
+        </ProfileSectionBoundary>
       )}
 
       {activeTab === 'bookings' && (
@@ -618,93 +383,6 @@ export const ProfilePortal: React.FC<ProfilePortalProps> = ({
             </div>
           )}
         </div>
-      )}
-
-      {activeTab === 'saved' && (
-        <SavedAddressesPage />
-      )}
-
-      {/* Edit Profile Modal */}
-      {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-fadeIn">
-          <form onSubmit={handleSaveProfile} className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--pm-border)]">
-              <h3 className="text-base font-bold text-[var(--pm-text)]">Edit Profile</h3>
-              <button type="button" onClick={() => setIsEditing(false)} className="text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer">✕</button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Display Name</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Location</label>
-                <input
-                  type="text"
-                  required
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Profile Photo</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--pm-accent-soft)] file:px-2 file:py-1 file:text-xs file:font-bold"
-                />
-                <p className="mt-1 text-[10px] text-[var(--pm-muted)]">JPG, PNG বা WebP · Firebase Storage configured থাকলে cloud-এ সংরক্ষিত হবে</p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[var(--pm-text)] block mb-1">Avatar Image URL (fallback)</label>
-                <input
-                  type="text"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--pm-input)] text-xs text-[var(--pm-text)] border border-[var(--pm-border)] focus:border-[var(--pm-accent)] outline-none"
-                />
-              </div>
-            </div>
-
-            {profileSaveError && (
-              <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-500">
-                {profileSaveError}
-              </p>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="submit"
-                className="px-6 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs shadow-md transition-colors cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Order Review Modal */}
-      {reviewingOrder && (
-        <OrderReviewModal
-          order={reviewingOrder}
-          isOpen={!!reviewingOrder}
-          onClose={() => setReviewingOrder(null)}
-          onSubmitReview={handleSaveOrderReview}
-          initialReview={reviewingOrder.review}
-        />
       )}
 
     </div>

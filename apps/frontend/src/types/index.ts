@@ -104,6 +104,14 @@ export interface PayoutAccount {
   routingNumber?: string;
 }
 
+export interface AdministrativeArea {
+  division?: string;
+  district?: string;
+  upazila?: string;
+  thana?: string;
+  postalCode?: string;
+}
+
 export interface VendorProfile {
   id: string;
   handle?: string;
@@ -126,6 +134,8 @@ export interface VendorProfile {
   isOpen?: boolean;
   openingHoursLabel?: string;
   coordinates?: { lat: number; lng: number };
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
   createdAt: string;
   activeRoles?: BusinessRole[];
   documents?: BusinessDocument[];
@@ -392,6 +402,7 @@ export interface ProviderServiceOffer {
   verifiedBadge: boolean;
   rating: number;
   reviewsCount: number;
+  serviceArea?: AdministrativeArea;
   proximityDistance: string;
   estimatedArrival: string;
 }
@@ -420,6 +431,8 @@ export interface CommerceItem {
   deliveryEta: string;
   proximityDistance?: string;
   coordinates?: { lat: number; lng: number };
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
   isOpen?: boolean;
   openingHoursLabel?: string;
   prepMinutes?: number;
@@ -447,6 +460,7 @@ export interface ProductVariantOption {
   id: string;
   label: string;
   values: string[];
+  swatches?: Record<string, string>;
 }
 
 export interface ProductVariantOffer {
@@ -559,6 +573,7 @@ export interface VendorApplication {
   taxIdentificationNumber: string;
   category: VendorCategory;
   storeAddress: string;
+  serviceArea?: AdministrativeArea;
   contactEmail: string;
   contactPhone: string;
   payoutAccountType: 'Bank Account' | 'Mobile Banking';
@@ -589,6 +604,10 @@ export interface SavedAddress {
   streetAddress: string;
   apartment?: string;
   city: string;
+  division?: string;
+  district?: string;
+  upazila?: string;
+  thana?: string;
   postalCode?: string;
   tag: 'home' | 'office' | 'other';
   isDefault: boolean;
@@ -623,6 +642,7 @@ export interface VendorStoreSettings {
   helplinePhone: string;
   supportEmail: string;
   storeAddress: string;
+  serviceArea?: AdministrativeArea;
   logoUrl?: string;
   bannerUrl?: string;
   tradeLicenseNumber: string;

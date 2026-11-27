@@ -17,6 +17,7 @@ import { CommerceItem, PortalTab, SocialPost } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SUPER_PORTALS } from '@/data/portalsData';
 import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
+import { Button } from '@/components/shared/Button';
 
 export type SearchScope = 'all' | 'b2c' | 'b2b' | 'posts';
 
@@ -348,13 +349,15 @@ export const MegaSearch: React.FC<MegaSearchProps> = ({
               <p className="text-xs font-bold text-[var(--pm-text)]">
                 {isBn ? `"${query}" এর জন্য সরাসরি কিছু পাওয়া যায়নি` : `No direct hits for "${query}"`}
               </p>
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 onClick={() => handlePickTerm(query.trim())}
-                className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer"
+                className="font-bold"
               >
                 {isBn ? 'পুরো মার্কেটপ্লেসে খুঁজুন' : 'Apply Filter to Feed'}
-              </button>
+              </Button>
             </div>
           )}
 

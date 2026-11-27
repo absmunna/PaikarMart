@@ -165,7 +165,11 @@ interface LogisticsState {
   fetchQuote: (req: LogisticsQuoteRequest) => Promise<LogisticsQuoteBreakdown>;
   fetchShipment: (orderId: string, dropLocation?: string) => Promise<ShipmentRecord>;
   fetchAllShipments: () => Promise<ShipmentRecord[]>;
-  assignCourierPartner: (orderId: string, partner: CourierPartner) => Promise<void>;
+  assignCourierPartner: (
+    orderId: string,
+    partner: CourierPartner,
+    assignedCourierUid?: string
+  ) => Promise<void>;
   advanceShipmentCheckpoint: (
     orderId: string,
     status: ShipmentStatus,
@@ -249,13 +253,21 @@ export const useLogisticsStore = create<LogisticsState>()(
         return shipment;
       },
 
-      assignCourierPartner: async (orderId, partner) => {
-        const remote = await logisticsOrderApiClient.assignCourier(orderId, partner);
+      assignCourierPartner: async (orderId, partner, assignedCourierUid) => {
+        const remote = await logisticsOrderApiClient.assignCourier(
+          orderId,
+          partner,
+          assignedCourierUid
+        );
         if (remote) {
           set((state) => ({
             shipments: { ...state.shipments, [orderId]: remote }
           }));
           return;
+        }
+
+        if (assignedCourierUid) {
+          throw new Error('Courier assignment could not be saved. Check access and try again.');
         }
 
         set((state) => {
@@ -273,7 +285,7 @@ export const useLogisticsStore = create<LogisticsState>()(
                 id: `cp_${Date.now()}`,
                 status: current.status,
                 message: `Waybill assigned to ${partner} Express Network`,
-                location: current.pickupLocation,
+                location: current.pickupLocation || 'Dhaka Logistics Hub',
                 time: new Date().toISOString()
               },
               ...current.checkpoints
@@ -339,7 +351,7 @@ export const useLogisticsStore = create<LogisticsState>()(
         if (payload.otp.trim() !== current.deliveryOtp) {
           return {
             ok: false,
-            error: `Invalid Delivery OTP. Check shipment code (${current.deliveryOtp}).`
+            error: 'Invalid Delivery OTP.'
           };
         }
 
@@ -363,7 +375,7 @@ export const useLogisticsStore = create<LogisticsState>()(
               id: `cp_${Date.now()}`,
               status: 'DELIVERED',
               message: `3-Step POD verified via OTP ${payload.otp.trim()}`,
-              location: current.dropLocation,
+              location: current.dropLocation || 'Delivery location',
               time: now
             },
             ...current.checkpoints

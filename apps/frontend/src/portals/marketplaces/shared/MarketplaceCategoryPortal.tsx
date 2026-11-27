@@ -3,8 +3,8 @@ import { Package, RotateCcw, SlidersHorizontal, Zap } from 'lucide-react';
 import { CommerceItem, Order, PortalTab, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLocationSettings } from '@/contexts';
-import { computeLocalGeofenceMeta } from '@/features/logistics';
 import { DEFAULT_AVATAR_URL } from '@/shared/utils';
+import { getListingAdministrativeArea, matchesAdministrativeArea } from '@/utils/administrativeArea';
 import {
   CommerceProductCard,
   FlashDealsSection,
@@ -71,7 +71,7 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
   onResetChildPortal,
 }) => {
   const { language } = useLanguage();
-  const { activeLocation, coordinates, radarRadiusKm } = useLocationSettings();
+  const { activeLocation, activeArea } = useLocationSettings();
   const isBn = language === 'bn';
 
   const [sortBy, setSortBy] = useState<'recommended' | 'price_low' | 'price_high' | 'rating'>('recommended');
@@ -85,14 +85,6 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
     setVisibleCount(12);
   }, [config.portalId, externalActivePortal, externalSubCategory, externalSearchQuery, sortBy]);
 
-  const hyperlocalMetaMap = useMemo(() => {
-    const map: Record<string, ReturnType<typeof computeLocalGeofenceMeta>> = {};
-    items.forEach((item, idx) => {
-      map[item.id] = computeLocalGeofenceMeta(item, coordinates, radarRadiusKm, idx);
-    });
-    return map;
-  }, [items, coordinates, radarRadiusKm]);
-
   const filteredItems = useMemo(() => {
     const normalizedSub = (externalSubCategory || 'all').trim().toLowerCase();
     const normalizedQuery = externalSearchQuery.trim().toLowerCase();
@@ -101,10 +93,12 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
       .filter((item: any) => {
         if (config.itemMatcher && !config.itemMatcher(item)) return false;
 
-        const geoMeta = hyperlocalMetaMap[item.id];
         if (externalActivePortal === 'retail' && item.tradeMode !== 'retail') return false;
         if (externalActivePortal === 'wholesale' && item.tradeMode !== 'wholesale') return false;
-        if (externalActivePortal === 'nearby' && (!geoMeta || !geoMeta.withinRadius)) return false;
+        if (
+          externalActivePortal === 'nearby' &&
+          !matchesAdministrativeArea(activeArea, getListingAdministrativeArea(item))
+        ) return false;
         if (externalActivePortal === 'services' && item.type !== 'service') return false;
         if (externalActivePortal === 'demand' && !item.isDemandRequest && !item.badge?.includes('Demand')) return false;
         if (externalActivePortal === 'used' && !item.isUsedItem && !item.badge?.includes('Used')) return false;
@@ -123,14 +117,14 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
       })
       .sort((a, b) => {
         if (externalActivePortal === 'nearby') {
-          return (hyperlocalMetaMap[a.id]?.distanceKm ?? 99) - (hyperlocalMetaMap[b.id]?.distanceKm ?? 99);
+          return (b.rating || 0) - (a.rating || 0);
         }
         if (sortBy === 'price_low') return a.price - b.price;
         if (sortBy === 'price_high') return b.price - a.price;
         if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
         return 0;
       });
-  }, [items, hyperlocalMetaMap, config, externalActivePortal, externalSubCategory, externalSearchQuery, sortBy]);
+  }, [items, activeArea, config, externalActivePortal, externalSubCategory, externalSearchQuery, sortBy]);
 
   const visibleItems = filteredItems.slice(0, visibleCount);
 
@@ -253,22 +247,13 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
           <button
             type="button"
             onClick={() => onSelectTab?.('wholesale')}
-            className="px-3.5 py-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold hover:border-[var(--pm-accent)] hover:text-[var(--pm-accent)] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            className="min-h-10 px-3.5 py-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold hover:border-[var(--pm-accent)] hover:text-[var(--pm-accent)] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Package className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
             <span>{isBn ? 'পাইকারি' : 'Wholesale'}</span>
           </button>
         </div>
       </div>
-
-      {config.showVouchers !== false && (
-        <VoucherDealsStrip
-          isBn={isBn}
-          appliedVoucherCode={appliedVoucherCode}
-          onSelectVoucher={(code) => onSelectVoucher?.(code)}
-          onOpenPrescriptionModal={() => setIsPrescriptionModalOpen(true)}
-        />
-      )}
 
       {config.showFlashDeals && !isLoading && (
         <FlashDealsSection
@@ -305,12 +290,24 @@ export const MarketplaceCategoryPortal: React.FC<MarketplaceCategoryPortalProps>
                   onAddToCart={handleAddWithFeedback}
                   onBuyNow={handleBuyNow}
                   onSelectTab={onSelectTab}
+                  showServiceArea={externalActivePortal === 'nearby'}
                 />
+                {config.showVouchers !== false && (idx === 1 || (visibleItems.length === 1 && idx === 0)) && (
+                  <VoucherDealsStrip
+                    key={`voucher_${config.portalId}`}
+                    isBn={isBn}
+                    appliedVoucherCode={appliedVoucherCode}
+                    onSelectVoucher={(code) => onSelectVoucher?.(code)}
+                    onOpenPrescriptionModal={() => setIsPrescriptionModalOpen(true)}
+                    className="col-span-full"
+                  />
+                )}
                 {showAdAfter && (
                   <PromotionalAdCard
                     key={`ad_card_${config.portalId}_${idx}`}
                     index={Math.floor((idx + 1) / 4) - 1}
                     isBn={isBn}
+                    className="col-span-full"
                   />
                 )}
               </React.Fragment>

@@ -42,7 +42,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
   onCompleteOnboarding
 }) => {
   const { language } = useLanguage();
-  const { firebaseUser, refetchProfile } = useAuth();
+  const { firebaseUser } = useAuth();
   const isBn = language === 'bn';
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -65,9 +65,9 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
   const [nidNumber, setNidNumber] = useState('');
   const [businessRegNumber, setBusinessRegNumber] = useState('');
   const [tinNumber, setTinNumber] = useState('');
-  const [tradeLicenseFileName, setTradeLicenseFileName] = useState('Trade_License_2026.pdf');
+  const [tradeLicenseFileName, setTradeLicenseFileName] = useState('');
   const [tradeLicenseUrl, setTradeLicenseUrl] = useState<string | undefined>(undefined);
-  const [nidFileName, setNidFileName] = useState('NID_Verification_Scan.jpg');
+  const [nidFileName, setNidFileName] = useState('');
   const [nidFileUrl, setNidFileUrl] = useState<string | undefined>(undefined);
   const [uploadingDocType, setUploadingDocType] = useState<'nid' | 'trade' | null>(null);
 
@@ -122,7 +122,10 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
     }
 
     const uid = firebaseUser?.uid || applicantId;
-    if (!uid || uid === 'user_me') return;
+    if (!uid || uid === 'user_me') {
+      setErrorMsg(isBn ? 'ডকুমেন্ট আপলোড করতে আগে সাইন ইন করুন।' : 'Sign in before uploading documents.');
+      return;
+    }
 
     try {
       setUploadingDocType(docKind);
@@ -130,18 +133,22 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
       if (uploadedUrl) {
         if (docKind === 'nid') setNidFileUrl(uploadedUrl);
         else setTradeLicenseUrl(uploadedUrl);
+      } else {
+        setErrorMsg(isBn ? 'ডকুমেন্ট আপলোড করা যায়নি। আবার চেষ্টা করুন।' : 'Document upload failed. Try again.');
       }
     } catch (err) {
-      if (err instanceof Error && (err.message.includes('6 MB') || err.message.includes('Unsupported'))) {
-        setErrorMsg(err.message);
-      }
-      // Keep filename reference cleanly if cloud storage is not provisioned in local preview
+      setErrorMsg(err instanceof Error ? err.message : (isBn ? 'ডকুমেন্ট আপলোড ব্যর্থ হয়েছে।' : 'Document upload failed.'));
     } finally {
       setUploadingDocType(null);
     }
   };
 
   const handleFinishOnboarding = async () => {
+    if (!firebaseUser) {
+      setErrorMsg(isBn ? 'সেলার আবেদন জমা দিতে আগে সাইন ইন করুন।' : 'Sign in before submitting a seller application.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
@@ -182,8 +189,8 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
         legalEntityName: (legalEntityName || storeName).trim(),
         sellerTier,
         nidNumber: nidNumber.trim(),
-        businessRegistrationNumber: businessRegNumber.trim() || `TRD-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        taxIdentificationNumber: tinNumber.trim() || 'TIN-PENDING',
+        businessRegistrationNumber: businessRegNumber.trim(),
+        taxIdentificationNumber: tinNumber.trim(),
         activeRoles: selectedRoles,
         payoutAccount: {
           type: payoutType,
@@ -195,11 +202,10 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
         location: storeLocation.trim()
       });
 
-      await refetchProfile().catch(() => null);
       onCompleteOnboarding(response.vendorProfile);
       onClose();
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Unable to submit KYC registration.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to submit KYC registration.');
     } finally {
       setIsSubmitting(false);
     }
@@ -238,35 +244,45 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
     }
   ];
 
-  const STEP_TITLES = [
+  const STEP_TITLES_EN = [
     'Store & Tier',
     'Capabilities',
     'NID & Trade KYC',
     'Payout Account',
     'Review & Submit'
   ];
+  const STEP_TITLES_BN = [
+    'স্টোর ও ধরন',
+    'ব্যবসার সুবিধা',
+    'এনআইডি ও কেওয়াইসি',
+    'পেআউট অ্যাকাউন্ট',
+    'পর্যালোচনা ও জমা'
+  ];
+  const STEP_SHORT_TITLES = isBn
+    ? ['স্টোর', 'ব্যবসা', 'যাচাই', 'পেআউট', 'পর্যালোচনা']
+    : ['Store', 'Business', 'Verify', 'Payout', 'Review'];
+  const stepTitles = isBn ? STEP_TITLES_BN : STEP_TITLES_EN;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs animate-fadeIn">
       <div role="dialog" aria-modal="true" aria-labelledby="merchant-onboarding-title" className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-5 border-b border-[var(--pm-border)] flex items-center justify-between shrink-0 bg-[var(--pm-surface)]">
+        <div className="p-3 sm:p-5 border-b border-[var(--pm-border)] flex items-center justify-between shrink-0 bg-[var(--pm-surface)]">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center shrink-0">
               <Store className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs text-[var(--pm-muted)]">
-                <h3 id="merchant-onboarding-title" className="text-base font-bold text-[var(--pm-text)] truncate">
-                  {isBn ? 'মার্চেন্ট কেওয়াইসি (KYC) অনবোর্ডিং' : '5-Step Merchant KYC Onboarding'}
+              <div className="flex items-center gap-2">
+                <h3 id="merchant-onboarding-title" className="text-sm sm:text-base font-bold text-[var(--pm-text)] truncate">
+                  {isBn ? 'সেলার অ্যাকাউন্ট তৈরি' : 'Create seller account'}
                 </h3>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono font-bold text-[var(--pm-accent)]">
-                  Step {step}/5
+                <span className="shrink-0 text-[11px] font-semibold text-[var(--pm-accent)]">
+                  {isBn ? `ধাপ ${step}/৫` : `Step ${step} of 5`}
                 </span>
               </div>
               <p className="text-xs text-[var(--pm-muted)] truncate">
-                {STEP_TITLES[step - 1]} · One Unified Account for Retail, B2B, Fleet & Services
+                {isBn ? 'পাঁচ ধাপে আপনার সেলার প্রোফাইল তৈরি করুন' : 'Set up your seller profile in five steps'}
               </p>
             </div>
           </div>
@@ -282,8 +298,8 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
         </div>
 
         {/* Step Progress Bar */}
-        <div className="px-5 pt-3 pb-2 border-b border-[var(--pm-border)] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {STEP_TITLES.map((title, idx) => {
+        <div className="px-3 sm:px-5 pt-3 pb-2 border-b border-[var(--pm-border)] flex items-center gap-1 overflow-x-auto no-scrollbar">
+          {stepTitles.map((title, idx) => {
             const num = (idx + 1) as 1 | 2 | 3 | 4 | 5;
             const active = step === num;
             const done = step > num;
@@ -293,7 +309,8 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
                 type="button"
                 onClick={() => num < step && setStep(num)}
                 disabled={num > step}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                aria-label={`${num}. ${title}`}
+                className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-colors ${
                   active
                     ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
                     : done
@@ -301,7 +318,8 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
                     : 'text-[var(--pm-muted)]'
                 }`}
               >
-                {num}. {title}
+                <span className="sm:hidden">{num}. {STEP_SHORT_TITLES[idx]}</span>
+                <span className="hidden sm:inline">{num}. {title}</span>
               </button>
             );
           })}
@@ -615,7 +633,7 @@ export const MultiRoleOnboardingModal: React.FC<MultiRoleOnboardingModalProps> =
                   <span className="font-mono font-bold text-[var(--pm-text)] text-right">{nidNumber}</span>
                   <span>Trade License:</span>
                   <span className="font-mono text-[var(--pm-text)] text-right">
-                    {businessRegNumber || 'Auto-Generated Ref'}
+                    {businessRegNumber || (isBn ? 'দেওয়া হয়নি' : 'Not provided')}
                   </span>
                   <span>Payout Settlement:</span>
                   <span className="font-mono font-bold text-[var(--pm-text)] text-right">

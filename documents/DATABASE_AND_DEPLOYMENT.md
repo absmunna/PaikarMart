@@ -30,7 +30,7 @@ PaikarMart uses a multi-layer persistence architecture designed to combine stric
 5. **`public.catalog_submissions`:** AI pre-audit scores (`ai_confidence_score`, `ai_audit_notes`) + moderator review status (`pending_review | approved | rejected`).
 6. **`public.master_services` & `public.provider_service_offers`:** Service checklists, estimated duration, provider `base_rate`, and `service_radius_km`.
 7. **`public.social_posts` & `public.social_comments`:** Author link, media URL, optional `tagged_product_id`, reaction counters, and moderation controls.
-8. **`public.orders`, `escrow_records`, & `shipment_waybills`:** Idempotent order placement (`idempotency_key`), itemized JSONB snapshot, BDT totals (`subtotal`, `delivery_fee`, `tax`, `total`), `status`, 4-digit `delivery_otp`, courier partner, and POD status.
+8. **`public.orders`, `escrow_records`, & `shipment_waybills`:** Idempotent order placement (`idempotency_key`) with a separate customer-facing `public_order_id`; itemized JSONB snapshot, BDT totals (`subtotal`, `delivery_fee`, `tax`, `total`), `status`, 4-digit `delivery_otp`, courier partner, and POD status. Apply `supabase/migrations/20261127_persist_public_order_ids.sql` to existing databases.
 
 ### B. Zero-Trust Row Level Security (`supabase/schema.sql`) & `firestore.rules`
 * **Default Deny:** All Firestore collections deny read/write unless explicitly matched (`allow read, write: if false;`).
@@ -69,7 +69,9 @@ PaikarMart uses a multi-layer persistence architecture designed to combine stric
 
 ## 4. Build Pipeline & Multi-Cloud Deployment Architecture
 
-PaikarMart supports **Single-Server Monolithic Cloud Run / Render** deployment AND **Split Multi-Cloud Free-Tier** deployment from the exact same codebase:
+The repository contains configuration and documentation for multiple deployment topologies. The approved no-billing target is:
+
+**Approved no-billing target (2026-11-26):** Vercel Free frontend, Render Free backend, Supabase Free PostgreSQL, and Firebase Spark without a billing account. Use only Firebase capabilities that are currently available without enabling billing. Firebase Hosting and Cloud Run are not selected. Verify plan terms and current quotas before production; stop if a requested capability requires a paid plan or billing activation.
 
 ### A. Root Build & Runtime Commands (`package.json`)
 ```json
@@ -88,29 +90,26 @@ PaikarMart supports **Single-Server Monolithic Cloud Run / Render** deployment A
 
 ### B. Deployment Topologies
 
-1. **AI Studio / Google Cloud Run (Unified Full-Stack Container):**
-   * Runs `npm run build` followed by Express serving `apps/frontend/dist` and `/api/*` on port `3000`.
-   * Injects `GEMINI_API_KEY` and `APP_URL` securely at runtime.
-2. **Render Web Service (`render.yaml`) — Dedicated API + Static Server:**
+1. **Render Free Web Service (`render.yaml`) — Selected backend:**
    * `buildCommand`: `npm install && npm run build`
    * `startCommand`: `node server.js`
    * Configures `NODE_ENV=production`, `PORT=10000`, `SUPABASE_*`, `FIREBASE_PROJECT_ID`, `GEMINI_API_KEY`.
    * Exposes `/api/health` returning backend, database, auth, and frontend connectivity diagnostics.
-3. **Firebase Hosting (`firebase.json`) + Render Backend:**
-   * Serves `apps/frontend/dist` globally via CDN with SPA fallback rewrite `** -> /index.html`.
-   * Deploys `firestore.rules` alongside hosting updates (`"firestore": { "rules": "firestore.rules" }`).
-4. **Vercel (`vercel.json`) + Render Backend:**
+2. **Vercel Free (`vercel.json`) + Render Free — Selected frontend/API topology:**
    * Builds to `apps/frontend/dist` and proxies `/api/(.*)` directly to `https://paikarmart-backend.onrender.com/api/$1` while rewriting SPA routes `/(.*)` to `/index.html`.
+3. **Firebase Spark — Identity/data integrations only where no-billing access is available:**
+   * Keep Firebase rules and existing integrations; do not enable billing, upgrade to Blaze, or use Firebase Hosting for this deployment.
+4. **Unselected alternatives:** Cloud Run unified hosting and Firebase Hosting are not part of the approved no-billing deployment.
 
 ---
 
 ## 5. Pre-Deployment Production Checklist
 
 * [ ] Rotate or verify all secrets in cloud host env panel (`GEMINI_API_KEY`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`); `.env` is gitignored.
-* [x] Sync `packages/database/prisma/schema.prisma` 1:1 with `supabase/schema.sql` (apply in Supabase SQL Editor or `npx prisma migrate deploy` inside `packages/database`).
-* [x] Harden and deploy `firestore.rules` (Zero-Trust + Zero-PII `public_profiles` + strict `request.time` & owner checks).
+* [ ] Review and reconcile `packages/database/prisma/schema.prisma` with `supabase/schema.sql` after a table/RLS diff; apply reviewed additive migrations, and never apply an unreviewed full-schema migration.
+* [ ] Verify deployed `firestore.rules` and Firebase product availability on Spark without billing.
 * [x] Align `vercel.json` (`apps/frontend/dist`), `firebase.json` (`firestore.rules`), `render.yaml` (`node server.js`), and `package.json` (`start: node server.js`).
-* [x] Confirm all 3 build/typecheck gates exit `0` (`npm run build`, `npm run lint`, backend `npx tsc --noEmit`).
+* [ ] Confirm frontend/backend build and type-check gates pass in the deployment environment.
 
 ## Recent Updates (2026-11-21)
 

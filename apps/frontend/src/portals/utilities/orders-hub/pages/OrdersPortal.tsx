@@ -5,7 +5,7 @@ import { StoreSalesOrdersTab } from '@/portals/utilities/orders-hub/components/S
 import { OrderDetailsModal } from '@/portals/utilities/orders-hub/components/OrderDetailsModal';
 import { OrderDashboard } from '@/portals/utilities/orders-hub/components/OrderDashboard';
 import { GuestOrderTracker } from '@/portals/utilities/orders-hub/components/GuestOrderTracker';
-import { ShoppingBag, Store, Sparkles, ArrowRight, ShieldCheck, Truck } from 'lucide-react';
+import { ShoppingBag, Store, ShieldCheck, Truck } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useLogisticsStore } from '@/features/logistics';
 
@@ -15,7 +15,6 @@ interface OrdersPortalProps {
   onUpdateOrder: (updatedOrder: Order) => void;
   onReorderOrder?: (newOrder: Order) => void;
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal: () => void;
 }
 
 export const OrdersPortal: React.FC<OrdersPortalProps> = ({
@@ -24,7 +23,6 @@ export const OrdersPortal: React.FC<OrdersPortalProps> = ({
   onUpdateOrder,
   onReorderOrder,
   onSelectTab,
-  onOpenVendorModal
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -102,16 +100,6 @@ export const OrdersPortal: React.FC<OrdersPortalProps> = ({
               <span>{isBn ? 'ট্রানজিট ও লজিস্টিকস' : 'Transit & Logistics'}</span>
             </button>
 
-            {!currentUser.isVendor && (
-              <button
-                type="button"
-                onClick={onOpenVendorModal}
-                className="px-4 py-2 rounded-[2rem] bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 active-scale cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isBn ? 'ভেন্ডর রেজিস্টার করুন' : 'Become a Vendor'}</span>
-              </button>
-            )}
           </div>
         </div>
 
@@ -172,19 +160,10 @@ export const OrdersPortal: React.FC<OrdersPortalProps> = ({
             </h3>
             <p className="text-xs text-[var(--pm-muted)] leading-relaxed">
               {isBn
-                ? 'একই একাউন্ট থেকে ক্রেতা ও বিক্রেতা উভয় সুবিধা পেতে বিনামূল্যে পাইকারমার্ট মার্চেন্ট ভেন্ডর রেজিস্ট্রেশন সম্পন্ন করুন।'
-                : 'Register your business store to receive customer orders, manage courier dispatches, and track store revenue.'}
+                ? 'বিক্রেতা হিসেবে নিবন্ধন বা অর্ডার পরিচালনা করতে সাইডবার থেকে “আমার ব্যবসা” খুলুন।'
+                : 'To register as a seller or manage sales orders, open My Business in the sidebar.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onOpenVendorModal}
-            className="px-6 py-3 rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold transition-all shadow-lg inline-flex items-center gap-2 active-scale cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>{isBn ? 'ফ্রি ভেন্ডর রেজিস্ট্রেশন করুন' : 'Start Free Merchant Onboarding'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
       )}
 

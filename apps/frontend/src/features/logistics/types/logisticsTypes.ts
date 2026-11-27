@@ -58,18 +58,31 @@ export interface ShipmentRecord {
   courierPartner: CourierPartner;
   trackingNumber: string;
   status: ShipmentStatus;
-  deliveryOtp: string;
+  deliveryOtp?: string;
   checkpoints: ShipmentCheckpoint[];
-  rider: CourierRider;
+  rider?: CourierRider;
   estimatedDelivery: string;
   etaText: string;
-  distanceRemaining: string;
-  pickupLocation: string;
-  dropLocation: string;
-  shippingFee: number;
+  distanceRemaining?: string;
+  pickupLocation?: string;
+  dropLocation?: string;
+  shippingFee?: number;
   podReceipt?: PodReceipt;
   updatedAt: string;
 }
+
+export type PublicShipmentRecord = Pick<
+  ShipmentRecord,
+  | 'id'
+  | 'orderId'
+  | 'courierPartner'
+  | 'trackingNumber'
+  | 'status'
+  | 'checkpoints'
+  | 'estimatedDelivery'
+  | 'etaText'
+  | 'updatedAt'
+>;
 
 export interface FleetVehicle {
   id: string;

@@ -3,6 +3,7 @@ import {
   TRUST_LEVEL_DEFINITIONS,
   isGovernanceRole,
   normalizeHandle,
+  type AdministrativeArea,
   type BusinessRole,
   type KycStatus,
   type PublicProfileProjection,
@@ -43,6 +44,8 @@ export interface ServerVendorProfile {
   rating: number;
   totalSales: number;
   location: string;
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
   isOpen?: boolean;
   openingHoursLabel?: string;
   coordinates?: { lat: number; lng: number };
@@ -98,6 +101,8 @@ const seededStores: ServerVendorProfile[] = [
     rating: 4.9,
     totalSales: 482500,
     location: 'Bashundhara City, Dhaka',
+    storeAddress: 'Bashundhara City, Dhaka',
+    serviceArea: { division: 'Dhaka', district: 'Dhaka' },
     isOpen: true,
     openingHoursLabel: '10:00 AM – 9:30 PM',
     coordinates: { lat: 23.751, lng: 90.3905 },
@@ -132,6 +137,8 @@ const seededStores: ServerVendorProfile[] = [
     rating: 4.8,
     totalSales: 1940000,
     location: 'Chawkbazar, Old Dhaka',
+    storeAddress: 'Chawkbazar, Old Dhaka',
+    serviceArea: { division: 'Dhaka', district: 'Dhaka', thana: 'Chawkbazar' },
     isOpen: true,
     openingHoursLabel: '8:30 AM – 8:00 PM',
     coordinates: { lat: 23.7152, lng: 90.3965 },
@@ -167,6 +174,8 @@ const seededStores: ServerVendorProfile[] = [
     rating: 4.95,
     totalSales: 6240000,
     location: 'BSCIC Industrial Area, Gazipur',
+    storeAddress: 'BSCIC Industrial Area, Gazipur',
+    serviceArea: { division: 'Dhaka', district: 'Gazipur' },
     isOpen: true,
     openingHoursLabel: '8:00 AM – 6:00 PM',
     coordinates: { lat: 23.9999, lng: 90.4203 },
@@ -232,6 +241,8 @@ export interface VendorSubmissionPayload {
   };
   documents?: ServerVendorDocument[];
   location?: string;
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
 }
 
 export function computeTrustLevel(payload: {
@@ -339,6 +350,8 @@ export function submitVendorKycApplication(payload: VendorSubmissionPayload): {
     rating: 5.0,
     totalSales: 0,
     location: payload.location || 'Dhaka Central Commercial Hub',
+    storeAddress: payload.storeAddress,
+    serviceArea: payload.serviceArea,
     isOpen: true,
     openingHoursLabel: '9:00 AM – 9:00 PM',
     createdAt: new Date().toISOString(),
@@ -434,6 +447,8 @@ export async function syncKycSubmissionToDatabase(
           kyc_status: vendorProfile.kycStatus,
           category: mappedCategory,
           commission_tier: vendorProfile.commissionTier,
+          store_address: vendorProfile.storeAddress || vendorProfile.location,
+          service_area: vendorProfile.serviceArea || {},
           status: 'pending',
           is_verified: false,
         })
@@ -452,6 +467,8 @@ export async function syncKycSubmissionToDatabase(
           kyc_status: vendorProfile.kycStatus,
           category: mappedCategory,
           commission_tier: vendorProfile.commissionTier,
+          store_address: vendorProfile.storeAddress || vendorProfile.location,
+          service_area: vendorProfile.serviceArea || {},
           status: 'pending',
           is_verified: false,
         })
@@ -495,7 +512,7 @@ export async function getKycApplicationsForUser(applicantAuthUid: string): Promi
       if (profileUuid) {
         const { data } = await supabaseAdmin
           .from('stores')
-          .select('id, store_name, kyc_status, seller_tier, is_verified, status, commission_tier, created_at')
+          .select('id, store_name, kyc_status, seller_tier, is_verified, status, commission_tier, store_address, service_area, created_at')
           .eq('owner_id', profileUuid)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -936,6 +953,57 @@ export async function getStoreOwnerId(storeId: string): Promise<string | null> {
   return vendorStoreRegistry.get(storeId)?.applicantId || null;
 }
 
+export async function updateVendorServiceArea(
+  authUid: string,
+  storeAddress: string,
+  serviceArea: AdministrativeArea
+): Promise<{ storeAddress: string; serviceArea: AdministrativeArea }> {
+  const cleanArea: AdministrativeArea = {};
+  for (const field of ['division', 'district', 'upazila', 'thana', 'postalCode'] as const) {
+    const value = serviceArea[field];
+    if (typeof value === 'string' && value.trim()) {
+      cleanArea[field] = value.trim().slice(0, 80);
+    }
+  }
+  if (!cleanArea.division || !cleanArea.district) {
+    throw new Error('Division and district are required for local discovery.');
+  }
+  if (!supabaseAdmin) {
+    throw new Error('Vendor location storage is unavailable.');
+  }
+
+  const profileUuid = await resolveProfileUuidByAuthUid(authUid);
+  if (!profileUuid) throw new Error('Vendor profile was not found.');
+
+  const storeLookup = await supabaseAdmin
+    .from('stores')
+    .select('id')
+    .eq('owner_id', profileUuid)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (storeLookup.error) throw new Error('Unable to find the vendor storefront.');
+  if (!storeLookup.data?.id) throw new Error('No storefront is linked to this account.');
+
+  const normalizedAddress = storeAddress.trim().slice(0, 240);
+  const updated = await supabaseAdmin
+    .from('stores')
+    .update({ store_address: normalizedAddress, service_area: cleanArea })
+    .eq('id', storeLookup.data.id);
+  if (updated.error) throw new Error('Unable to save the storefront service area.');
+
+  const profile = Array.from(vendorStoreRegistry.values()).find(
+    (store) => store.applicantId === authUid
+  );
+  if (profile) {
+    profile.storeAddress = normalizedAddress;
+    profile.serviceArea = cleanArea;
+  }
+
+  invalidateAuthProfileCache(authUid);
+  return { storeAddress: normalizedAddress, serviceArea: cleanArea };
+}
+
 export async function listPublicStores(): Promise<PublicStoreSummary[]> {
   if (supabaseAdmin) {
     try {
@@ -1058,6 +1126,7 @@ export async function getPublicProfileByHandle(handleOrId: string): Promise<Publ
     storeId: matched.id,
     displayName: matched.storeName,
     location: matched.location,
+    serviceArea: matched.serviceArea,
     verified: matched.verified,
     trustLevel: matched.trustLevel,
     sellerTier: matched.sellerTier,

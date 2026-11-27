@@ -31,7 +31,6 @@ interface UtilityMixedFeedProps {
   onSelectTab: (tab: PortalTab) => void;
   onOpenWallet: () => void;
   onOpenNotifications: () => void;
-  onOpenSettings: () => void;
   onOpenCloudGuide: () => void;
 }
 
@@ -42,14 +41,20 @@ export const UtilityMixedFeed: React.FC<UtilityMixedFeedProps> = ({
   onSelectTab,
   onOpenWallet,
   onOpenNotifications,
-  onOpenSettings,
   onOpenCloudGuide,
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
   const navigate = useNavigate();
 
-  const registeredUtilityPortals = useMemo(() => getPortalsForHub('utility'), []);
+  const registeredUtilityPortals = useMemo(
+    () => getPortalsForHub('utility').filter((portal) => (
+      portal.id !== 'seller-central' &&
+      portal.id !== 'user-profile' &&
+      portal.id !== 'settings-center'
+    )),
+    []
+  );
 
   const handleOpenUtilityPortal = (portalId: string, entryRoute: string) => {
     if (portalId === 'wallet') {
@@ -60,24 +65,12 @@ export const UtilityMixedFeed: React.FC<UtilityMixedFeedProps> = ({
       onOpenNotifications();
       return;
     }
-    if (portalId === 'settings-center') {
-      onOpenSettings();
-      return;
-    }
     if (portalId === 'guide') {
       onOpenCloudGuide();
       return;
     }
     if (portalId === 'orders-hub') {
       onSelectTab('orders');
-      return;
-    }
-    if (portalId === 'seller-central') {
-      onSelectTab('vendor-dash');
-      return;
-    }
-    if (portalId === 'user-profile') {
-      onSelectTab('profile');
       return;
     }
     navigate(entryRoute);
@@ -90,12 +83,12 @@ export const UtilityMixedFeed: React.FC<UtilityMixedFeedProps> = ({
           {isBn ? 'ইউটিলিটি হাব · অ্যাকাউন্ট ককপিট' : 'Utility Hub · Account & Operations'}
         </p>
         <h1 className="mt-1 text-xl sm:text-2xl font-black tracking-tight">
-          {isBn ? 'অর্ডার, ওয়ালেট, সেলার সেন্ট্রাল ও সেটিংস' : 'Orders, Wallet, Seller Central & Settings'}
+          {isBn ? 'অর্ডার, ওয়ালেট ও নোটিফিকেশন' : 'Orders, Wallet & Notifications'}
         </h1>
         <p className="mt-1.5 text-xs sm:text-sm text-white/80">
           {isBn
-            ? 'আপনার অ্যাকাউন্ট, পেমেন্ট ব্যালেন্স, অর্ডার ট্র্যাকিং এবং ভেন্ডর টুলস এক জায়গা থেকে পরিচালনা করুন।'
-            : 'Manage your orders, BDT escrow wallet, storefront tools, notifications, and platform preferences in one cockpit.'}
+            ? 'আপনার অর্ডার, পেমেন্ট ব্যালেন্স ও নোটিফিকেশন এক জায়গা থেকে দেখুন।'
+            : 'Review your orders, BDT wallet balance, and notifications in one place.'}
         </p>
 
         <div className="mt-4 grid grid-cols-3 gap-2.5">

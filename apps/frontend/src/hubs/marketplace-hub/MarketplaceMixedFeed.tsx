@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CommerceItem, Order, PortalTab, User } from '@/types';
 import { type PortalFilterType } from '@/features/marketplace';
+import { ComingSoonNotice } from '@/components/shared/ComingSoonNotice';
 import { findRegisteredPortal } from '@/hubs/shared/portalRegistry';
 import {
   MarketplaceCategoryPortal,
   type MarketplacePortalBaseProps,
 } from '@/portals/marketplaces/shared/MarketplaceCategoryPortal';
 import { RetailPortal } from '@/portals/marketplaces/retail';
-import { WholesalePortal } from '@/portals/marketplaces/wholesale';
 import { GroceryPortal } from '@/portals/marketplaces/grocery';
 import { PharmacyPortal } from '@/portals/marketplaces/pharmacy';
 import { BrandShopsPortal } from '@/portals/marketplaces/brand-shops';
@@ -62,6 +62,8 @@ export const MarketplaceMixedFeed: React.FC<MarketplacePortalProps> = ({
 
   const fullDiscoveryItems = useMemo(() => {
     const base = [...items];
+    if (!import.meta.env.DEV) return base;
+
     const demandMock: CommerceItem = {
       id: 'demand_rfq_01',
       storeId: 'buyer_mizan_corp',
@@ -125,16 +127,7 @@ export const MarketplaceMixedFeed: React.FC<MarketplacePortalProps> = ({
   const registeredPortal = normalizedPortalId !== 'all' ? findRegisteredPortal(normalizedPortalId) : undefined;
 
   if (registeredPortal?.id === 'wholesale') {
-    return (
-      <WholesalePortal
-        items={items}
-        isLoading={isLoading}
-        onAddToCart={onAddToCart}
-        onSelectTab={onSelectTab}
-        externalSearchQuery={externalSearchQuery}
-        externalSubCategory={externalSubCategory}
-      />
-    );
+    return <ComingSoonNotice featureName="Wholesale and B2B" />;
   }
 
   const ChildPortalComponent = registeredPortal ? MARKETPLACE_CHILD_VIEWS[registeredPortal.id] : undefined;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bike, Truck, Package, Zap, Car } from 'lucide-react';
 import { CommerceItem } from '@/types';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface RideOptionCardProps {
   ride: CommerceItem;
@@ -26,11 +27,11 @@ export const getRideIcon = (subCat?: string) => {
 
 export const RideOptionCard: React.FC<RideOptionCardProps> = ({ ride, onClick }) => {
   return (
-    <div
+    <ContentCard
       onClick={() => onClick(ride)}
-      className="group bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-[2rem] p-4 sm:p-5 flex items-center gap-4 sm:gap-5 cursor-pointer hover:border-[var(--pm-accent)] hover:shadow-lg transition-all duration-200 active-scale"
+      className="group p-4 sm:p-5 flex items-center gap-4 sm:gap-5 cursor-pointer hover:border-[var(--pm-accent)] hover:shadow-lg transition-all duration-200 active-scale"
     >
-      <div className="relative w-20 h-16 sm:w-28 sm:h-20 rounded-[1.25rem] bg-[var(--pm-surface)] flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+      <ContentCardMedia className="group flex h-16 w-20 shrink-0 items-center justify-center rounded-[1.25rem] shadow-xs sm:h-20 sm:w-28">
         <img
           src={ride.imageUrl}
           alt={ride.title}
@@ -39,7 +40,7 @@ export const RideOptionCard: React.FC<RideOptionCardProps> = ({ ride, onClick })
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-      </div>
+      </ContentCardMedia>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-xs text-[var(--pm-accent)] font-bold mb-1">
@@ -76,6 +77,6 @@ export const RideOptionCard: React.FC<RideOptionCardProps> = ({ ride, onClick })
           <span>Book</span>
         </button>
       </div>
-    </div>
+    </ContentCard>
   );
 };

@@ -89,14 +89,14 @@ export const MegaSearchPanel: React.FC<MegaSearchPanelProps> = ({
           }}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full pl-10 pr-9 py-2.5 bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-xl text-sm text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--pm-accent)]/50 shadow-xs"
+          className="w-full pl-10 pr-12 py-2.5 bg-[var(--pm-card)] border border-[var(--pm-border)] rounded-xl text-sm text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--pm-accent)]/50 shadow-xs"
         />
         {searchQuery && (
           <button
             type="button"
             onClick={() => onSearchChange('')}
             aria-label="Clear search"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--pm-muted)] hover:text-[var(--pm-text)] cursor-pointer"
+            className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-lg text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -109,7 +109,7 @@ export const MegaSearchPanel: React.FC<MegaSearchPanelProps> = ({
                 <Clock className="w-3.5 h-3.5" />
                 {isBn ? 'সাম্প্রতিক সার্চ' : 'Recent Searches'}
               </span>
-              <button type="button" onClick={clearRecent} className="hover:text-[var(--pm-text)] cursor-pointer">
+              <button type="button" onClick={clearRecent} className="min-h-10 px-2 hover:text-[var(--pm-text)] cursor-pointer">
                 {isBn ? 'মুছুন' : 'Clear'}
               </button>
             </div>
@@ -122,7 +122,7 @@ export const MegaSearchPanel: React.FC<MegaSearchPanelProps> = ({
                     e.preventDefault();
                     applyKeyword(term);
                   }}
-                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--pm-surface)] text-xs font-semibold text-[var(--pm-text)] truncate cursor-pointer"
+                  className="min-h-10 text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--pm-surface)] text-xs font-semibold text-[var(--pm-text)] truncate cursor-pointer"
                 >
                   {term}
                 </button>
@@ -142,7 +142,7 @@ export const MegaSearchPanel: React.FC<MegaSearchPanelProps> = ({
             key={item.query}
             type="button"
             onClick={() => applyKeyword(item.query)}
-            className="shrink-0 px-2.5 py-1 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[11px] font-semibold text-[var(--pm-text)] transition-colors cursor-pointer"
+            className="shrink-0 min-h-10 px-3 py-1 rounded-lg bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[11px] font-semibold text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             {isBn ? item.labelBn : item.labelEn}
           </button>

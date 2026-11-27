@@ -3,7 +3,6 @@ import {
   X,
   Trash2,
   ShoppingBag,
-  CheckCircle2,
   CreditCard,
   ArrowRight,
   Plus,
@@ -11,27 +10,18 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { CartItem, Order, User } from '@/types';
-import { GuestCheckoutForm } from '@/features/marketplace/components/GuestCheckoutForm';
 import { CheckoutSuccessSummary } from '@/features/marketplace/components/CheckoutSuccessSummary';
-import { AccountConversionPopup } from '@/features/marketplace/components/AccountConversionPopup';
+import { useAuth } from '@/features/auth';
 
-import { verifyUniqueUser } from '@/features/auth';
 import { getEffectiveUnitPrice } from '@/features/marketplace/utils/commerceUtils';
 import { retailApiClient } from '@/features/marketplace/services/retailApiClient';
-import { SandboxPaymentModal } from '@/features/wallet/components/SandboxPaymentModal';
-import type { PaymentGatewayProviderId } from '@/features/wallet/services/paymentGatewayClient';
-import { auth } from '@/lib/firebase';
-
-const handleVerifyUser = async (data: any) => {
-  return await verifyUniqueUser(data.email, data.phone);
-};
 
 interface CartCheckoutDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: CartItem[];
-  onUpdateQuantity: (productId: string, quantity: number) => void;
-  onRemoveItem: (productId: string) => void;
+  onUpdateQuantity: (productId: string, quantity: number, selectedVariant?: string, isWholesale?: boolean) => void;
+  onRemoveItem: (productId: string, selectedVariant?: string, isWholesale?: boolean) => void;
   onClearCart: () => void;
   onOrderPlaced: (order: Order) => void;
   currentUser?: User;
@@ -49,8 +39,9 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   currentUser,
   initialPromoCode,
 }) => {
+  const { firebaseUser } = useAuth();
+  const isAuthenticated = Boolean(firebaseUser);
   const [deliveryAddress, setDeliveryAddress] = useState('House 12, Road 4, Dhanmondi, Dhaka');
-  const [paymentMethod, setPaymentMethod] = useState<'Credit / Debit Card' | 'Mobile Wallet (bKash/Nagad/Rocket)' | 'Cash on Delivery'>('Cash on Delivery');
   const [promoCode, setPromoCode] = useState('');
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [discount, setDiscount] = useState(0);
@@ -60,12 +51,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [showConversion, setShowConversion] = useState(false);
-  const [guestData, setGuestData] = useState<any>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGatewayProviderId>('bkash');
-  const [isGatewayCheckoutOpen, setIsGatewayCheckoutOpen] = useState(false);
-  const [pendingCheckoutData, setPendingCheckoutData] = useState<any>(null);
 
   // States for registered user quick checkout
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -161,15 +147,19 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
   };
 
-  const submitOrderAfterPayment = async (data?: any, paymentTrxId?: string) => {
+  const submitCodOrder = async () => {
     if (items.length === 0) return;
+    if (!isAuthenticated) {
+      setCheckoutError('Sign in to place an order. Guest checkout is not available yet.');
+      return;
+    }
     setCheckoutError(null);
     setIsProcessing(true);
 
-    const resolvedAddress = data?.address || tempUserDetails.address || deliveryAddress;
-    const resolvedPayment = (data?.paymentMethod || paymentMethod) as Order['paymentMethod'];
-    const resolvedBuyerName = data?.name || tempUserDetails.name || currentUser?.name;
-    const resolvedBuyerPhone = data?.phone || tempUserDetails.phone || currentUser?.handle;
+    const resolvedAddress = tempUserDetails.address || deliveryAddress;
+    const resolvedPayment: Order['paymentMethod'] = 'Cash on Delivery';
+    const resolvedBuyerName = tempUserDetails.name || currentUser?.name;
+    const resolvedBuyerPhone = tempUserDetails.phone || currentUser?.handle;
     const idempotencyKey = `cart-${Date.now()}-${items.length}`;
 
     try {
@@ -181,7 +171,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
         tax,
         promoCode: appliedCode || undefined,
         deliveryAddress: resolvedAddress,
-        paymentMethod: paymentTrxId ? `${resolvedPayment} (${paymentTrxId})` : resolvedPayment,
+        paymentMethod: resolvedPayment,
         estimatedArrival: '30 - 45 Minutes',
         buyerName: resolvedBuyerName,
         buyerPhone: resolvedBuyerPhone,
@@ -217,12 +207,6 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
       setDiscount(0);
       setFreeShippingPromo(false);
       setPromoStatus(null);
-
-      const isGuest = !currentUser || (!currentUser.isVendor && !currentUser.id.startsWith('user_'));
-      if (isGuest && data) {
-        setGuestData(data);
-        setShowConversion(true);
-      }
     } catch (err: any) {
       setCheckoutError(err?.message || 'Unable to place order right now. Please try again.');
     } finally {
@@ -230,18 +214,8 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
     }
   };
 
-  const handlePlaceOrder = async (data?: any) => {
-    const chosenMethod = (data?.paymentMethod || paymentMethod) as string;
-    const isOnlineGateway = chosenMethod !== 'Cash on Delivery';
-
-    if (isOnlineGateway && auth.currentUser) {
-      setSelectedGateway(chosenMethod === 'Credit / Debit Card' ? 'sslcommerz' : selectedGateway);
-      setPendingCheckoutData(data || null);
-      setIsGatewayCheckoutOpen(true);
-      return;
-    }
-
-    await submitOrderAfterPayment(data);
+  const handlePlaceOrder = async () => {
+    await submitCodOrder();
   };
 
   return (
@@ -353,7 +327,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
                   return (
                     <div
-                      key={`${cartItem.product.id}-${cartItem.isWholesale ? 'w' : 'r'}`}
+                      key={`${cartItem.product.id}-${cartItem.isWholesale ? 'w' : 'r'}-${cartItem.selectedVariant || 'default'}`}
                       className="p-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-start gap-3"
                     >
                       <img
@@ -382,7 +356,7 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
 
                           <button
                             type="button"
-                            onClick={() => onRemoveItem(cartItem.product.id)}
+                            onClick={() => onRemoveItem(cartItem.product.id, cartItem.selectedVariant, cartItem.isWholesale)}
                             className="text-[var(--pm-muted)] hover:text-[var(--pm-danger)] p-1 transition-colors cursor-pointer"
                             title="Remove item"
                           >
@@ -399,7 +373,12 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                             <button
                               type="button"
                               disabled={cartItem.isWholesale && cartItem.quantity <= moq}
-                              onClick={() => onUpdateQuantity(cartItem.product.id, cartItem.quantity - (cartItem.isWholesale ? 10 : 1))}
+                              onClick={() => onUpdateQuantity(
+                                cartItem.product.id,
+                                cartItem.quantity - (cartItem.isWholesale ? 10 : 1),
+                                cartItem.selectedVariant,
+                                cartItem.isWholesale
+                              )}
                               className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-[var(--pm-surface)] text-[var(--pm-muted)] disabled:opacity-30 cursor-pointer"
                             >
                               <Minus className="w-3.5 h-3.5" />
@@ -409,7 +388,12 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                             </span>
                             <button
                               type="button"
-                              onClick={() => onUpdateQuantity(cartItem.product.id, cartItem.quantity + (cartItem.isWholesale ? 10 : 1))}
+                              onClick={() => onUpdateQuantity(
+                                cartItem.product.id,
+                                cartItem.quantity + (cartItem.isWholesale ? 10 : 1),
+                                cartItem.selectedVariant,
+                                cartItem.isWholesale
+                              )}
                               className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-[var(--pm-surface)] text-[var(--pm-muted)] cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -425,8 +409,20 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
               {/* Delivery Details & Payment Form */}
               {items.length > 0 && (
                 <div className="space-y-4 pt-3 border-t border-[var(--pm-border)]">
-                  {!currentUser ? (
-                    <GuestCheckoutForm onVerify={handleVerifyUser} onComplete={(data) => handlePlaceOrder(data)} />
+                  {!isAuthenticated || !currentUser ? (
+                    <div className="rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-4">
+                      <p className="text-sm font-bold text-[var(--pm-text)]">Sign in to place an order</p>
+                      <p className="mt-1 text-xs text-[var(--pm-muted)]">
+                        Guest checkout is not available in the first release. Your bag will be here when you return.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="mt-3 text-xs font-bold text-[var(--pm-accent)] hover:underline cursor-pointer"
+                      >
+                        Close checkout and sign in
+                      </button>
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       {!isEditingDetails ? (
@@ -504,57 +500,18 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                     </div>
                   )}
 
-                  {/* Payment Method */}
+                  {/* Cash on delivery is the only supported checkout method for now. */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-[var(--pm-text)] flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
-                      Payment Gateway Method
+                      Payment method
                     </label>
-                    <div className="grid grid-cols-1 gap-1.5">
-                      {(['Credit / Debit Card', 'Mobile Wallet (bKash/Nagad/Rocket)', 'Cash on Delivery'] as const).map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => {
-                            setPaymentMethod(method);
-                            if (method === 'Credit / Debit Card') setSelectedGateway('sslcommerz');
-                            if (method === 'Mobile Wallet (bKash/Nagad/Rocket)' && selectedGateway === 'sslcommerz') {
-                              setSelectedGateway('bkash');
-                            }
-                          }}
-                          className={`p-2.5 rounded-xl border text-xs font-medium text-left flex items-center justify-between transition-colors cursor-pointer ${
-                            paymentMethod === method
-                              ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] font-bold'
-                              : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-text)]'
-                          }`}
-                        >
-                          <span>{method}</span>
-                          {paymentMethod === method && <CheckCircle2 className="w-3.5 h-3.5 text-[var(--pm-accent)]" />}
-                        </button>
-                      ))}
+                    <div className="p-3 rounded-xl border border-[var(--pm-accent-border)] bg-[var(--pm-accent-soft)]">
+                      <p className="text-xs font-bold text-[var(--pm-accent)]">Cash on Delivery</p>
+                      <p className="mt-1 text-[11px] text-[var(--pm-muted)]">
+                        Pay the courier in cash when your order arrives. Online payment is temporarily unavailable.
+                      </p>
                     </div>
-                    {paymentMethod === 'Mobile Wallet (bKash/Nagad/Rocket)' && auth.currentUser && (
-                      <div className="grid grid-cols-3 gap-1.5 pt-1">
-                        {([
-                          { id: 'bkash', label: 'bKash' },
-                          { id: 'nagad', label: 'Nagad' },
-                          { id: 'sslcommerz', label: 'Rocket / SSL' },
-                        ] as const).map((gw) => (
-                          <button
-                            key={gw.id}
-                            type="button"
-                            onClick={() => setSelectedGateway(gw.id)}
-                            className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold cursor-pointer ${
-                              selectedGateway === gw.id
-                                ? 'border-[var(--pm-accent)] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]'
-                                : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)]'
-                            }`}
-                          >
-                            {gw.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   {/* Server-Validated Promo Code */}
@@ -626,10 +583,16 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
                 <button
                   type="button"
                   onClick={() => handlePlaceOrder()}
-                  disabled={isProcessing || isEditingDetails}
+                  disabled={isProcessing || isEditingDetails || !isAuthenticated || !currentUser}
                   className="w-full py-3 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-40 text-[var(--pm-accent-fg)] font-bold text-xs sm:text-sm shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>{isProcessing ? 'Processing Secure Order...' : `Place Order · ৳${total.toLocaleString()}`}</span>
+                  <span>
+                    {isProcessing
+                      ? 'Processing Secure Order...'
+                      : !isAuthenticated || !currentUser
+                        ? 'Sign in to place order'
+                        : `Place Order · ৳${total.toLocaleString()}`}
+                  </span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -637,29 +600,6 @@ export const CartCheckoutDrawer: React.FC<CartCheckoutDrawerProps> = ({
           </>
         )}
 
-        <AccountConversionPopup
-          isOpen={showConversion}
-          onClose={() => setShowConversion(false)}
-          onConvert={() => {
-            setGuestData(null);
-          }}
-          guestEmail={guestData?.email}
-          guestPhone={guestData?.phone}
-        />
-
-        <SandboxPaymentModal
-          isOpen={isGatewayCheckoutOpen}
-          onClose={() => setIsGatewayCheckoutOpen(false)}
-          provider={selectedGateway}
-          amount={Math.max(10, total)}
-          purpose="order_checkout"
-          customerName={pendingCheckoutData?.name || tempUserDetails.name || currentUser?.name}
-          customerPhone={pendingCheckoutData?.phone || tempUserDetails.phone || currentUser?.phone}
-          onVerified={(verified) => {
-            setIsGatewayCheckoutOpen(false);
-            void submitOrderAfterPayment(pendingCheckoutData, verified.trxId);
-          }}
-        />
       </div>
     </div>
   );

@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   ShoppingCart, 
-  Store, 
   Sparkles, 
   ShieldAlert,
   Menu,
@@ -24,7 +23,8 @@ import { useAuth } from '@/features/auth';
 import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 import { AiAssistantDrawer } from '@/features/ai';
 import { MegaSearch, SearchScope } from '@/components/shared/MegaSearch';
-import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
+import { Button } from '@/components/shared/Button';
+import { ROUTE_PATHS } from '@/shared/constants/routes';
 
 const SEARCH_HISTORY_STORAGE_KEY = 'paikarmart_search_history_v1';
 const DEFAULT_TRENDING_SEARCHES = [
@@ -43,13 +43,11 @@ interface TopNavbarProps {
   onOpenWallet: () => void;
   onOpenNotifications: () => void;
   onOpenLocationModal?: () => void;
-  onOpenSettings?: () => void;
   onOpenSuperAdminModal?: () => void;
   onOpenAuthModal?: (tab?: 'login' | 'register') => void;
   onUpdateLocation?: (newLocation: string, coordinates?: { lat: number; lng: number }) => void;
   unreadNotificationsCount: number;
   onOpenSidebar: () => void;
-  onOpenVendorModal: () => void;
   onOpenCloudGuide: () => void;
   cartCount: number;
   currentUser: User;
@@ -72,12 +70,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onOpenNotifications,
   onOpenLocationModal,
   onUpdateLocation,
-  onOpenSettings,
   onOpenSuperAdminModal,
   onOpenAuthModal,
   unreadNotificationsCount,
   onOpenSidebar,
-  onOpenVendorModal,
   onOpenCloudGuide,
   cartCount,
   currentUser,
@@ -93,6 +89,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const { t, language } = useLanguage();
   const isBn = language === 'bn';
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { 
     firebaseUser, 
     activeProfileMode, 
@@ -376,19 +373,62 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     }
   };
 
+  const isProductDetailsRoute = Boolean(
+    matchPath({ path: ROUTE_PATHS.PRODUCT_DETAILS, end: true }, pathname)
+  );
+
   const handleMobileBack = () => {
-    if (currentTab === 'feed') {
-      onOpenSidebar();
-      return;
-    }
     if (window.history.length > 1) {
       navigate(-1);
-    } else {
-      onSelectTab('feed');
+      return;
     }
+
+    if (isProductDetailsRoute) {
+      navigate(ROUTE_PATHS.MARKETPLACE_HUB);
+      return;
+    }
+
+    onSelectTab('feed');
   };
 
   const mobileConfig = useMemo(() => {
+    const productDetailsMatch = matchPath(
+      { path: ROUTE_PATHS.PRODUCT_DETAILS, end: true },
+      pathname
+    );
+    if (productDetailsMatch) {
+      const product = commerceItems.find((item) => item.id === productDetailsMatch.params.id);
+      return {
+        mode: 'detail' as const,
+        title: product?.title || (isBn ? 'পণ্যের বিবরণ' : 'Product details'),
+        subtitle: product?.category || (isBn ? 'পণ্যের তথ্য' : 'Product information'),
+        action: 'cart' as const,
+      };
+    }
+
+    if (matchPath({ path: ROUTE_PATHS.SETTINGS, end: true }, pathname)) {
+      return {
+        mode: 'detail' as const,
+        title: isBn ? 'অ্যাপ সেটিংস' : 'Settings',
+        subtitle: isBn ? 'প্রোফাইল ও প্রিফারেন্স' : 'Profile & preferences',
+        action: 'none' as const,
+      };
+    }
+
+    const publicHandleMatch = matchPath({ path: ROUTE_PATHS.PUBLIC_HANDLE, end: true }, pathname);
+    const isPublicStoreRoute = Boolean(
+      matchPath({ path: ROUTE_PATHS.PUBLIC_STORE, end: true }, pathname)
+    );
+    if (publicHandleMatch || isPublicStoreRoute) {
+      const handle = publicHandleMatch?.params.handle;
+      return {
+        mode: 'detail' as const,
+        title: handle ? `@${handle}` : (isBn ? 'স্টোরফ্রন্ট' : 'Storefront'),
+        subtitle: isBn ? 'পাবলিক প্রোফাইল' : 'Public profile',
+        action: 'cart' as const,
+      };
+    }
+
     switch (currentTab) {
       case 'feed':
         return { mode: 'feed' as const };
@@ -399,6 +439,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       case 'nearby':
         return {
           mode: 'commerce' as const,
+          showBack: currentTab !== 'explore' && pathname !== ROUTE_PATHS.MARKETPLACE_HUB,
           placeholder:
             currentTab === 'wholesale'
               ? isBn ? 'পাইকারি লট বা ফ্যাক্টরি খুঁজুন...' : 'Search wholesale lots & factories...'
@@ -427,14 +468,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           mode: 'detail' as const,
           title: isBn ? 'নোটিফিকেশন' : 'Notifications',
           subtitle: isBn ? 'অর্ডার ও সিস্টেম নোটিশ' : 'Order & system alerts',
-          action: 'settings' as const
+          action: 'none' as const
         };
       case 'settings':
         return {
           mode: 'detail' as const,
           title: isBn ? 'অ্যাপ সেটিংস' : 'Settings',
           subtitle: isBn ? 'প্রোফাইল ও প্রিফারেন্স' : 'Profile & preferences',
-          action: 'close' as const
+          action: 'none' as const
         };
       case 'messages':
         return {
@@ -448,7 +489,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           mode: 'detail' as const,
           title: isBn ? 'আমার প্রোফাইল' : 'My Profile',
           subtitle: currentUser.name || (isBn ? 'ব্যবহারকারী অ্যাকাউন্ট' : 'User account'),
-          action: 'settings' as const
+          action: 'none' as const
         };
       case 'vendor-dash':
         return {
@@ -469,14 +510,16 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           mode: 'detail' as const,
           title: isBn ? 'সার্ভিস মার্কেট' : 'Local Services',
           subtitle: isBn ? 'হোম সার্ভিস ও টেকনিশিয়ান' : 'On-demand repairs & experts',
-          action: 'location' as const
+          action: 'location' as const,
+          showBack: false,
         };
       case 'rides':
         return {
           mode: 'detail' as const,
           title: isBn ? 'ট্রানজিট ও রাইড' : 'Transit & Logistics',
           subtitle: isBn ? 'সিটি রাইড ও কার্গো' : 'Rides & freight delivery',
-          action: 'location' as const
+          action: 'location' as const,
+          showBack: false,
         };
       case 'wishlist':
         return {
@@ -509,7 +552,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       default:
         return { mode: 'feed' as const };
     }
-  }, [currentTab, isBn, currentUser.name, wishlistCount]);
+  }, [
+    currentTab,
+    isBn,
+    currentUser.name,
+    wishlistCount,
+    pathname,
+    commerceItems,
+  ]);
 
   const renderSearchDropdown = (customTopClass?: string) => (
     <TopNavSearchDropdown
@@ -662,28 +712,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               />
             </div>
 
-            {/* My Business / আমার ব্যবসা Entry Point */}
-            <button
-              type="button"
-              onClick={() => {
-                if (currentUser.isVendor) {
-                  onSelectTab('vendor-dash');
-                } else {
-                  onOpenVendorModal();
-                }
-              }}
-              className={`hidden lg:flex items-center gap-1.5 h-10 px-3 rounded-xl border text-xs font-bold transition-all active-scale cursor-pointer shrink-0 ${
-                currentTab === 'vendor-dash'
-                  ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25 hover:bg-amber-500/20'
-              }`}
-              title={isBn ? 'আমার ব্যবসা ও স্টোর পরিচালনা' : 'My Business & Store Management'}
-              aria-label={isBn ? 'আমার ব্যবসা' : 'My Business'}
-            >
-              <Store className="w-4 h-4 shrink-0 text-amber-500" />
-              <span>{isBn ? 'আমার ব্যবসা' : 'My Business'}</span>
-            </button>
-
             {/* Super Admin Control Center Button */}
             {onOpenSuperAdminModal && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
               <button
@@ -820,35 +848,19 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
             )}
 
             {/* Login / Auth Button for Guests; Profile Avatar for Signed-in Users */}
-            {!firebaseUser && onOpenAuthModal ? (
-              <button
+            {!firebaseUser && onOpenAuthModal && (
+              <Button
                 type="button"
+                variant="primary"
+                size="md"
                 onClick={() => onOpenAuthModal('login')}
-                className="h-10 px-3.5 flex items-center justify-center gap-1.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-sm shadow-md active-scale transition-all cursor-pointer shrink-0 whitespace-nowrap"
+                className="gap-1.5 shadow-md active-scale whitespace-nowrap"
                 title={isBn ? 'লগইন বা রেজিস্টার করুন' : 'Sign In or Register'}
                 aria-label={isBn ? 'লগইন' : 'Login'}
               >
                 <LogIn className="w-4 h-4 shrink-0" />
                 <span>{isBn ? 'লগইন' : 'Login'}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onSelectTab('profile')}
-                className="relative w-10 h-10 flex items-center justify-center rounded-xl active-scale group cursor-pointer shrink-0"
-                title={isBn ? 'প্রোফাইল' : 'Profile'}
-                aria-label={isBn ? 'প্রোফাইল' : 'Profile'}
-              >
-                <img
-                  src={safeMediaSrc(currentUser.avatar, DEFAULT_AVATAR_URL)}
-                  alt={currentUser.name}
-                  referrerPolicy="no-referrer"
-                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-[var(--pm-border)] group-hover:ring-[var(--pm-accent)] transition-all shadow-md"
-                />
-                {firebaseUser && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[var(--pm-success)] border-2 border-[var(--pm-card)] rounded-full" />
-                )}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -871,7 +883,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           onSelectTab={onSelectTab}
           onOpenCart={onOpenCart}
           onOpenNotifications={onOpenNotifications}
-          onOpenSettings={onOpenSettings}
           onOpenAuthModal={onOpenAuthModal}
           onOpenLocationModal={onOpenLocationModal}
           onUpdateLocation={onUpdateLocation}

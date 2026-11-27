@@ -50,6 +50,9 @@ export const ProductEngagementSection: React.FC<ProductEngagementSectionProps> =
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setReviews([]);
+    setQna([]);
+    setStats(null);
     retailApiClient.fetchProductEngagement(productId).then((data) => {
       if (!active) return;
       if (data) {
@@ -161,7 +164,7 @@ export const ProductEngagementSection: React.FC<ProductEngagementSectionProps> =
       </div>
 
       {loading ? (
-        <div className="py-6 text-center text-xs text-[var(--pm-muted)]">
+        <div role="status" className="py-6 text-center text-xs text-[var(--pm-muted)]">
           {isBn ? 'তথ্য লোড হচ্ছে...' : 'Loading verified feedback...'}
         </div>
       ) : subTab === 'reviews' ? (
@@ -256,7 +259,7 @@ export const ProductEngagementSection: React.FC<ProductEngagementSectionProps> =
           {/* Review Items */}
           {reviews.length === 0 ? (
             <p className="text-xs text-[var(--pm-muted)] py-4 text-center">
-              {isBn ? 'এখনও কোনো রিভিউ নেই। প্রথম রিভিউ দিন।' : 'No reviews yet for this product. Be the first to review.'}
+              {isBn ? 'এখনও কোনো লিখিত রিভিউ নেই।' : 'There are no written reviews yet.'}
             </p>
           ) : (
             <div className="space-y-3">

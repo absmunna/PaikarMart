@@ -1,5 +1,8 @@
 import React from 'react';
-import { Info, X } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { SponsoredFeedCard } from '@/components/shared/SponsoredFeedCard';
+import { ButtonLink } from '@/components/shared/Button';
 
 interface AdMobBannerProps {
   format?: 'banner' | 'leaderboard' | 'native';
@@ -9,82 +12,71 @@ interface AdMobBannerProps {
 
 const AD_VARIANTS = {
   vercel: {
-    tag: 'Vercel',
-    title: 'Deploy Next-Gen React Frontends on Vercel',
-    desc: 'Zero configuration edge deployments, instant previews, and global CDN caching.',
-    url: 'https://vercel.com'
+    tag: 'Local picks',
+    tagBn: 'স্থানীয় পছন্দ',
+    title: 'Find good things from trusted local sellers',
+    titleBn: 'বিশ্বস্ত স্থানীয় বিক্রেতার পণ্য খুঁজুন',
+    desc: 'Everyday finds, handmade goods and shops around you.',
+    descBn: 'নিত্যপ্রয়োজনীয় পণ্য, হাতে তৈরি জিনিস ও কাছের দোকান দেখুন।',
+    url: '/hub/marketplace'
   },
   supabase: {
-    tag: 'Supabase',
-    title: 'PostgreSQL Database & Real-Time Auth',
-    desc: 'Scalable PostgreSQL, Row-Level Security, vector search, and instant APIs.',
-    url: 'https://supabase.com'
+    tag: 'Verified shops',
+    tagBn: 'যাচাইকৃত দোকান',
+    title: 'Shop with confidence',
+    titleBn: 'নিশ্চিন্তে কেনাকাটা করুন',
+    desc: 'Discover shops with clear seller details and helpful reviews.',
+    descBn: 'বিক্রেতার তথ্য ও ক্রেতার মতামত দেখে দোকান বেছে নিন।',
+    url: '/hub/marketplace'
   },
   render: {
-    tag: 'Render',
-    title: 'Host Cloud Web Services & APIs on Render',
-    desc: 'Deploy fast, reliable Node.js backends and microservices with automatic SSL.',
-    url: 'https://render.com'
+    tag: 'Nearby services',
+    tagBn: 'কাছের সেবা',
+    title: 'Find a trusted service nearby',
+    titleBn: 'কাছাকাছি বিশ্বস্ত সেবা খুঁজুন',
+    desc: 'Browse local professionals for everyday jobs and repairs.',
+    descBn: 'দৈনন্দিন কাজ ও মেরামতের জন্য স্থানীয় পেশাজীবী দেখুন।',
+    url: '/services'
   }
 };
 
-export const AdMobBanner: React.FC<AdMobBannerProps> = ({ format = 'banner', variant = 'vercel', className = '' }) => {
+export const AdMobBanner: React.FC<AdMobBannerProps> = ({ variant = 'vercel', className = '' }) => {
   const [dismissed, setDismissed] = React.useState(false);
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
   const ad = AD_VARIANTS[variant] || AD_VARIANTS.vercel;
 
   if (dismissed) return null;
 
   return (
-    <div className={`relative overflow-hidden rounded-xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-3 ${className}`}>
-      <div className="flex items-center justify-between text-[11px] text-[var(--pm-muted)] mb-2">
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold uppercase tracking-wider text-[10px] px-1.5 py-0.5 rounded bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[var(--pm-muted)]">
-            Ad · Google AdMob
-          </span>
-          <span>Sponsored Recommendation</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button 
-            type="button" 
-            aria-label="Ad info" 
-            className="p-1 text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
-          >
-            <Info className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setDismissed(true)} 
-            aria-label="Close ad"
-            className="p-1 text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+    <SponsoredFeedCard
+      label={isBn ? 'স্থানীয় মার্কেটপ্লেস' : 'Local marketplace'}
+      onDismiss={() => setDismissed(true)}
+      dismissLabel={isBn ? 'সুপারিশটি বন্ধ করুন' : 'Dismiss recommendation'}
+      className={className}
+    >
+      <div className="space-y-2">
+        <p className="text-[11px] font-bold text-[var(--pm-accent)]">
+          {isBn ? ad.tagBn : ad.tag}
+        </p>
+        <h3 className="text-[15px] font-black leading-snug text-[var(--pm-text)]">
+          {isBn ? ad.titleBn : ad.title}
+        </h3>
+        <p className="text-sm leading-relaxed text-[var(--pm-muted)]">
+          {isBn ? ad.descBn : ad.desc}
+        </p>
       </div>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-[var(--pm-accent-soft)] border border-[var(--pm-accent-border)] flex items-center justify-center shrink-0">
-            <span className="font-bold text-[var(--pm-accent)] text-xs text-center px-1">{ad.tag}</span>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-[var(--pm-text)]">
-              {ad.title}
-            </h4>
-            <p className="text-xs text-[var(--pm-muted)] mt-0.5">
-              {ad.desc}
-            </p>
-          </div>
-        </div>
-        <a
-          href={ad.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] transition-colors"
+      <div className="flex justify-end">
+        <ButtonLink
+          to={ad.url}
+          variant="primary"
+          size="md"
+          className="text-xs font-bold"
         >
-          Learn More
-        </a>
+          <span>{isBn ? 'দেখুন' : 'Explore'}</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </ButtonLink>
       </div>
-    </div>
+    </SponsoredFeedCard>
   );
 };

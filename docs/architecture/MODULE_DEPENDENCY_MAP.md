@@ -92,3 +92,32 @@ apps/backend/server.ts
 - `payment` -> may call `wallet` (verified deposit webhook / atomic ledger credit), `orders` (payment confirmation), `notifications`.
 - `wholesale` / `rfq` -> shares unified `rfqRepository`, verifies `escrow`.
 - No module may import `server.ts` or any `apps/frontend/*` module.
+
+### Observed boundary and deployment dependencies
+
+| Boundary | Observed coupling | Desired rule |
+|---|---|---|
+| Server composition | `server.ts` mounts domain routers and also defines feed and catalog-verification handlers. | Keep server as composition root; route business behavior through domain routers. |
+| Orders | Router owns persistence/fallback behavior and imports voucher, vendor, logistics and notification logic. | Keep order lifecycle in `modules/orders`; call explicit domain services through stable interfaces. |
+| Payment and wallet | Payment routes invoke wallet ledger operations; session state is held in payment route memory. | Payment owns provider/session lifecycle; wallet owns ledger; persist both with idempotent transaction boundaries. |
+| Escrow and wallet | Escrow routes delegate to `walletService`; logistics calls memory escrow helpers. | Establish one durable escrow service and a single POD-to-release flow; retain compatibility exports during migration. |
+| Persistence | `services/dbService.ts` serves several modules. | Move queries into domain repositories only after caller inventory; keep compatibility facade until all call sites are migrated. |
+| Shared contracts | `packages/shared` has common roles, area types and domain interfaces; frontend aliases it. | Use it only for cross-app contracts. Decide workspace linking before backend imports package names. |
+
+## Data and deployment dependencies
+
+- Firebase Authentication issues the identity token; backend middleware is the API authorization boundary.
+- Supabase/PostgreSQL is intended as the relational source of truth; `supabase/schema.sql` defines RLS and tables.
+- POD authorization compares the authenticated profile to the order owner or `shipment_waybills.assigned_courier_profile_id`; the additive migration is staging-only until verified.
+- Firebase Firestore/Storage rules are separate policies and must remain deployed with their Firebase resources.
+- `packages/database/prisma/schema.prisma` is kept as a mirror of the SQL entities; verify generated Prisma artifacts whenever SQL migrations change.
+- Selected no-billing topology: Vercel Free frontend rewrites `/api/*` to Render Free; Supabase Free PostgreSQL is the relational database. Firebase remains on Spark without billing, and Firebase Hosting/Cloud Run are not deployment targets. Use only Firebase products currently available without billing; preserve `firebase.json` rules.
+- GitHub Actions publishes a `prod-build` branch; its current copy step is inconsistent with its build output path.
+
+## Compatibility constraints
+
+1. Preserve all routes in `app/router/routeManifest.tsx`.
+2. Preserve `/api/*` and `/api/v1/*` endpoints and response DTOs while extracting services.
+3. Preserve Firebase/Supabase identities, database IDs, RLS rules, and existing rows.
+4. Preserve current root package and deployment paths until workspace/deployment changes are separately approved.
+5. Keep existing barrel/re-export facades while migrating imports.

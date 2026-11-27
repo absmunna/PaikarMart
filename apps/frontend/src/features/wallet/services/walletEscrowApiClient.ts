@@ -2,6 +2,8 @@ import { EscrowRecord, EscrowSummary, WalletServerPayload } from '@/features/wal
 import { apiRequest } from '@/shared/services/apiClient';
 
 export async function fetchWalletStateApi(userId = 'user_me'): Promise<{
+  source: 'supabase' | 'memory';
+  persistenceReady: boolean;
   wallet: WalletServerPayload;
   escrowSummary: EscrowSummary;
   escrows: EscrowRecord[];

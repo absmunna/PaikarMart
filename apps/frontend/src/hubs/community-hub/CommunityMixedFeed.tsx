@@ -18,6 +18,7 @@ const COMMUNITY_ICONS: Record<string, React.ComponentType<{ className?: string }
 interface CommunityMixedFeedProps {
   currentUser: User;
   posts: SocialPost[];
+  savedPostIds: string[];
   commerceItems: CommerceItem[];
   isLoading?: boolean;
   onCreatePost: (
@@ -31,24 +32,25 @@ interface CommunityMixedFeedProps {
   ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (item: CommerceItem) => void;
   onDeductBalance: (amount: number) => boolean;
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
 }
 
 export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
   currentUser,
   posts,
+  savedPostIds,
   commerceItems,
   isLoading = false,
   onCreatePost,
   onReactToPost,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart,
   onDeductBalance,
   onSelectTab,
-  onOpenVendorModal,
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -107,7 +109,8 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
         <button
           type="button"
           onClick={() => setActivePortalId('all')}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+          aria-pressed={activePortalId === 'all'}
+          className={`shrink-0 min-h-10 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
             activePortalId === 'all'
               ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
               : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)]'
@@ -123,7 +126,8 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
               key={portal.id}
               type="button"
               onClick={() => handlePortalSelect(portal.id)}
-              className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+              aria-pressed={isActive}
+              className={`shrink-0 min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                 isActive
                   ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent'
                   : 'bg-[var(--pm-card)] text-[var(--pm-text)] border-[var(--pm-border)] hover:border-[var(--pm-accent)]/50'
@@ -140,7 +144,6 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
         <DemandBoardPortal
           currentUser={currentUser}
           onSelectTab={onSelectTab}
-          onOpenVendorModal={onOpenVendorModal}
         />
       ) : activeRegisteredPortal?.id === 'creator-studio' ? (
         <CreatorPortal
@@ -181,11 +184,13 @@ export const CommunityMixedFeed: React.FC<CommunityMixedFeedProps> = ({
           <SocialPortal
             currentUser={currentUser}
             posts={posts}
+            savedPostIds={savedPostIds}
             commerceItems={commerceItems}
             isLoading={isLoading}
             onCreatePost={onCreatePost}
             onReactToPost={onReactToPost}
             onAddComment={onAddComment}
+            onToggleSavedPost={onToggleSavedPost}
             onAddToCart={onAddToCart}
           />
         </div>

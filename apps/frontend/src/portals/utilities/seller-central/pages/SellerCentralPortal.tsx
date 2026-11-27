@@ -25,8 +25,6 @@ import {
   Truck,
   Video,
   FileText,
-  Settings,
-  User,
   ExternalLink,
   Layers,
   Sparkles,
@@ -49,7 +47,6 @@ interface SellerCentralPortalProps {
   bookings?: ServiceBooking[];
   onAddNewProduct: (newProductData: Omit<CommerceItem, 'id' | 'rating' | 'reviewsCount'>) => void;
   onCreatePromoPost: (product: CommerceItem) => void;
-  onOpenStoreSettings: () => void;
   onSelectTab: (tab: PortalTab) => void;
 }
 
@@ -60,7 +57,6 @@ export const SellerCentralPortal: React.FC<SellerCentralPortalProps> = ({
   bookings = [],
   onAddNewProduct,
   onCreatePromoPost,
-  onOpenStoreSettings,
   onSelectTab
 }) => {
   const { language } = useLanguage();
@@ -227,23 +223,6 @@ export const SellerCentralPortal: React.FC<SellerCentralPortalProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => onSelectTab('profile')}
-              className="px-3 py-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>{isBn ? 'প্রোফাইল' : 'Profile'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onOpenStoreSettings}
-              className="p-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] transition-colors cursor-pointer"
-              title="Store Settings & Payouts"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
           </div>
         </div>
 

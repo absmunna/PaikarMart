@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { CommerceItem } from '@/types';
 import type { ComputedHyperlocalMeta } from '@/features/logistics';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface ServiceCardProps {
   service: CommerceItem;
@@ -49,19 +51,18 @@ export const getServiceIcon = (subCat?: string) => {
 export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hyperlocalMeta }) => {
   const navigate = useNavigate();
   const isOpen = hyperlocalMeta?.isOpen ?? service.isOpen ?? true;
-  const distanceLabel = hyperlocalMeta
-    ? `${hyperlocalMeta.distanceKm.toFixed(1)} km`
-    : service.proximityDistance || 'Nearby';
+  const serviceAreaLabel =
+    formatAdministrativeArea(service.serviceArea) || service.storeAddress || 'Area not specified';
   const etaLabel = hyperlocalMeta
     ? `${hyperlocalMeta.totalEtaMin} min (Prep ${hyperlocalMeta.estimatedPrepMin}m + Transit ${hyperlocalMeta.estimatedTransitMin}m)`
     : service.deliveryEta || 'Same Day';
 
   return (
-    <div
+    <ContentCard
       onClick={() => onClick(service)}
-      className="group bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer hover:border-[var(--pm-accent)] hover:shadow-xl transition-all duration-300 active:scale-[0.99]"
+      className="group p-5 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer hover:border-[var(--pm-accent)] hover:shadow-xl transition-all duration-300 active:scale-[0.99]"
     >
-      <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden shrink-0 shadow-sm bg-[var(--pm-surface)]">
+      <ContentCardMedia className="group h-20 w-20 sm:h-24 sm:w-24 shrink-0 rounded-2xl shadow-sm">
         <img
           src={service.imageUrl}
           alt={service.title}
@@ -69,7 +70,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hype
           decoding="async"
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         />
-      </div>
+      </ContentCardMedia>
 
       <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
@@ -78,9 +79,9 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hype
             <span>{service.subCategory || 'Pro Service'}</span>
           </span>
           <span aria-hidden="true" className="text-[var(--pm-muted)]">·</span>
-          <span className="text-[var(--pm-text)] flex items-center gap-1 tabular-nums">
+          <span className="text-[var(--pm-text)] flex items-center gap-1">
             <MapPin className="w-3 h-3 text-[var(--pm-danger)]" />
-            <span>{distanceLabel}</span>
+            <span>{serviceAreaLabel}</span>
           </span>
           <span aria-hidden="true" className="text-[var(--pm-muted)]">·</span>
           <span className={isOpen ? 'text-[var(--pm-success)]' : 'text-[var(--pm-danger)]'}>
@@ -146,6 +147,6 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onClick, hype
           </button>
         </div>
       </div>
-    </div>
+    </ContentCard>
   );
 };

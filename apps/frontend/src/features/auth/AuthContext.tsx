@@ -30,7 +30,7 @@ import {
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
 import { safeMediaSrc } from '@/shared/utils';
 import { revokeAllAuthSessions, syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
-import { vendorApiClient } from '@/features/vendors/vendorApiClient';
+import { vendorApiClient } from '@/features/vendors';
 import {
   useFirebaseSupabaseSync,
   type SupabaseUserProfile

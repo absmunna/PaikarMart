@@ -13,6 +13,7 @@ import {
   submitVendorKycApplication,
   syncKycDecisionToDatabase,
   syncKycSubmissionToDatabase,
+  updateVendorServiceArea,
   updateGovernanceRoleInDb
 } from './vendorService.js';
 import { isPrivilegedRole, requireFirebaseAuth, requireRole } from '../../middleware/requireFirebaseAuth.js';
@@ -81,6 +82,41 @@ vendorRouter.get('/profile/:handle', async (req: Request, res: Response) => {
   }
   res.json({ success: true, profile });
 });
+
+vendorRouter.patch(
+  '/storefront/location',
+  requireFirebaseAuth,
+  requireRole(['vendor', 'admin', 'super_admin']),
+  async (req: Request, res: Response) => {
+    const storeAddress =
+      typeof req.body?.storeAddress === 'string' ? req.body.storeAddress.trim() : '';
+    const serviceArea = req.body?.serviceArea;
+    if (
+      !storeAddress ||
+      storeAddress.length > 240 ||
+      !serviceArea ||
+      typeof serviceArea !== 'object' ||
+      Array.isArray(serviceArea)
+    ) {
+      res.status(400).json({ error: 'A store address and service area are required.' });
+      return;
+    }
+
+    try {
+      const saved = await updateVendorServiceArea(res.locals.auth.uid, storeAddress, serviceArea);
+      res.json({ success: true, ...saved });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to save the storefront service area.';
+      const status = message.includes('required')
+        ? 400
+        : message.includes('not found') || message.includes('No storefront')
+          ? 404
+          : 500;
+      res.status(status).json({ error: message });
+    }
+  }
+);
 
 vendorRouter.get('/:vendorId/analytics', requireFirebaseAuth, requireRole(['vendor', 'moderator', 'admin', 'super_admin']), async (req: Request, res: Response) => {
   try {

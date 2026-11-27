@@ -26,6 +26,18 @@ export const authRateLimiter = rateLimit({
   },
 });
 
+export const podVerificationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: {
+    error: 'Too many delivery verification attempts. Please try again later.',
+    code: 'TOO_MANY_POD_ATTEMPTS',
+  },
+});
+
 // AI endpoint rate limiter
 export const aiRateLimiter = rateLimit({
   windowMs: 60 * 1000,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type {
   AppNotification,
   CommerceItem,
@@ -19,6 +19,8 @@ import { AuthGuard } from '@/app/guards/AuthGuard';
 import { RoleGuard } from '@/app/guards/RoleGuard';
 import { ROUTE_PATHS } from '@/app/router/routeIds';
 import { FeedSkeleton, PortalSkeleton } from '@/design-system/components';
+import { ComingSoonNotice } from '@/components/shared/ComingSoonNotice';
+import { getComingSoonFeature } from '@/app/router/featureAvailability';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>
@@ -75,8 +77,12 @@ const TransitPortal = lazyWithRetry(() => import('@/portals/logistics/transit-lo
 const CreatorPortal = lazyWithRetry(() => import('@/portals/community/creator-studio').then((m) => ({ default: m.CreatorPortal })));
 const SellerCentralPortal = lazyWithRetry(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerCentralPortal })));
 const SellerInventoryPage = lazyWithRetry(() => import('@/portals/utilities/seller-central').then((m) => ({ default: m.SellerInventoryPage })));
-const ProfilePortal = lazyWithRetry(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.ProfilePortal })));
-const PublicStorefrontPage = lazyWithRetry(() => import('@/portals/utilities/user-profile').then((m) => ({ default: m.PublicStorefrontPage })));
+const ProfilePortal = lazyWithRetry(() =>
+  import('@/portals/utilities/user-profile/pages/ProfilePortal').then((m) => ({ default: m.ProfilePortal }))
+);
+const PublicStorefrontPage = lazyWithRetry(() =>
+  import('@/portals/utilities/user-profile/pages/PublicStorefrontPage').then((m) => ({ default: m.PublicStorefrontPage }))
+);
 const NotificationsPortal = lazyWithRetry(() => import('@/portals/utilities/notifications-center').then((m) => ({ default: m.NotificationsPortal })));
 const OrdersPortal = lazyWithRetry(() => import('@/portals/utilities/orders-hub').then((m) => ({ default: m.OrdersPortal })));
 const WalletPortal = lazyWithRetry(() => import('@/portals/utilities/wallet').then((m) => ({ default: m.WalletPortal })));
@@ -102,9 +108,11 @@ export interface AppRouteManifestProps {
   currentUser: User;
   setCurrentUser: React.Dispatch<React.SetStateAction<User>>;
   posts: SocialPost[];
+  savedPostIds: string[];
   filteredPosts: SocialPost[];
   commerceItems: CommerceItem[];
   isCatalogLoading?: boolean;
+  catalogNotice?: string | null;
   isFeedLoading?: boolean;
   orders: Order[];
   bookings: ServiceBooking[];
@@ -120,12 +128,10 @@ export interface AppRouteManifestProps {
   initialSettingsSection: SettingsSectionId;
   setCurrentTab: (tab: PortalTab) => void;
   navigate: (to: string) => void;
-  onOpenVendorModal: () => void;
   onOpenCloudGuide: () => void;
   onOpenWallet: () => void;
   onOpenNotifications: () => void;
   onOpenAuthModal: (tab?: 'login' | 'register') => void;
-  onOpenSettingsPortal: (section?: SettingsSectionId) => void;
   onOpenSuperAdminModal: () => void;
   onCreatePost: (
     content: string,
@@ -138,6 +144,7 @@ export interface AppRouteManifestProps {
   ) => void;
   onReactToPost: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onAddToCart: (product: CommerceItem, quantity?: number, isWholesale?: boolean, specialInstructions?: string) => void;
   onBuyNow: (product: CommerceItem, quantity?: number, isWholesale?: boolean, specialInstructions?: string) => void;
   onSelectVoucher: (code: string) => void;
@@ -159,9 +166,11 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
   currentUser,
   setCurrentUser,
   posts,
+  savedPostIds,
   filteredPosts,
   commerceItems,
   isCatalogLoading = false,
+  catalogNotice = null,
   isFeedLoading = false,
   orders,
   bookings,
@@ -177,16 +186,15 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
   initialSettingsSection,
   setCurrentTab,
   navigate,
-  onOpenVendorModal,
   onOpenCloudGuide,
   onOpenWallet,
   onOpenNotifications,
   onOpenAuthModal,
-  onOpenSettingsPortal,
   onOpenSuperAdminModal,
   onCreatePost,
   onReactToPost,
   onAddComment,
+  onToggleSavedPost,
   onAddToCart,
   onBuyNow,
   onSelectVoucher,
@@ -201,6 +209,12 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
   onMarkAllNotificationsAsRead,
   onClearAllNotifications,
 }) => {
+  const location = useLocation();
+  const comingSoonFeature = getComingSoonFeature(location.pathname);
+  if (comingSoonFeature) {
+    return <ComingSoonNotice featureName={comingSoonFeature} />;
+  }
+
   return (
     <React.Suspense fallback={currentTab === 'feed' ? <FeedSkeleton /> : <PortalSkeleton />}>
       <Routes>
@@ -210,12 +224,11 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
           path={ROUTE_PATHS.EXPLORE}
           element={
             <ExplorePortal
+              currentUser={currentUser}
               onSelectTab={setCurrentTab}
-              onOpenVendorModal={onOpenVendorModal}
+              onOpenWallet={onOpenWallet}
               onOpenCloudGuide={onOpenCloudGuide}
               onQuickSearch={(q) => setSearchQuery(q)}
-              isVendor={Boolean(currentUser.vendorProfile)}
-              currentUser={currentUser}
             />
           }
         />
@@ -226,11 +239,13 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <SocialPortal
               currentUser={currentUser}
               posts={filteredPosts}
+              savedPostIds={savedPostIds}
               commerceItems={commerceItems}
               isLoading={isFeedLoading}
               onCreatePost={onCreatePost}
               onReactToPost={onReactToPost}
               onAddComment={onAddComment}
+              onToggleSavedPost={onToggleSavedPost}
               onAddToCart={(item) => onAddToCart(item, 1, item.type === 'wholesale')}
             />
           }
@@ -242,6 +257,7 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <MarketplaceHub
               items={commerceItems}
               isLoading={isCatalogLoading}
+              catalogNotice={catalogNotice}
               onAddToCart={onAddToCart}
               onBuyNow={onBuyNow}
               onSelectTab={setCurrentTab}
@@ -278,11 +294,10 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
           element={
             <ProductDetailsLanding
               currentUser={currentUser}
-              onUpdateUser={setCurrentUser}
-              onOrderPlaced={onOrderPlaced}
               commerceItems={commerceItems}
+              onAddToCart={onAddToCart}
+              onBuyNow={onBuyNow}
               isLoading={isCatalogLoading}
-              onOpenAuthModal={onOpenAuthModal}
             />
           }
         />
@@ -339,15 +354,16 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <CommunityHub
               currentUser={currentUser}
               posts={filteredPosts}
+              savedPostIds={savedPostIds}
               commerceItems={commerceItems}
               isLoading={isFeedLoading}
               onCreatePost={onCreatePost}
               onReactToPost={onReactToPost}
               onAddComment={onAddComment}
+              onToggleSavedPost={onToggleSavedPost}
               onAddToCart={(item) => onAddToCart(item, 1, item.type === 'wholesale')}
               onDeductBalance={onDeductBalance}
               onSelectTab={setCurrentTab}
-              onOpenVendorModal={onOpenVendorModal}
             />
           }
         />
@@ -362,7 +378,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
               onSelectTab={setCurrentTab}
               onOpenWallet={onOpenWallet}
               onOpenNotifications={onOpenNotifications}
-              onOpenSettings={() => onOpenSettingsPortal('account_profile')}
               onOpenCloudGuide={onOpenCloudGuide}
             />
           }
@@ -374,7 +389,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <RoleGuard
               currentUser={currentUser}
               requiredMode="seller"
-              onOpenVendorModal={onOpenVendorModal}
               onNavigateHome={() => navigate(ROUTE_PATHS.SOCIAL)}
             >
               {currentUser.vendorProfile && (
@@ -396,7 +410,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <RoleGuard
               currentUser={currentUser}
               requiredMode="seller"
-              onOpenVendorModal={onOpenVendorModal}
               onNavigateHome={() => navigate(ROUTE_PATHS.SOCIAL)}
             >
               {currentUser.vendorProfile && (
@@ -407,7 +420,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                   bookings={bookings}
                   onAddNewProduct={onAddNewProduct}
                   onCreatePromoPost={onCreatePromoPost}
-                  onOpenStoreSettings={() => onOpenSettingsPortal('vendor_store')}
                   onSelectTab={setCurrentTab}
                 />
               )}
@@ -421,11 +433,13 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <PublicStorefrontPage
               commerceItems={commerceItems}
               posts={posts}
+              savedPostIds={savedPostIds}
               currentUser={currentUser}
               onAddToCart={onAddToCart}
               onBookService={onBookService}
               onReact={onReactToPost}
               onAddComment={onAddComment}
+              onToggleSavedPost={onToggleSavedPost}
               onDeductBalance={onDeductBalance}
             />
           }
@@ -437,11 +451,13 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <PublicStorefrontPage
               commerceItems={commerceItems}
               posts={posts}
+              savedPostIds={savedPostIds}
               currentUser={currentUser}
               onAddToCart={onAddToCart}
               onBookService={onBookService}
               onReact={onReactToPost}
               onAddComment={onAddComment}
+              onToggleSavedPost={onToggleSavedPost}
               onDeductBalance={onDeductBalance}
             />
           }
@@ -453,21 +469,15 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <AuthGuard onOpenAuthModal={onOpenAuthModal}>
               <ProfilePortal
                 currentUser={currentUser}
-                onUpdateUser={setCurrentUser}
                 posts={posts}
+                savedPostIds={savedPostIds}
                 orders={orders}
                 bookings={bookings}
                 onReact={onReactToPost}
                 onAddComment={onAddComment}
+                onToggleSavedPost={onToggleSavedPost}
                 onAddToCart={onAddToCart}
                 commerceItems={commerceItems}
-                onOpenVendorModal={onOpenVendorModal}
-                onOpenWallet={onOpenWallet}
-                onUpdateOrder={onUpdateOrder}
-                onSelectTab={setCurrentTab}
-                onOpenSettingsPortal={onOpenSettingsPortal}
-                onOpenSuperAdminModal={onOpenSuperAdminModal}
-                onOpenAuthModal={onOpenAuthModal}
               />
             </AuthGuard>
           }
@@ -483,7 +493,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                 onMarkAllAsRead={onMarkAllNotificationsAsRead}
                 onClearAll={onClearAllNotifications}
                 onSelectTab={setCurrentTab}
-                onOpenSettingsPortal={onOpenSettingsPortal}
               />
             </AuthGuard>
           }
@@ -499,7 +508,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                 onUpdateOrder={onUpdateOrder}
                 onReorderOrder={onReorderOrder}
                 onSelectTab={setCurrentTab}
-                onOpenVendorModal={onOpenVendorModal}
               />
             </AuthGuard>
           }
@@ -513,7 +521,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
                 currentUser={currentUser}
                 onUpdateUser={setCurrentUser}
                 onSelectTab={setCurrentTab}
-                onOpenVendorModal={onOpenVendorModal}
               />
             </AuthGuard>
           }
@@ -533,7 +540,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
           element={
             <UserGuidePortal
               onSelectTab={setCurrentTab}
-              onOpenVendorModal={onOpenVendorModal}
               isVendor={currentUser.isVendor}
             />
           }
@@ -560,7 +566,6 @@ export const AppRouteManifest: React.FC<AppRouteManifestProps> = ({
             <DemandBoardPortal
               currentUser={currentUser}
               onSelectTab={setCurrentTab}
-              onOpenVendorModal={onOpenVendorModal}
             />
           }
         />

@@ -56,8 +56,10 @@ export const WholesaleFilterBar: React.FC<WholesaleFilterBarProps> = ({
           {(['all', 'low', 'medium', 'high'] as MOQFilter[]).map((moq) => (
             <button
               key={moq}
+              type="button"
               onClick={() => onSelectMOQ(moq)}
-              className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
+              aria-pressed={selectedMOQ === moq}
+              className={`min-h-10 px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all whitespace-nowrap cursor-pointer ${
                 selectedMOQ === moq
                   ? 'bg-[var(--pm-card)] text-[var(--pm-text)] shadow-xs'
                   : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
@@ -81,8 +83,10 @@ export const WholesaleFilterBar: React.FC<WholesaleFilterBarProps> = ({
             return (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => onSelectCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
+                aria-pressed={isActive}
+                className={`flex min-h-10 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer border ${
                   isActive
                     ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-xs'
                     : 'bg-[var(--pm-surface)] border-[var(--pm-border)] text-[var(--pm-muted)] hover:text-[var(--pm-text)]'

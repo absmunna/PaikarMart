@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   Image,
   Tag,
-  Smile,
   Send,
   X,
   ShoppingBag,
@@ -140,35 +139,42 @@ export const PostComposer: React.FC<PostComposerProps> = ({
           />
 
           {/* Citizen Category Selector */}
-          <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[var(--pm-muted)] mr-1">
+          <div className="mt-3">
+            <span className="mb-1.5 block text-xs font-semibold text-[var(--pm-muted)]">
               {isBn ? 'ক্যাটাগরি:' : 'Category:'}
             </span>
-            {[
-              { id: 'general', labelBn: 'সাধারণ পোস্ট', labelEn: 'General', icon: Sparkles },
-              { id: 'homemade', labelBn: 'হোমমেড খাবার/পণ্য', labelEn: 'Homemade Food', icon: Utensils },
-              { id: 'bid', labelBn: 'পাবলিক নিলাম/বিড', labelEn: 'Public Bid', icon: Gavel },
-              { id: 'property_rent', labelBn: 'ফ্ল্যাট ভাড়া/জমি', labelEn: 'Flat Rent/Property', icon: Home },
-              { id: 'used_goods', labelBn: 'সেকেন্ড হ্যান্ড পণ্য', labelEn: 'Used Goods', icon: Package },
-            ].map((cat) => {
-              const Icon = cat.icon;
-              const isSelected = citizenCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCitizenCategory(cat.id as CitizenPostCategory)}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
-                      : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)] border border-[var(--pm-border)]'
-                  }`}
-                >
-                  <Icon className="w-3 h-3" />
-                  <span>{isBn ? cat.labelBn : cat.labelEn}</span>
-                </button>
-              );
-            })}
+            <div
+              role="group"
+              aria-label={isBn ? 'পোস্টের ক্যাটাগরি' : 'Post category'}
+              className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1 no-scrollbar"
+            >
+              {[
+                { id: 'general', labelBn: 'সাধারণ পোস্ট', labelEn: 'General', icon: Sparkles },
+                { id: 'homemade', labelBn: 'হোমমেড খাবার/পণ্য', labelEn: 'Homemade Food', icon: Utensils },
+                { id: 'bid', labelBn: 'পাবলিক নিলাম/বিড', labelEn: 'Public Bid', icon: Gavel },
+                { id: 'property_rent', labelBn: 'ফ্ল্যাট ভাড়া/জমি', labelEn: 'Flat Rent/Property', icon: Home },
+                { id: 'used_goods', labelBn: 'সেকেন্ড হ্যান্ড পণ্য', labelEn: 'Used Goods', icon: Package },
+              ].map((cat) => {
+                const Icon = cat.icon;
+                const isSelected = citizenCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setCitizenCategory(cat.id as CitizenPostCategory)}
+                    className={`flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'border-[var(--pm-accent)] bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                        : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span>{isBn ? cat.labelBn : cat.labelEn}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {requiresCitizenVerification && !isCitizenVerified && (
@@ -288,50 +294,54 @@ export const PostComposer: React.FC<PostComposerProps> = ({
       )}
 
       {/* Footer Actions */}
-      <div className="mt-4 pt-4 border-t border-[var(--pm-border)] flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5">
-        <div className="flex items-center gap-1 shrink-0 overflow-x-auto no-scrollbar">
-          <div className="flex items-center p-1 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
+      <div className="mt-4 flex flex-col gap-3 border-t border-[var(--pm-border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar">
+          <div
+            role="group"
+            aria-label={isBn ? 'পোস্টের ধরন' : 'Post type'}
+            className="flex shrink-0 items-center rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-1"
+          >
             {(['regular', 'demand', 'sale'] as PostType[]).map((type) => (
               <button
                 key={type}
                 type="button"
+                aria-pressed={postType === type}
                 onClick={() => setPostType(type)}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all cursor-pointer ${
+                className={`min-h-10 rounded-lg px-3 text-xs font-semibold transition-colors cursor-pointer ${
                   postType === type 
                     ? (type === 'demand' ? 'bg-orange-600 text-white shadow-sm' : type === 'sale' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-sm')
                     : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
                 }`}
               >
-                {type === 'regular' ? 'Post' : type === 'demand' ? 'Buy' : 'Sell'}
+                {type === 'regular'
+                  ? isBn ? 'পোস্ট' : 'Post'
+                  : type === 'demand'
+                  ? isBn ? 'চাই' : 'Buy'
+                  : isBn ? 'বিক্রি' : 'Sell'}
               </button>
             ))}
           </div>
 
           <div className="w-px h-6 bg-[var(--pm-border)] mx-1 sm:mx-2" />
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={() => setShowProductPicker(!showProductPicker)}
-              className={`p-2 sm:p-2.5 rounded-full transition-all active-scale cursor-pointer ${selectedProduct ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]' : 'text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)]'}`}
-              title="Tag Product"
+              aria-label={isBn ? 'পণ্য ট্যাগ করুন' : 'Tag a product'}
+              className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active-scale cursor-pointer ${selectedProduct ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]' : 'text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)]'}`}
+              title={isBn ? 'পণ্য ট্যাগ করুন' : 'Tag a product'}
             >
-              <Tag className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              <Tag className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => setMediaPreview(mediaPreview ? null : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80')}
-              className={`p-2 sm:p-2.5 rounded-full transition-all active-scale cursor-pointer ${mediaPreview ? 'bg-[var(--pm-success-soft)] text-[var(--pm-success)]' : 'text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)]'}`}
-              title="Add Photo"
+              aria-label={isBn ? 'ছবির প্রিভিউ যোগ করুন' : 'Add a photo preview'}
+              className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active-scale cursor-pointer ${mediaPreview ? 'bg-[var(--pm-success-soft)] text-[var(--pm-success)]' : 'text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)]'}`}
+              title={isBn ? 'ছবির প্রিভিউ যোগ করুন' : 'Add a photo preview'}
             >
-              <Image className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-            </button>
-            <button
-              type="button"
-              className="p-2 sm:p-2.5 rounded-full text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] transition-all active-scale cursor-pointer"
-              title="Add Feeling"
-            >
-              <Smile className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              <Image className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -340,10 +350,10 @@ export const PostComposer: React.FC<PostComposerProps> = ({
           type="button"
           onClick={handleSubmit}
           disabled={!content.trim() && !selectedProduct && !mediaPreview}
-          className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 rounded-full bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] disabled:opacity-30 text-[var(--pm-accent-fg)] text-xs sm:text-[13px] font-black uppercase tracking-wider transition-all active-scale shadow-lg cursor-pointer shrink-0 ml-auto sm:ml-0"
+          className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--pm-accent)] px-4 text-sm font-bold text-[var(--pm-accent-fg)] transition-colors hover:bg-[var(--pm-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40 active-scale sm:w-auto sm:px-6"
         >
-          <span>Share</span>
-          <Send className="w-3.5 h-3.5" />
+          <span>{isBn ? 'শেয়ার করুন' : 'Share post'}</span>
+          <Send className="h-4 w-4" />
         </button>
       </div>
     </div>

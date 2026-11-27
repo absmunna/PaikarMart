@@ -9,7 +9,6 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Order, CommerceItem, SocialPost } from '@/types';
-import { AdMobBanner } from '@/components/shared/AdMobBanner';
 import { TrendingTopicsWidget } from '@/components/shared/TrendingTopicsWidget';
 import { DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
 
@@ -37,14 +36,6 @@ export const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
       
       {/* AI Trending Topics Community Pulse Widget */}
       <TrendingTopicsWidget posts={posts} onSelectTopic={onSelectTopic} />
-
-      {/* Google AdMob Sponsored Card */}
-      <div className="space-y-1">
-        <span className="text-[11px] font-bold text-[var(--pm-muted)] uppercase tracking-wider block px-1">
-          Sponsored Spotlight
-        </span>
-        <AdMobBanner variant="supabase" />
-      </div>
 
       {/* Live Order Tracker if any active orders exist */}
       {activeOrders.length > 0 && (

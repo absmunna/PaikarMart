@@ -256,16 +256,16 @@ export const CategoryBar: React.FC<CategoryBarProps> = ({
               type="button"
               onClick={() => handleTileClick(cat)}
               aria-pressed={Boolean(isSelected)}
-              className={`shrink-0 snap-start w-[78px] sm:w-[92px] min-h-[64px] sm:min-h-[70px] px-1.5 py-1.5 sm:px-2 sm:py-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer group active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--pm-card)] ${
+              className={`shrink-0 snap-start w-auto min-w-[6.5rem] max-w-[11rem] sm:w-[92px] sm:min-w-0 sm:max-w-none min-h-11 sm:min-h-[70px] px-3 py-2 sm:px-2 sm:py-2 rounded-xl border flex flex-row sm:flex-col items-center justify-start sm:justify-center gap-2 sm:gap-1 transition-colors cursor-pointer group active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--pm-card)] ${
                 isSelected
                   ? `bg-gradient-to-br ${cat.tintClass} shadow-sm ring-1 ring-[var(--pm-accent)]/40`
                   : 'bg-[var(--pm-surface)] border-[var(--pm-border)] text-[var(--pm-text)] hover:border-[var(--pm-accent)]/40'
               }`}
             >
-              <div className="w-8 h-8 rounded-lg bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                <Icon className="w-4 h-4 shrink-0 text-[var(--pm-accent)]" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-[var(--pm-accent)]" />
               </div>
-              <span className="text-[10px] sm:text-[11px] font-bold text-center leading-tight line-clamp-1 sm:line-clamp-2 w-full px-0.5">
+              <span className="min-w-0 text-[11px] font-bold text-left sm:text-center leading-tight line-clamp-2 sm:w-full px-0.5">
                 {isBn ? cat.labelBn : cat.labelEn}
               </span>
             </button>
@@ -276,7 +276,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = ({
       {/* TIER 3: Context-Aware Subcategory Chips */}
       {subcategories.length > 0 && (
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 border-t border-[var(--pm-border)] touch-pan-x overscroll-x-contain snap-x snap-mandatory">
-          <span className="text-[10px] font-bold text-[var(--pm-muted)] flex items-center gap-1 shrink-0 pr-1">
+          <span className="text-[11px] sm:text-[10px] font-bold text-[var(--pm-muted)] flex items-center gap-1 shrink-0 pr-1">
             <ArrowRight className="w-3 h-3 text-[var(--pm-accent)]" />
             {isBn ? 'সাব-ক্যাটাগরি:' : 'Sub:'}
           </span>
@@ -289,7 +289,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = ({
                 onSearchFilter?.(activeTile?.searchFilter || '');
               }}
               aria-pressed={isAllSubSelected}
-              className={`shrink-0 snap-start px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] ${
+              className={`shrink-0 snap-start min-h-10 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] ${
                 isAllSubSelected
                   ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border-[var(--pm-accent)]/40'
                   : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'
@@ -331,7 +331,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = ({
                   }
                 }}
                 aria-pressed={isSubSelected}
-                className={`shrink-0 snap-start px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] ${
+                className={`shrink-0 snap-start min-h-10 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)] ${
                   isSubSelected
                     ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border-[var(--pm-accent)]/40'
                     : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:text-[var(--pm-text)]'

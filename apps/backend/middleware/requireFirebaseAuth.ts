@@ -202,10 +202,17 @@ export const SUPER_ADMIN_EMAILS = new Set([
   'root.admin@paikarmart.com'
 ]);
 
+export function isAllowlistedSuperAdminEmail(
+  email: string | undefined,
+  emailVerified: boolean | undefined
+): boolean {
+  return emailVerified === true && Boolean(email && SUPER_ADMIN_EMAILS.has(email.trim().toLowerCase()));
+}
+
 async function buildVerifiedAuthContext(decoded: DecodedIdToken): Promise<VerifiedFirebaseAuth> {
   const claims = decoded as DecodedIdToken & { role?: string; roles?: string[] };
   const dbMeta = await loadAuthoritativeRoleMeta(decoded.uid);
-  const isSuperAdminEmail = Boolean(decoded.email && SUPER_ADMIN_EMAILS.has(decoded.email.toLowerCase()));
+  const isSuperAdminEmail = isAllowlistedSuperAdminEmail(decoded.email, decoded.email_verified);
 
   const mergedRoles = Array.from(
     new Set([

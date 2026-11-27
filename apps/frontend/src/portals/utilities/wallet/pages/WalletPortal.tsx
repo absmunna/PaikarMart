@@ -15,7 +15,6 @@ import {
   Smartphone,
   Info,
   Clock,
-  ArrowRight,
   Search,
 } from 'lucide-react';
 import { User, PortalTab, WalletTransaction as SharedWalletTransaction } from '@/types';
@@ -26,14 +25,12 @@ export interface WalletPortalProps {
   currentUser: User;
   onUpdateUser: (updatedUser: User) => void;
   onSelectTab?: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
 }
 
 export const WalletPortal: React.FC<WalletPortalProps> = ({
   currentUser,
   onUpdateUser,
   onSelectTab,
-  onOpenVendorModal,
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -243,16 +240,6 @@ export const WalletPortal: React.FC<WalletPortalProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span>{isBn ? 'ব্যালেন্স রিফ্রেশ' : 'Sync Balance'}</span>
             </button>
-            {onOpenVendorModal && !currentUser.isVendor && (
-              <button
-                type="button"
-                onClick={onOpenVendorModal}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black transition-colors cursor-pointer shadow-md"
-              >
-                <span>{isBn ? 'মার্চেন্ট অ্যাকাউন্ট খুলুন' : 'Become a Merchant'}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </div>
       </section>
