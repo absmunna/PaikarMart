@@ -187,9 +187,9 @@ export async function findStoredOrderByIdOrKey(orderIdOrKey: string) {
   const trimmed = orderIdOrKey.trim();
   if (!trimmed) return null;
   try {
-    let { data, error } = isUuidString(trimmed)
+    let { data, error } = await (isUuidString(trimmed)
       ? client.from('orders').select('*').or(`id.eq.${trimmed},idempotency_key.eq.${trimmed}`).maybeSingle()
-      : client.from('orders').select('*').eq('idempotency_key', trimmed).maybeSingle();
+      : client.from('orders').select('*').eq('idempotency_key', trimmed).maybeSingle());
     if (!error && !data && !isUuidString(trimmed)) {
       ({ data, error } = await client.from('orders').select('*').eq('public_order_id', trimmed).maybeSingle());
     }

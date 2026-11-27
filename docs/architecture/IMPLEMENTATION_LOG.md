@@ -260,3 +260,19 @@ Tracks baseline verification, architectural audits, module migrations, tests, an
 - Wallet, seller-onboarding, and RFQ shortcuts now route to their gated pages instead of opening the unfinished feature modals.
 - Added the missing root `react-is` dependency required by Recharts; the root lockfile was reconciled. The production frontend/backend build and frontend/backend TypeScript checks passed, with a non-fatal large-chunk warning.
 - `git diff --check` passed. The targeted HTTP security test was attempted but the sandbox proxy returned 502 for loopback requests, so order API behavior remains unverified here. npm reported four high-severity advisories. No staging, migration, or deployment was performed.
+
+## 2026-11-28 — Production payment sandbox guard
+
+- Updated `isPaymentSandboxAllowed()` to reject sandbox mode in production even when `PAYMENT_SANDBOX_MODE=true`; explicit sandbox overrides remain available outside production.
+- Added a regression test for the production override case. The focused test, backend TypeScript check, and `git diff --check` passed.
+
+## 2026-11-28 — Verified-email super-admin promotion
+
+- Allowlisted email addresses now receive the email-based super-admin role only when Firebase's verified-email claim is true.
+- Added regression coverage for unverified, missing, case-insensitive verified, and non-allowlisted addresses. The focused test, backend TypeScript check, and `git diff --check` passed.
+
+## 2026-11-28 — Fail-closed order status persistence
+
+- Order status and tracking state now change only after the database confirms the status update. A failed persistence returns `503` and does not cache a fallback order.
+- Added deterministic unit coverage for failed and successful persistence. The focused test, backend TypeScript check, and `git diff --check` passed.
+- An HTTP route test attempt returned `502` from the sandbox proxy for the local server, so route-level HTTP behavior remains unverified here.

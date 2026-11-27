@@ -9,7 +9,12 @@ import {
   getRecentAuditEvents,
   redactSensitiveFields,
 } from '../middleware/audit.js';
-import { requireFirebaseAuth, requireRole } from '../middleware/requireFirebaseAuth.js';
+import {
+  isAllowlistedSuperAdminEmail,
+  requireFirebaseAuth,
+  requireRole,
+  SUPER_ADMIN_EMAILS,
+} from '../middleware/requireFirebaseAuth.js';
 import { notificationRouter } from '../modules/notifications/notificationRoutes.js';
 import identityRouter from '../modules/identity/identityRoutes.js';
 import { aiRouter } from '../modules/ai/aiRoutes.js';
@@ -216,6 +221,15 @@ test('identityRouter, ai moderate-post, and rfq/forecasting routes enforce authe
 
 test('requireFirebaseAuth export remains callable', () => {
   assert.equal(typeof requireFirebaseAuth, 'function');
+});
+
+test('allowlisted super-admin emails require a verified Firebase email claim', () => {
+  const allowlistedEmail = Array.from(SUPER_ADMIN_EMAILS)[0];
+
+  assert.equal(isAllowlistedSuperAdminEmail(allowlistedEmail, false), false);
+  assert.equal(isAllowlistedSuperAdminEmail(allowlistedEmail, undefined), false);
+  assert.equal(isAllowlistedSuperAdminEmail(allowlistedEmail?.toUpperCase(), true), true);
+  assert.equal(isAllowlistedSuperAdminEmail('unlisted@example.com', true), false);
 });
 
 test('Step 1 & 5: promote-seller and promote-creator enforce auth on both /api/auth and /api/v1/auth', async () => {

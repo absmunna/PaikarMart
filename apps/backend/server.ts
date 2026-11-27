@@ -246,7 +246,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     logger.info('PaikarMart Super App Server started', { module: 'server', port: PORT });
   });
 }

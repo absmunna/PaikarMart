@@ -25,14 +25,14 @@ Maintains active architectural, infrastructure, security, and schema issues disc
 
 ## Remaining Active Operational Items
 
-1. **[KI-009 / Operational] Remote Push via Personal Access Token & Supabase SQL Execution**
-   - Remote `origin` has been configured locally (`https://github.com/absmunna/PaikarMart.git`). Because pushing requires GitHub credentials, run `git push -u origin refactor/modular-architecture` with your GitHub token, then create a PR to merge into `main`.
+1. **[KI-009 / Operational] Supabase SQL Execution**
+   - Branch `refactor/modular-architecture` has been pushed to `origin` at commit `1faa0dea`. A pull request and merge to `main` are still pending.
    - Apply `supabase/migrations/20261126_financial_and_persistence_hardening.sql` in your Supabase SQL Editor.
    - Legacy Windows scripts (`run_phase1_migrations.ps1`, `scripts/sync-to-web.ps1`, `scripts/sync-web.ps1`) remain untouched for historical reference.
 
 ## Active shipment authorization gap
 
-POD authorization, outbound courier payload access, and checkpoint updates are now scoped to the order owner/assigned courier/logistics staff as appropriate. These changes depend on `supabase/migrations/20261126_add_shipment_courier_assignment.sql`, which has not been applied or staging-tested. Other shipment mutation/read routes and end-to-end HTTP integration remain to be verified.
+POD authorization, outbound courier payload access, and checkpoint updates are now scoped to the order owner/assigned courier/logistics staff as appropriate. These changes depend on `supabase/migrations/20261126_add_shipment_courier_assignment.sql` and `supabase/migrations/20261127_persist_public_order_ids.sql`, which have not been applied or staging-tested. Other shipment mutation/read routes and end-to-end HTTP integration remain to be verified.
 
 ## Deployment constraint
 
@@ -42,7 +42,7 @@ Use Vercel Free, Render Free, Supabase Free PostgreSQL, and Firebase Spark witho
 
 - The local Vite preview returns `404` for its optimized `recharts.js` dependency when the profile Insights tab is opened; the route now defers that dependency and keeps the rest of the profile usable with an inline error state.
 - The production build now succeeds after adding the missing root `react-is` dependency, but the Insights chart still needs browser verification and the build warns about chunks larger than 500 kB.
-- Re-test the Insights chart in preview; do not treat the successful build as proof that analytics renders correctly.
+- The latest local browser check could not reach `localhost:3000` (connection timed out); re-test the Insights chart in a reachable preview and do not treat the successful build as proof that analytics renders correctly.
 
 ## First release slice: Retail Marketplace + COD
 

@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import express from 'express';
-import { orderRouter } from '../modules/orders/orderRoutes.js';
+import {
+  orderRouter,
+  persistOrderStatusUpdate,
+  type OrderLifecycleStatus,
+} from '../modules/orders/orderRoutes.js';
 import { evaluateVoucher } from '../modules/retail/retailRoutes.js';
 
 function startTestServer(app: express.Express): Promise<{ baseUrl: string; close: () => Promise<void> }> {
@@ -130,6 +134,36 @@ test('POST /api/orders rejects online payment methods while checkout is COD-only
   } finally {
     await srv.close();
   }
+});
+
+test('order status and tracking step change only after persistence succeeds', async () => {
+  const order = {
+    id: 'PKM-status-persistence-test',
+    status: 'confirmed' as OrderLifecycleStatus,
+    trackingStep: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const beforeFailedUpdate = { ...order };
+
+  const failed = await persistOrderStatusUpdate(
+    order,
+    'preparing',
+    '2026-01-02T00:00:00.000Z',
+    async () => false
+  );
+  assert.equal(failed, false);
+  assert.deepEqual(order, beforeFailedUpdate);
+
+  const succeeded = await persistOrderStatusUpdate(
+    order,
+    'preparing',
+    '2026-01-02T00:00:00.000Z',
+    async () => true
+  );
+  assert.equal(succeeded, true);
+  assert.equal(order.status, 'preparing');
+  assert.equal(order.trackingStep, 2);
+  assert.equal(order.updatedAt, '2026-01-02T00:00:00.000Z');
 });
 
 test('evaluateVoucher rejects unknown promo codes and enforces minimum spend threshold', () => {

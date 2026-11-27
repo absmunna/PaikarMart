@@ -76,6 +76,20 @@ const STATUS_TO_SHIPMENT: Record<OrderLifecycleStatus, ShipmentStatus> = {
   delivered: 'DELIVERED'
 };
 
+export async function persistOrderStatusUpdate(
+  order: Pick<ServerOrderRecord, 'id' | 'status' | 'trackingStep' | 'updatedAt'>,
+  status: OrderLifecycleStatus,
+  updatedAt: string,
+  persist: typeof updateStoredOrderStatus = updateStoredOrderStatus
+): Promise<boolean> {
+  if (!(await persist(order.id, status, updatedAt))) return false;
+
+  order.status = status;
+  order.trackingStep = STATUS_TO_STEP[status];
+  order.updatedAt = updatedAt;
+  return true;
+}
+
 // GET /api/orders
 orderRouter.get('/', requireFirebaseAuth, async (_req: Request, res: Response) => {
   const auth = res.locals.auth;
@@ -449,6 +463,7 @@ const handleUpdateStatus = async (req: Request, res: Response) => {
   let order =
     serverOrders.find((o) => o.id === req.params.id || o.idempotencyKey === req.params.id) ||
     (await findStoredOrderByIdOrKey(req.params.id));
+  let shouldCacheFallbackOrder = false;
 
   const fallbackOrder = req.body?.fallbackOrder;
   if (!order && fallbackOrder) {
@@ -465,7 +480,7 @@ const handleUpdateStatus = async (req: Request, res: Response) => {
       id: req.params.id,
       customerId: fallbackOrder.customerId || auth.uid,
     };
-    serverOrders.unshift(order!);
+    shouldCacheFallbackOrder = true;
   }
 
   if (!order) {
@@ -496,11 +511,13 @@ const handleUpdateStatus = async (req: Request, res: Response) => {
   }
 
   const nowIso = new Date().toISOString();
-  order.status = targetStatus;
-  order.trackingStep = STATUS_TO_STEP[targetStatus];
-  order.updatedAt = nowIso;
+  const persisted = await persistOrderStatusUpdate(order, targetStatus, nowIso);
+  if (!persisted) {
+    res.status(503).json({ error: 'We could not save the order status. Please try again later.' });
+    return;
+  }
 
-  await updateStoredOrderStatus(order.id, targetStatus, nowIso);
+  if (shouldCacheFallbackOrder) serverOrders.unshift(order);
 
   const shipmentStatus = STATUS_TO_SHIPMENT[targetStatus];
   const shipment = appendShipmentCheckpoint(
