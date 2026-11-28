@@ -2,23 +2,25 @@ import React from 'react';
 import { Lock, LogIn } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { PortalSkeleton } from '@/components/shared/SkeletonLoaders';
 
 interface AuthGuardProps {
   children: React.ReactNode;
   onOpenAuthModal?: (tab?: 'login' | 'register') => void;
+  fallback?: React.ReactNode;
 }
 
-export const AuthGuard: React.FC<AuthGuardProps> = ({ children, onOpenAuthModal }) => {
+export const AuthGuard: React.FC<AuthGuardProps> = ({
+  children,
+  onOpenAuthModal,
+  fallback,
+}) => {
   const { firebaseUser, loading } = useAuth();
   const { language } = useLanguage();
   const isBn = language === 'bn';
 
   if (loading) {
-    return (
-      <div className="p-6 sm:p-8 text-center text-sm text-[var(--pm-muted)]">
-        {isBn ? 'সিকিউর সেশন যাচাই করা হচ্ছে…' : 'Checking secure session…'}
-      </div>
-    );
+    return <>{fallback ?? <PortalSkeleton />}</>;
   }
   if (firebaseUser) return <>{children}</>;
 
@@ -41,7 +43,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children, onOpenAuthModal 
         <button
           type="button"
           onClick={() => onOpenAuthModal('login')}
-          className="px-6 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs sm:text-sm font-black inline-flex items-center justify-center gap-2 cursor-pointer active-scale shadow-md transition-all"
+          className="min-h-11 px-6 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-xs sm:text-sm font-black inline-flex items-center justify-center gap-2 cursor-pointer active-scale shadow-md transition-all"
         >
           <LogIn className="w-4 h-4 shrink-0" />
           <span>{isBn ? 'লগইন করুন' : 'Sign in'}</span>

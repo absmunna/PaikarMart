@@ -70,7 +70,7 @@ export const LogisticsLivePanel: React.FC<LogisticsLivePanelProps> = ({
     PENDING: {
       status: 'PICKUP_ASSIGNED',
       msg: 'Courier rider arrived at seller warehouse for pickup',
-      loc: shipment.pickupLocation
+      loc: shipment.pickupLocation || 'Dhaka Logistics Hub'
     },
     PICKUP_ASSIGNED: {
       status: 'IN_TRANSIT',
@@ -158,8 +158,12 @@ export const LogisticsLivePanel: React.FC<LogisticsLivePanelProps> = ({
             <span className="font-bold text-[var(--pm-text)]">{shipment.trackingNumber}</span>
             <span aria-hidden="true">·</span>
             <span>{shipment.courierPartner}</span>
-            <span aria-hidden="true">·</span>
-            <span>OTP: {shipment.deliveryOtp}</span>
+            {shipment.deliveryOtp && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>OTP: {shipment.deliveryOtp}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -214,36 +218,40 @@ export const LogisticsLivePanel: React.FC<LogisticsLivePanelProps> = ({
           <span className="text-[10px] text-[var(--pm-muted)] block">
             {isBn ? 'শিপিং ফি' : 'Courier Tariff'}
           </span>
-          <span className="text-sm font-mono tabular-nums font-black text-[var(--pm-text)] mt-0.5 block">
-            ৳{shipment.shippingFee.toLocaleString()}
-          </span>
+          {shipment.shippingFee != null && (
+            <span className="text-sm font-mono tabular-nums font-black text-[var(--pm-text)] mt-0.5 block">
+              ৳{shipment.shippingFee.toLocaleString()}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Assigned Rider Card */}
-      <div className="p-3.5 rounded-[1.25rem] bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-[1rem] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] flex items-center justify-center shrink-0 font-black text-sm">
-            <Truck className="w-5 h-5" />
+      {shipment.rider && (
+        <div className="p-3.5 rounded-[1.25rem] bg-[var(--pm-card)] border border-[var(--pm-border)] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-[1rem] bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] flex items-center justify-center shrink-0 font-black text-sm">
+              <Truck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[var(--pm-text)] truncate">
+                {shipment.rider.name}
+              </p>
+              <p className="text-[11px] text-[var(--pm-muted)] font-mono truncate">
+                {shipment.rider.rating}★ · {shipment.rider.tripsCount} trips · {shipment.rider.phone}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-[var(--pm-text)] truncate">
-              {shipment.rider.name}
-            </p>
-            <p className="text-[11px] text-[var(--pm-muted)] font-mono truncate">
-              {shipment.rider.rating}★ · {shipment.rider.tripsCount} trips · {shipment.rider.phone}
-            </p>
-          </div>
-        </div>
 
-        <a
-          href={`tel:${shipment.rider.phone}`}
-          className="px-3.5 py-2 rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 active-scale transition-colors"
-        >
-          <PhoneCall className="w-3.5 h-3.5" />
-          <span>{isBn ? 'কল' : 'Call Rider'}</span>
-        </a>
-      </div>
+          <a
+            href={`tel:${shipment.rider.phone}`}
+            className="px-3.5 py-2 rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 active-scale transition-colors"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>{isBn ? 'কল' : 'Call Rider'}</span>
+          </a>
+        </div>
+      )}
 
       {podFeedback && (
         <div
@@ -280,7 +288,11 @@ export const LogisticsLivePanel: React.FC<LogisticsLivePanelProps> = ({
               <KeyRound className="w-4 h-4 text-[var(--pm-success)]" />
               <span>{isBn ? '৩-ধাপ ডেলিভারি POD যাচাই' : '3-Step POD & Escrow Release'}</span>
             </span>
-            <span className="text-[11px] font-mono text-[var(--pm-muted)]">Waybill OTP: {shipment.deliveryOtp}</span>
+            {shipment.deliveryOtp && (
+              <span className="text-[11px] font-mono text-[var(--pm-muted)]">
+                Waybill OTP: {shipment.deliveryOtp}
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

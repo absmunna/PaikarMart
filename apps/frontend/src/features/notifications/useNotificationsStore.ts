@@ -15,18 +15,29 @@ export function useNotificationsStore(isAuthenticated: boolean) {
   const [notifications, setNotifications] = useState<AppNotification[]>(() =>
     loadStoredData('NOTIFICATIONS', INITIAL_NOTIFICATIONS)
   );
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
 
   useEffect(() => {
     saveStoredData('NOTIFICATIONS', notifications);
   }, [notifications]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setIsNotificationsLoading(false);
+      return;
+    }
     let active = true;
-    fetchUserNotificationsApi().then((serverNotifs) => {
-      if (!active || !serverNotifs || serverNotifs.length === 0) return;
-      setNotifications(serverNotifs);
-    });
+    setIsNotificationsLoading(true);
+    fetchUserNotificationsApi()
+      .then((serverNotifs) => {
+        if (!active || !serverNotifs || serverNotifs.length === 0) return;
+        setNotifications(serverNotifs);
+      })
+      .finally(() => {
+        if (active) {
+          setIsNotificationsLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -109,6 +120,7 @@ export function useNotificationsStore(isAuthenticated: boolean) {
     notifications,
     visibleNotifications,
     unreadNotificationsCount,
+    isNotificationsLoading,
     addNotification,
     handleMarkNotificationAsRead,
     handleMarkAllNotificationsAsRead,

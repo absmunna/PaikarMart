@@ -35,7 +35,8 @@ export type SettingsSectionId =
   | 'vendor_kyc'
   | 'vendor_payout'
   | 'vendor_fulfillment'
-  | 'vendor_hours';
+  | 'vendor_hours'
+  | 'team_access';
 
 export type UserRole = 'consumer' | 'vendor' | 'moderator' | 'admin' | 'super_admin';
 
@@ -104,6 +105,14 @@ export interface PayoutAccount {
   routingNumber?: string;
 }
 
+export interface AdministrativeArea {
+  division?: string;
+  district?: string;
+  upazila?: string;
+  thana?: string;
+  postalCode?: string;
+}
+
 export interface VendorProfile {
   id: string;
   handle?: string;
@@ -126,6 +135,8 @@ export interface VendorProfile {
   isOpen?: boolean;
   openingHoursLabel?: string;
   coordinates?: { lat: number; lng: number };
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
   createdAt: string;
   activeRoles?: BusinessRole[];
   documents?: BusinessDocument[];
@@ -207,14 +218,30 @@ export interface User {
   profileType?: 'personal' | 'organization' | 'business_page';
 }
 
+export type TeamPageRole = 'admin' | 'editor' | 'viewer';
+
 export interface PaikarMartDelegate {
   id: string;
   email: string;
   name: string;
   role: UserRole;
+  pageRole?: TeamPageRole;
   addedAt: string;
   addedBy: string;
   status: 'active' | 'invited';
+}
+
+export interface VendorDelegate {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  ownerId: string;
+  email: string;
+  name: string;
+  pageRole: TeamPageRole;
+  status: 'active' | 'invited' | 'revoked';
+  addedBy: string;
+  addedAt: string;
 }
 
 export type ReactionType = 'like' | 'love' | 'care' | 'haha' | 'wow' | 'sad';
@@ -392,6 +419,7 @@ export interface ProviderServiceOffer {
   verifiedBadge: boolean;
   rating: number;
   reviewsCount: number;
+  serviceArea?: AdministrativeArea;
   proximityDistance: string;
   estimatedArrival: string;
 }
@@ -420,6 +448,8 @@ export interface CommerceItem {
   deliveryEta: string;
   proximityDistance?: string;
   coordinates?: { lat: number; lng: number };
+  storeAddress?: string;
+  serviceArea?: AdministrativeArea;
   isOpen?: boolean;
   openingHoursLabel?: string;
   prepMinutes?: number;
@@ -447,6 +477,7 @@ export interface ProductVariantOption {
   id: string;
   label: string;
   values: string[];
+  swatches?: Record<string, string>;
 }
 
 export interface ProductVariantOffer {
@@ -559,6 +590,7 @@ export interface VendorApplication {
   taxIdentificationNumber: string;
   category: VendorCategory;
   storeAddress: string;
+  serviceArea?: AdministrativeArea;
   contactEmail: string;
   contactPhone: string;
   payoutAccountType: 'Bank Account' | 'Mobile Banking';
@@ -589,6 +621,10 @@ export interface SavedAddress {
   streetAddress: string;
   apartment?: string;
   city: string;
+  division?: string;
+  district?: string;
+  upazila?: string;
+  thana?: string;
   postalCode?: string;
   tag: 'home' | 'office' | 'other';
   isDefault: boolean;
@@ -623,6 +659,7 @@ export interface VendorStoreSettings {
   helplinePhone: string;
   supportEmail: string;
   storeAddress: string;
+  serviceArea?: AdministrativeArea;
   logoUrl?: string;
   bannerUrl?: string;
   tradeLicenseNumber: string;

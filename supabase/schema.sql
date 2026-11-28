@@ -89,6 +89,10 @@ create table if not exists public.saved_addresses (
   street_address text not null,
   apartment text,
   city text not null,
+  division text,
+  district text,
+  upazila text,
+  thana text,
   postal_code text,
   tag text not null default 'home' check (tag in ('home', 'office', 'other')),
   is_default boolean not null default false,
@@ -96,6 +100,10 @@ create table if not exists public.saved_addresses (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+alter table public.saved_addresses add column if not exists division text;
+alter table public.saved_addresses add column if not exists district text;
+alter table public.saved_addresses add column if not exists upazila text;
+alter table public.saved_addresses add column if not exists thana text;
 
 -- ==============================================================================
 -- 4. Vendor Stores Table (Multi-Vendor Business Entities & Hyperlocal Geofence)
@@ -117,6 +125,8 @@ create table if not exists public.stores (
   rating numeric(3,2) default 5.00 check (rating >= 0.00 and rating <= 5.00),
   total_sales numeric(12,2) default 0.00,
   banner_url text,
+  store_address text,
+  service_area jsonb not null default '{}'::jsonb,
   lat numeric(9,6),
   lng numeric(9,6),
   service_radius_km numeric(4,1) default 5.0 check (service_radius_km >= 1.0 and service_radius_km <= 20.0),
@@ -125,6 +135,8 @@ create table if not exists public.stores (
   prep_minutes int default 12 check (prep_minutes >= 0),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+alter table public.stores add column if not exists store_address text;
+alter table public.stores add column if not exists service_area jsonb not null default '{}'::jsonb;
 
 -- 4.1 One account can operate multiple independent vendor stores.
 create table if not exists public.vendor_memberships (
@@ -314,6 +326,7 @@ create table if not exists public.social_comments (
 -- ==============================================================================
 create table if not exists public.orders (
   id uuid primary key default uuid_generate_v4(),
+  public_order_id text unique,
   idempotency_key text unique,
   customer_id uuid references public.profiles(id) on delete cascade not null,
   subtotal numeric(10,2) not null check (subtotal >= 0.00),
@@ -339,6 +352,7 @@ create table if not exists public.shipment_waybills (
   courier_partner text not null default 'PaikarForce' check (courier_partner in ('PaikarForce', 'Steadfast', 'Pathao', 'RedX')),
   status text not null default 'PENDING',
   delivery_otp text not null,
+  assigned_courier_profile_id uuid references public.profiles(id) on delete set null,
   pickup_location text not null,
   drop_location text not null,
   shipping_fee_bdt numeric(10,2) default 60.00 check (shipping_fee_bdt >= 0.00),
@@ -347,6 +361,10 @@ create table if not exists public.shipment_waybills (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+alter table public.shipment_waybills
+  add column if not exists assigned_courier_profile_id uuid references public.profiles(id) on delete set null;
+create index if not exists idx_shipment_waybills_assigned_courier
+  on public.shipment_waybills(assigned_courier_profile_id);
 
 create table if not exists public.return_pickups (
   id uuid primary key default uuid_generate_v4(),
@@ -987,13 +1005,14 @@ create policy "Vendors can manage their own service offers"
 -- ------------------------------------------------------------------------------
 -- 12. SHIPMENT WAYBILLS & RETURN PICKUPS RLS
 -- ------------------------------------------------------------------------------
-create policy "Customers and admins can view shipment waybills"
+create policy "Customers, assigned couriers and admins can view shipment waybills"
   on public.shipment_waybills for select
   using (
     exists (
       select 1 from public.orders o
       where o.id = order_id and o.customer_id = public.current_profile_id()
     )
+    or assigned_courier_profile_id = public.current_profile_id()
     or public.has_role('moderator')
     or public.has_role('admin')
     or public.has_role('super_admin')

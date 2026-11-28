@@ -3,6 +3,7 @@ import { Lock, Play, CheckCircle2, Heart, Coins, BookOpen } from 'lucide-react';
 import { CommerceItem, CreatorContent } from '@/types';
 import { ShoppableProductOverlay } from '@/portals/community/creator-studio/components/ShoppableProductOverlay';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface CreatorContentCardProps {
   post: CreatorContent;
@@ -18,9 +19,9 @@ export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({
   onAddToCart,
 }) => {
   return (
-    <article className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl overflow-hidden shadow-xs group transition-all duration-300 hover:shadow-xl">
+    <ContentCard className="group transition-all duration-300 hover:shadow-xl">
       
-      <div className="relative aspect-video overflow-hidden bg-[var(--pm-surface)] cursor-pointer">
+      <ContentCardMedia className="aspect-video cursor-pointer">
         <img 
           src={safeMediaSrc(post.mediaUrl, "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&h=450&q=80")} 
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
@@ -55,7 +56,7 @@ export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({
             <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-md text-white text-[10px] font-black font-mono shadow-sm">14:28</span>
           </div>
         ) : null}
-      </div>
+      </ContentCardMedia>
 
       <div className="p-6 space-y-4">
         <div className="flex items-center gap-4">
@@ -87,6 +88,6 @@ export const CreatorContentCard: React.FC<CreatorContentCardProps> = ({
           <button type="button" className="flex items-center gap-1.5 hover:text-[var(--pm-accent)] transition-colors cursor-pointer"><BookOpen className="w-4 h-4"/> Read Details</button>
         </div>
       </div>
-    </article>
+    </ContentCard>
   );
 };

@@ -14,13 +14,12 @@ import {
   Building2,
   Map,
   X,
-  AlertCircle,
-  Settings
+  AlertCircle
 } from 'lucide-react';
 import { User } from '@/types';
 import { useLocationSettings } from '@/contexts/LocationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useSettings } from '@/contexts/SettingsContext';
+import { Button } from '@/components/shared/Button';
 
 interface TopNavLocationMenuProps {
   currentUser: User;
@@ -39,7 +38,6 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
   // Hook into centralized modular contexts
   const locationCtx = useLocationSettings();
   const { t } = useLanguage();
-  const { openSettings } = useSettings();
 
   const activeLoc = locationCtx?.activeLocation || currentUser.location || 'Dhaka, Bangladesh';
   const liveCoords = locationCtx?.coordinates || currentUser.coordinates || { lat: 23.7925, lng: 90.4078 };
@@ -79,7 +77,7 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         className="h-9 sm:h-10 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] font-semibold text-xs transition-all shadow-xs border border-[var(--pm-border)] cursor-pointer max-w-[140px] lg:max-w-[180px] xl:max-w-[210px] shrink-0"
-        title="Live Location System & Radar"
+        title="Current address and GPS location"
       >
         {/* Pulsing Beacon Dot */}
         <div className="relative flex items-center justify-center shrink-0">
@@ -122,7 +120,7 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
               </div>
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider">
-                  Live GPS Radar
+                  Live GPS Location
                 </h4>
                 <p className="text-[10px] opacity-85">
                   {isLiveTracking ? 'Continuous Tracking Active' : 'Real-time Device Geolocation'}
@@ -131,17 +129,6 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
             </div>
 
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  openSettings('location');
-                }}
-                className="p-1 rounded-full opacity-80 hover:opacity-100 hover:bg-black/10 transition-colors cursor-pointer"
-                title="Open Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -199,18 +186,20 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
             )}
 
             {/* Live GPS Detection Button */}
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => {
                 if (locationCtx) {
                   locationCtx.detectLiveLocation();
                 }
               }}
               disabled={isLocating}
-              className="w-full py-2.5 px-3.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-98 cursor-pointer disabled:opacity-60"
+              className="w-full font-bold shadow-md active:scale-98"
             >
               <Compass className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
               <span>{isLocating ? t.settings.location.detectingGPS : t.settings.location.detectGPS}</span>
-            </button>
+            </Button>
 
             {/* Continuous Live Tracking Switch */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
@@ -278,30 +267,20 @@ export const TopNavLocationMenu: React.FC<TopNavLocationMenuProps> = ({
 
             {/* Launch Full Google Map Modal */}
             {onOpenLocationModal && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setIsOpen(false);
                   onOpenLocationModal();
                 }}
-                className="w-full py-2 px-3 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-[var(--pm-border)]"
+                className="w-full font-bold"
               >
                 <Map className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
                 <span>{t.settings.location.openInteractiveMap}</span>
                 <ExternalLink className="w-3 h-3 opacity-60" />
-              </button>
+              </Button>
             )}
-
-            {/* Link to Full Settings */}
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                openSettings('appearance');
-              }}
-              className="w-full py-2 px-3 rounded-xl bg-[var(--pm-accent-soft)] hover:bg-[var(--pm-accent)]/20 text-[var(--pm-accent)] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-[var(--pm-accent-border)]"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>{t.settings.title}</span>
-            </button>
 
           </div>
 

@@ -30,3 +30,25 @@ Maintains active architectural, infrastructure, security, and schema issues disc
    - Apply `supabase/migrations/20261126_financial_and_persistence_hardening.sql` in your Supabase SQL Editor.
    - Legacy Windows scripts (`run_phase1_migrations.ps1`, `scripts/sync-to-web.ps1`, `scripts/sync-web.ps1`) remain untouched for historical reference.
 
+## Active shipment authorization gap
+
+POD authorization, outbound courier payload access, and checkpoint updates are now scoped to the order owner/assigned courier/logistics staff as appropriate. These changes depend on `supabase/migrations/20261126_add_shipment_courier_assignment.sql`, which has not been applied or staging-tested. Other shipment mutation/read routes and end-to-end HTTP integration remain to be verified.
+
+## Deployment constraint
+
+Use Vercel Free, Render Free, Supabase Free PostgreSQL, and Firebase Spark without billing. Do not enable billing or apply either Supabase migration to production without separate approval.
+
+## Local profile preview dependency issue
+
+- The local Vite preview returns `404` for its optimized `recharts.js` dependency when the profile Insights tab is opened; the route now defers that dependency and keeps the rest of the profile usable with an inline error state.
+- The production build now succeeds after adding the missing root `react-is` dependency, but the Insights chart still needs browser verification and the build warns about chunks larger than 500 kB.
+- Re-test the Insights chart in preview; do not treat the successful build as proof that analytics renders correctly.
+
+## First release slice: Retail Marketplace + COD
+
+- The initial scope is signed-in retail customers placing Cash on Delivery orders. Guest checkout and online payments are out of scope for this release.
+- Order creation now requires Firebase authentication and a successful persistent order write. Production order prices must resolve from live catalog records; unavailable storage or catalog data must not produce a success-shaped response or expose demo inventory.
+- Before release, staging must verify profile synchronization, catalog/listing schema and pricing, order idempotency, order tracking persistence, and shipment/waybill behavior. No production migration or deployment has been run.
+- Direct routes to deferred top-level areas now show a shared “Coming soon” screen, and the app restores to the marketplace when a saved route is deferred. Finer per-portal labels and staging verification remain; this is not yet a production release.
+- The latest dependency install reported four high-severity npm advisories; review and resolve or explicitly accept them before production.
+

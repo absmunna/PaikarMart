@@ -267,3 +267,55 @@ export const SocialFeedListSkeleton: React.FC<SocialFeedListSkeletonProps> = ({
   </div>
 );
 
+export const HubDirectorySkeleton: React.FC = () => (
+  <div className="space-y-6 animate-pulse p-4 max-w-7xl mx-auto">
+    <div className="h-36 bg-[var(--pm-surface)] rounded-3xl w-full border border-[var(--pm-border)]" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <div key={i} className="h-44 bg-[var(--pm-surface)] rounded-3xl border border-[var(--pm-border)]" />
+      ))}
+    </div>
+  </div>
+);
+
+export const NotificationsListSkeleton: React.FC = () => (
+  <div className="space-y-3 animate-pulse p-4 max-w-3xl mx-auto">
+    {[1, 2, 3, 4].map(i => (
+      <div key={i} className="h-20 bg-[var(--pm-surface)] rounded-2xl border border-[var(--pm-border)] w-full" />
+    ))}
+  </div>
+);
+
+export const OrdersListSkeleton: React.FC = () => (
+  <div className="space-y-4 animate-pulse p-4 max-w-4xl mx-auto">
+    {[1, 2, 3].map(i => (
+      <div key={i} className="h-32 bg-[var(--pm-surface)] rounded-3xl border border-[var(--pm-border)] w-full" />
+    ))}
+  </div>
+);
+
+export const ProfileViewSkeleton: React.FC = () => (
+  <div className="space-y-6 animate-pulse p-4 max-w-4xl mx-auto">
+    <div className="h-48 bg-[var(--pm-surface)] rounded-3xl w-full border border-[var(--pm-border)]" />
+    <div className="h-64 bg-[var(--pm-surface)] rounded-3xl w-full border border-[var(--pm-border)]" />
+  </div>
+);
+
+export const RouteCenterSkeleton: React.FC<{ pathname?: string; currentTab?: string }> = () => (
+  <div className="space-y-6 animate-pulse p-6 max-w-7xl mx-auto">
+    <div className="h-20 bg-[var(--pm-surface)] rounded-2xl w-full border border-[var(--pm-border)]" />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="h-64 bg-[var(--pm-surface)] rounded-3xl border border-[var(--pm-border)] md:col-span-2" />
+      <div className="h-64 bg-[var(--pm-surface)] rounded-3xl border border-[var(--pm-border)]" />
+    </div>
+  </div>
+);
+
+export const WalletViewSkeleton: React.FC = () => (
+  <div className="space-y-6 animate-pulse p-4 max-w-3xl mx-auto">
+    <div className="h-44 bg-[var(--pm-surface)] rounded-3xl w-full border border-[var(--pm-border)]" />
+    <div className="h-56 bg-[var(--pm-surface)] rounded-3xl w-full border border-[var(--pm-border)]" />
+  </div>
+);
+
+

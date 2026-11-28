@@ -29,7 +29,7 @@ import rfqRouter from './modules/rfq/rfqRoutes.js';
 import identityRouter from './modules/identity/identityRoutes.js';
 import storageRouter from './modules/storage/storageRoutes.js';
 import { socialRouter } from './modules/social/socialRoutes.js';
-import { requireFirebaseAuth, resolveFirebaseProjectId } from './middleware/requireFirebaseAuth.js';
+import { resolveFirebaseProjectId } from './middleware/requireFirebaseAuth.js';
 import { aiRateLimiter, authRateLimiter, generalRateLimiter } from './middleware/rateLimit.js';
 import { sanitizeApiInputs } from './middleware/sanitize.js';
 import { securityHeadersMiddleware } from './middleware/securityHeaders.js';
@@ -176,88 +176,6 @@ const handleHealthCheck = async (_req: Request, res: Response) => {
 
 app.get(['/api/health', '/api/v1/health'], handleHealthCheck);
 
-// Gemini AI Master Catalog Verification Endpoint
-app.post(['/api/catalog/verify-product', '/api/v1/catalog/verify-product'], requireFirebaseAuth, async (req: Request, res: Response) => {
-  const { title, brand, category, description, price } = req.body || {};
-
-  try {
-    if (process.env.GEMINI_API_KEY) {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
-      const prompt = `You are PaikarMart's AI Master Catalog Auditor. Evaluate the following proposed vendor product submission:
-Title: ${title}
-Brand: ${brand || 'Generic'}
-Category: ${category}
-Description: ${description}
-Price: ৳${price}
-
-Check for:
-1. Product authenticity & standard retail title clarity.
-2. Compliance (no illegal items/prohibited substances).
-3. Generate standard English title (titleEn) and Bengali title (titleBn).
-
-Respond ONLY in valid JSON format:
-{
-  "confidenceScore": number (0 to 100),
-  "isApproved": boolean,
-  "auditNotes": "string explanation",
-  "titleEn": "string",
-  "titleBn": "string",
-  "suggestedTags": ["string"]
-}`;
-
-      const aiResponse = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        }
-      });
-
-      const textResult = aiResponse.text || '{}';
-      const parsed = JSON.parse(textResult);
-
-      res.json({
-        success: true,
-        confidenceScore: parsed.confidenceScore ?? 96,
-        isApproved: parsed.isApproved ?? true,
-        auditNotes: parsed.auditNotes || 'Automated AI audit passed: Clean product title, authentic category classification.',
-        titleEn: parsed.titleEn || title,
-        titleBn: parsed.titleBn || title,
-        suggestedTags: parsed.suggestedTags || [category, brand || 'Generic']
-      });
-      return;
-    }
-  } catch (err) {
-    logger.error('Gemini AI Verification fallback', {
-      module: 'catalog',
-      action: 'verify-product',
-      error: err instanceof Error ? err.message : String(err)
-    });
-  }
-
-  // Fail-Safe security fallback: when AI audit is unavailable or network is restricted,
-  // hold for manual review rather than automatically approving unverified content.
-  res.json({
-    success: true,
-    confidenceScore: 50,
-    isApproved: false,
-    status: 'pending_human_review',
-    auditNotes: 'AI audit service queued listing for human verification (Fail-Safe Security Policy).',
-    titleEn: title,
-    titleBn: title,
-    suggestedTags: [category, brand || 'Pending Review']
-  });
-});
-
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     // Resolve frontend dist whether executed from root bundled `server.js` or `apps/backend/server.ts`
@@ -328,7 +246,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     logger.info('PaikarMart Super App Server started', { module: 'server', port: PORT });
   });
 }

@@ -6,11 +6,7 @@ import {
   type PublicProfileProjection
 } from '@paikarmart/shared';
 import {
-  Store,
-  ShieldCheck,
-  MapPin,
   Search,
-  ShoppingCart,
   MessageCircle,
   ArrowLeft,
   Share2,
@@ -19,38 +15,50 @@ import {
   Wrench,
   Package,
   MessageSquare,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Image as ImageIcon
 } from 'lucide-react';
 import { CommerceItem, ReactionType, ServiceBooking, SocialPost, User } from '@/types';
+import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { ProfileHeader } from '@/portals/utilities/user-profile/components/ProfileHeader';
 import { vendorApiClient } from '@/features/vendors';
 import { FeedPostCard } from '@/features/social';
+import { ProductCardActionRow } from '@/features/marketplace/components/ProductCardActionRow';
 import { ServiceCard, ServiceBookingModal } from '@/features/services';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 interface PublicStorefrontPageProps {
   commerceItems: CommerceItem[];
   posts: SocialPost[];
+  savedPostIds: string[];
   currentUser: User;
   onAddToCart: (item: CommerceItem, qty: number, isWholesale: boolean) => void;
   onBookService?: (booking: Omit<ServiceBooking, 'id' | 'status'>) => void;
   onReact: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
+  onToggleSavedPost: (postId: string) => void;
   onDeductBalance?: (amount: number) => boolean;
 }
 
-type ProfileSectionTab = 'all' | 'posts' | 'products' | 'services';
+type ProfileSectionTab = 'all' | 'posts' | 'photos' | 'products' | 'services';
 
 export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   commerceItems,
   posts,
+  savedPostIds,
   currentUser,
   onAddToCart,
   onBookService,
   onReact,
   onAddComment,
+  onToggleSavedPost,
   onDeductBalance
 }) => {
   const { handle, storeId } = useParams<{ handle?: string; storeId?: string }>();
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
 
   const rawParam = handle || storeId || currentUser.handle || currentUser.name;
   const targetSlug = normalizeHandle(rawParam);
@@ -66,6 +74,10 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setPublicProfile(null);
+    setActiveTab('all');
+    setSearchQuery('');
+    setModeFilter('all');
     void vendorApiClient
       .fetchPublicProfileByHandle(rawParam)
       .then((res) => {
@@ -94,6 +106,18 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
       );
     });
   }, [posts, targetSlug, rawParam, publicProfile]);
+  const filteredPosts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return query
+      ? matchingPosts.filter((post) =>
+          `${post.content} ${post.authorName}`.toLowerCase().includes(query)
+        )
+      : matchingPosts;
+  }, [matchingPosts, searchQuery]);
+  const matchingPhotos = useMemo(
+    () => filteredPosts.filter((post) => Boolean(post.mediaUrl?.trim())),
+    [filteredPosts]
+  );
 
   // Match all public Commerce Products (Retail & Wholesale) belonging to this handle / store
   const matchingProducts = useMemo(() => {
@@ -173,13 +197,24 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
 
   const resolvedLocation =
     publicProfile?.location ||
-    (isOwner ? currentUser.vendorProfile?.location || currentUser.location : 'Dhaka Verified Network');
+    (isOwner ? currentUser.vendorProfile?.location || currentUser.location : undefined);
 
   const isMerchantProfile =
     Boolean(publicProfile) ||
     matchingProducts.length > 0 ||
     matchingServices.length > 0 ||
     (isOwner && currentUser.isVendor);
+  const profileTabs: { id: ProfileSectionTab; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'posts', label: `Posts (${matchingPosts.length})` },
+    { id: 'photos', label: `Photos (${matchingPosts.filter((post) => post.mediaUrl?.trim()).length})` },
+    ...(isMerchantProfile || matchingProducts.length > 0
+      ? [{ id: 'products' as const, label: `Shop (${matchingProducts.length})` }]
+      : []),
+    ...(isMerchantProfile || matchingServices.length > 0
+      ? [{ id: 'services' as const, label: `Services (${matchingServices.length})` }]
+      : [])
+  ];
 
   const handleCopyShareLink = () => {
     const shareUrl = `${window.location.origin}/u/${encodeURIComponent(normalizeHandle(resolvedHandle))}`;
@@ -191,151 +226,139 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-20">
+    <div className="space-y-4 pb-20 sm:space-y-5">
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="text-xs font-bold text-[var(--pm-accent)] hover:underline flex items-center gap-1 cursor-pointer"
+          className="hidden md:inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--pm-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pm-accent)]"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </button>
-
-        <span className="text-[11px] font-medium text-[var(--pm-muted)] flex items-center gap-1">
-          <Lock className="w-3 h-3 text-[var(--pm-success)]" />
-          <span>Zero-PII Public Profile · Private Docs & Balance Hidden</span>
+        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--pm-muted)]">
+          <Lock className="h-3.5 w-3.5 text-[var(--pm-success)]" />
+          <span>Public profile</span>
         </span>
       </div>
 
-      {/* Unified Public Profile Header Banner */}
-      <div className="p-6 rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            {resolvedAvatar ? (
-              <img
-                src={resolvedAvatar}
-                alt={resolvedDisplayName}
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-[var(--pm-border)]"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center shrink-0 font-bold text-xl">
-                {isMerchantProfile ? <Store className="w-8 h-8" /> : resolvedDisplayName.charAt(0).toUpperCase()}
-              </div>
+      <ProfileHeader
+        displayName={resolvedDisplayName}
+        avatar={resolvedAvatar}
+        coverImage={isOwner ? currentUser.coverImage : undefined}
+        handle={resolvedHandle}
+        location={resolvedLocation}
+        bio={isOwner ? currentUser.bio : undefined}
+        verifiedLabel={
+          publicProfile?.verified
+            ? 'Verified seller'
+            : matchingPosts.some((post) => post.authorVerified)
+              ? 'Verified profile'
+              : undefined
+        }
+        badge={isMerchantProfile && !publicProfile?.verified ? (
+          <span className="rounded-full bg-[var(--pm-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--pm-muted)]">
+            Seller profile
+          </span>
+        ) : undefined}
+        secondaryMeta={(
+          <>
+            {isMerchantProfile && publicProfile?.category && (
+              <span>{publicProfile.category}</span>
             )}
-
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-bold text-[var(--pm-text)] truncate">
-                  {resolvedDisplayName}
-                </h1>
-                {(publicProfile?.verified || matchingPosts[0]?.authorVerified || isMerchantProfile) && (
-                  <span className="text-xs font-bold text-[var(--pm-success)] flex items-center gap-1">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Trust Level {publicProfile?.trustLevel ?? (isMerchantProfile ? 5 : 2)}</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--pm-muted)]">
-                <span className="font-mono font-bold text-[var(--pm-accent)]">
-                  {resolvedHandle}
-                </span>
-                <span aria-hidden="true">·</span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>{resolvedLocation}</span>
-                </span>
-                {isMerchantProfile && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span className={publicProfile?.isOpen === false ? 'text-[var(--pm-danger)] font-bold' : 'text-[var(--pm-success)] font-bold'}>
-                      {publicProfile?.isOpen === false ? 'Closed' : 'Open Now'}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span className="font-mono font-bold text-[var(--pm-text)]">
-                      ★ {(publicProfile?.rating ?? 4.9).toFixed(1)}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {isMerchantProfile && publicProfile?.isOpen !== undefined && (
+              <span className={publicProfile.isOpen ? 'font-semibold text-[var(--pm-success)]' : 'font-semibold text-[var(--pm-danger)]'}>
+                {publicProfile.isOpen ? 'Open now' : 'Closed'}
+              </span>
+            )}
+            {typeof publicProfile?.rating === 'number' && (
+              <span className="font-semibold text-[var(--pm-text)]">★ {publicProfile.rating.toFixed(1)}</span>
+            )}
+          </>
+        )}
+        actions={(
+          <>
             <button
               type="button"
               onClick={handleCopyShareLink}
-              className="px-3.5 py-2.5 rounded-xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-surface)] px-4 text-sm font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
             >
-              {copiedLink ? <Check className="w-3.5 h-3.5 text-[var(--pm-success)]" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'Link Copied' : 'Share @handle'}</span>
+              {copiedLink ? <Check className="h-4 w-4 text-[var(--pm-success)]" /> : <Share2 className="h-4 w-4" />}
+              <span>{copiedLink ? 'Link copied' : 'Share profile'}</span>
             </button>
 
             <Link
               to="/portal/messages"
-              className="px-4 py-2.5 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-accent)] px-4 text-sm font-semibold text-[var(--pm-accent-fg)] hover:bg-[var(--pm-accent-hover)]"
             >
-              <MessageCircle className="w-4 h-4" />
+              <MessageCircle className="h-4 w-4" />
               <span>Message</span>
             </Link>
 
             {isOwner && currentUser.isVendor && (
               <Link
                 to="/portal/seller"
-                className="px-3.5 py-2.5 rounded-xl bg-[var(--pm-success)] hover:opacity-90 text-white text-xs font-bold flex items-center gap-1.5"
+                className="col-span-2 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--pm-success)] px-4 text-sm font-semibold text-white hover:opacity-90 sm:col-span-1"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <SlidersHorizontal className="h-4 w-4" />
                 <span>Seller Central</span>
               </Link>
             )}
+          </>
+        )}
+        stats={(
+          <div className="flex min-h-12 items-center gap-4 text-sm text-[var(--pm-muted)]">
+            <span><strong className="text-[var(--pm-text)]">{matchingPosts.length}</strong> {matchingPosts.length === 1 ? 'post' : 'posts'}</span>
+            <span><strong className="text-[var(--pm-text)]">{matchingPosts.filter((post) => post.mediaUrl?.trim()).length}</strong> photos</span>
+            {isMerchantProfile && (
+              <span><strong className="text-[var(--pm-text)]">{matchingProducts.length}</strong> products</span>
+            )}
           </div>
-        </div>
-
-        {/* Single-ID Navigation Tabs (Posts + Shop + Services inside ONE @handle) */}
-        <div className="pt-4 border-t border-[var(--pm-border)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] overflow-x-auto no-scrollbar">
-            {([
-              { id: 'all', label: `All (${matchingPosts.length + matchingProducts.length + matchingServices.length})` },
-              { id: 'posts', label: `Posts (${matchingPosts.length})` },
-              { id: 'products', label: `Shop (${matchingProducts.length})` },
-              { id: 'services', label: `Services (${matchingServices.length})` }
-            ] as const).map((tab) => (
+        )}
+        tabs={(
+          <div className="flex items-center gap-1 overflow-x-auto px-3 no-scrollbar sm:px-6" role="group" aria-label="Public profile sections">
+            {profileTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ${
+                aria-pressed={activeTab === tab.id}
+                className={`min-h-12 shrink-0 border-b-[3px] px-4 text-sm font-semibold transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-xs'
-                    : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
+                    ? 'border-[var(--pm-accent)] text-[var(--pm-accent)]'
+                    : 'border-transparent text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)]'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-
-          <div className="relative sm:w-64">
-            <Search className="w-4 h-4 text-[var(--pm-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search inside ${resolvedHandle}...`}
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-[var(--pm-input)] border border-[var(--pm-border)] text-xs text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] outline-none focus:border-[var(--pm-accent)]"
-            />
+        )}
+        belowTabs={(
+          <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-3">
+            <div className="relative sm:max-w-sm">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--pm-muted)]" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search ${resolvedHandle}'s profile...`}
+                aria-label={`Search ${resolvedHandle}'s profile`}
+                className="min-h-10 w-full rounded-lg border border-[var(--pm-border)] bg-[var(--pm-input)] py-2 pl-10 pr-4 text-sm text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] outline-none focus:border-[var(--pm-accent)]"
+              />
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      />
 
       {loading ? (
-        <div className="p-10 text-center text-xs text-[var(--pm-muted)]">Loading unified @handle profile...</div>
+        <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-10 text-center text-sm text-[var(--pm-muted)]" role="status">
+          Loading profile...
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Shop Products Section */}
-          {(activeTab === 'all' || activeTab === 'products') && (
+          {(activeTab === 'all' || activeTab === 'products') && (isMerchantProfile || matchingProducts.length > 0) && (
             <section className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <h2 className="text-sm font-bold text-[var(--pm-text)] flex items-center gap-2">
@@ -348,7 +371,8 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
                       key={m}
                       type="button"
                       onClick={() => setModeFilter(m)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold capitalize cursor-pointer ${
+                      aria-pressed={modeFilter === m}
+                      className={`min-h-9 px-3 rounded-md text-xs font-bold capitalize cursor-pointer ${
                         modeFilter === m
                           ? 'bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] shadow-xs'
                           : 'text-[var(--pm-muted)]'
@@ -367,19 +391,29 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {matchingProducts.map((item) => (
-                    <div
+                    <ContentCard
                       key={item.id}
-                      className="p-4 rounded-2xl bg-[var(--pm-card)] border border-[var(--pm-border)] flex flex-col justify-between space-y-3"
+                      className="flex flex-col justify-between space-y-2.5 p-2.5"
                     >
-                      <div className="space-y-3">
-                        <div className="aspect-4/3 rounded-xl overflow-hidden bg-[var(--pm-surface)]">
+                      <div className="space-y-2.5">
+                        <ContentCardMedia className="aspect-[4/3] rounded-xl">
                           <img
-                            src={item.imageUrl}
+                            src={safeMediaSrc(item.imageUrl, DEFAULT_AVATAR_URL)}
                             alt={item.title}
                             referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                           />
-                        </div>
+                        </ContentCardMedia>
+                        <ProductCardActionRow
+                          item={item}
+                          isBn={isBn}
+                          onAddToCart={(product, isWholesale) =>
+                            onAddToCart(product, product.minWholesaleQty || 1, isWholesale)
+                          }
+                          className="-mx-2.5 -mt-2.5"
+                        />
                         <div className="space-y-1">
                           <p className="text-xs text-[var(--pm-muted)]">
                             {item.category} · {(item.tradeMode || item.type).toUpperCase()}
@@ -398,16 +432,14 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
                         <span className="text-base font-mono tabular-nums font-bold text-[var(--pm-text)]">
                           ৳{item.price.toLocaleString()}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => onAddToCart(item, item.minWholesaleQty || 1, item.type === 'wholesale')}
-                          className="px-3.5 py-2 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-1.5 cursor-pointer active-scale"
+                        <Link
+                          to={`/hub/marketplace/product/${encodeURIComponent(item.id)}`}
+                          className="min-h-10 rounded-xl px-3.5 flex items-center text-xs font-semibold text-[var(--pm-accent)] hover:bg-[var(--pm-card-hover)]"
                         >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>Add</span>
-                        </button>
+                          {isBn ? 'পণ্য দেখুন' : 'View product'}
+                        </Link>
                       </div>
-                    </div>
+                    </ContentCard>
                   ))}
                 </div>
               )}
@@ -415,7 +447,7 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
           )}
 
           {/* Bookable Services Section */}
-          {(activeTab === 'all' || activeTab === 'services') && (matchingServices.length > 0 || activeTab === 'services') && (
+          {(activeTab === 'all' || activeTab === 'services') && (isMerchantProfile || matchingServices.length > 0) && (
             <section className="space-y-3">
               <h2 className="text-sm font-bold text-[var(--pm-text)] flex items-center gap-2 px-1">
                 <Wrench className="w-4 h-4 text-[var(--pm-success)]" />
@@ -444,25 +476,56 @@ export const PublicStorefrontPage: React.FC<PublicStorefrontPageProps> = ({
             <section className="space-y-3">
               <h2 className="text-sm font-bold text-[var(--pm-text)] flex items-center gap-2 px-1">
                 <MessageSquare className="w-4 h-4 text-[var(--pm-accent)]" />
-                <span>Community & Merchant Updates</span>
+                <span>Posts</span>
               </h2>
-              {matchingPosts.length === 0 ? (
+              {filteredPosts.length === 0 ? (
                 <div className="p-6 rounded-2xl bg-[var(--pm-card)] border border-[var(--pm-border)] text-xs text-[var(--pm-muted)] text-center">
-                  No public social posts shared under {resolvedHandle} yet.
+                  {searchQuery.trim()
+                    ? `No posts match "${searchQuery.trim()}".`
+                    : `No public posts shared under ${resolvedHandle} yet.`}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {matchingPosts.map((post) => (
+                  {filteredPosts.map((post) => (
                     <FeedPostCard
                       key={post.id}
                       post={post}
                       currentUser={currentUser}
+                      isSaved={savedPostIds.includes(post.id)}
                       onReact={onReact}
                       onAddComment={onAddComment}
+                      onToggleSave={onToggleSavedPost}
                       onAddToCart={(item) => onAddToCart(item, 1, item.type === 'wholesale')}
                       commerceItems={commerceItems}
                     />
                   ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'photos' && (
+            <section className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-card)] p-4 sm:p-6">
+              <h2 className="mb-4 text-xl font-bold text-[var(--pm-text)]">Photos</h2>
+              {matchingPhotos.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {matchingPhotos.map((post) => (
+                    <figure key={post.id} className="overflow-hidden rounded-lg bg-[var(--pm-surface)]">
+                      <img
+                        src={safeMediaSrc(post.mediaUrl, DEFAULT_AVATAR_URL)}
+                        alt={post.content || `${resolvedDisplayName}'s photo`}
+                        loading="lazy"
+                        className="aspect-square w-full object-cover"
+                      />
+                    </figure>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-[var(--pm-surface)] px-5 py-10 text-center">
+                  <ImageIcon className="mx-auto h-8 w-8 text-[var(--pm-muted)]" />
+                  <p className="mt-3 text-sm text-[var(--pm-muted)]">
+                    {searchQuery.trim() ? 'No photos match your search.' : 'No photos shared yet.'}
+                  </p>
                 </div>
               )}
             </section>

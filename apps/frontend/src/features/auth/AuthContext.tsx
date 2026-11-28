@@ -20,7 +20,7 @@ import {
   type ConfirmationResult,
   type FirebaseUser 
 } from '@/lib/firebase';
-import { User, UserRole, PaikarMartDelegate } from '@/types';
+import { User, UserRole, PaikarMartDelegate, VendorDelegate, TeamPageRole } from '@/types';
 import {
   CURRENT_USER,
   DEFAULT_PERSONAL_USER,
@@ -30,7 +30,15 @@ import {
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
 import { safeMediaSrc } from '@/shared/utils';
 import { revokeAllAuthSessions, syncAuthenticatedProfile } from '@/features/auth/services/authProfileApi';
-import { vendorApiClient } from '@/features/vendors/vendorApiClient';
+import {
+  deletePaikarMartDelegateFromFirestore,
+  deleteVendorDelegateFromFirestore,
+  subscribePaikarMartDelegates,
+  subscribeVendorDelegates,
+  upsertPaikarMartDelegateInFirestore,
+  upsertVendorDelegateInFirestore,
+} from '@/features/auth/services/teamAccessFirestore';
+import { vendorApiClient } from '@/features/vendors';
 import {
   useFirebaseSupabaseSync,
   type SupabaseUserProfile
@@ -45,9 +53,19 @@ interface AuthContextType {
   personalUser: User;
   paikarMartProfile: User;
   paikarMartDelegates: PaikarMartDelegate[];
+  vendorDelegates: VendorDelegate[];
+  isTeamFirestoreSynced: boolean;
   switchProfileMode: (mode: 'personal' | 'paikarmart') => void;
-  grantPaikarMartAccess: (email: string, name?: string, role?: UserRole) => Promise<void>;
+  grantPaikarMartAccess: (email: string, name?: string, role?: UserRole, pageRole?: TeamPageRole) => Promise<void>;
   revokePaikarMartAccess: (email: string) => Promise<void>;
+  grantVendorAccess: (params: {
+    vendorId: string;
+    vendorName: string;
+    email: string;
+    name?: string;
+    pageRole?: TeamPageRole;
+  }) => Promise<void>;
+  revokeVendorAccess: (vendorId: string, email: string) => Promise<void>;
   supabaseProfile: SupabaseUserProfile | null;
   isSynced: boolean;
   syncError: Error | null;
@@ -117,6 +135,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return loadStoredData<PaikarMartDelegate[]>('PAIKARMART_DELEGATES', INITIAL_PAIKARMART_DELEGATES);
   });
 
+  const [vendorDelegates, setVendorDelegates] = useState<VendorDelegate[]>(() => {
+    return loadStoredData<VendorDelegate[]>('VENDOR_DELEGATES', []);
+  });
+
+  const [isTeamFirestoreSynced, setIsTeamFirestoreSynced] = useState<boolean>(false);
+
   const [personalUser, setPersonalUser] = useState<User>(() => {
     const stored = loadStoredData<User>('USER_PERSONAL', DEFAULT_PERSONAL_USER);
     return {
@@ -183,32 +207,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [paikarMartProfile, personalUser]);
 
-  const grantPaikarMartAccess = useCallback(async (email: string, name?: string, role: UserRole = 'admin') => {
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name?.trim() || cleanEmail.split('@')[0];
-    const newDelegate: PaikarMartDelegate = {
-      id: `del_${Date.now()}`,
-      email: cleanEmail,
-      name: cleanName,
-      role,
-      addedAt: new Date().toISOString().split('T')[0],
-      addedBy: auth.currentUser?.email || 'abs.munna1@gmail.com',
-      status: 'active'
-    };
+  const grantPaikarMartAccess = useCallback(
+    async (email: string, name?: string, role: UserRole = 'admin', pageRole?: TeamPageRole) => {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanName = name?.trim() || cleanEmail.split('@')[0];
+      const resolvedPageRole: TeamPageRole =
+        pageRole || (role === 'admin' || role === 'super_admin' ? 'admin' : role === 'moderator' ? 'editor' : 'viewer');
+      const addedByEmail = auth.currentUser?.email || 'abs.munna1@gmail.com';
+      const newDelegate: PaikarMartDelegate = {
+        id: `del_${Date.now()}`,
+        email: cleanEmail,
+        name: cleanName,
+        role,
+        pageRole: resolvedPageRole,
+        addedAt: new Date().toISOString().split('T')[0],
+        addedBy: addedByEmail,
+        status: 'active',
+      };
 
-    setPaikarMartDelegates((prev) => {
-      const filtered = prev.filter((d) => d.email.toLowerCase() !== cleanEmail);
-      const updated = [newDelegate, ...filtered];
-      saveStoredData('PAIKARMART_DELEGATES', updated);
-      return updated;
-    });
+      setPaikarMartDelegates((prev) => {
+        const filtered = prev.filter((d) => d.email.toLowerCase() !== cleanEmail);
+        const updated = [newDelegate, ...filtered];
+        saveStoredData('PAIKARMART_DELEGATES', updated);
+        return updated;
+      });
 
-    try {
-      await vendorApiClient.updateGovernanceRole({ email: cleanEmail, role });
-    } catch (err) {
-      logAuthDebug('[AuthContext:grantPaikarMartAccess] Backend governance sync notice:', err);
-    }
-  }, []);
+      await upsertPaikarMartDelegateInFirestore({
+        email: cleanEmail,
+        name: cleanName,
+        role,
+        pageRole: resolvedPageRole,
+        addedBy: addedByEmail,
+      }).catch((err) => {
+        logAuthDebug('[AuthContext:grantPaikarMartAccess] Firestore sync warning:', err);
+      });
+
+      try {
+        await vendorApiClient.updateGovernanceRole({ email: cleanEmail, role });
+      } catch (err) {
+        logAuthDebug('[AuthContext:grantPaikarMartAccess] Backend governance sync notice:', err);
+      }
+    },
+    []
+  );
 
   const revokePaikarMartAccess = useCallback(async (email: string) => {
     const cleanEmail = email.trim().toLowerCase();
@@ -221,11 +262,81 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
+    await deletePaikarMartDelegateFromFirestore(cleanEmail).catch((err) => {
+      logAuthDebug('[AuthContext:revokePaikarMartAccess] Firestore delete warning:', err);
+    });
+
     try {
       await vendorApiClient.updateGovernanceRole({ email: cleanEmail, role: 'consumer' });
     } catch (err) {
       logAuthDebug('[AuthContext:revokePaikarMartAccess] Backend governance revoke notice:', err);
     }
+  }, []);
+
+  const grantVendorAccess = useCallback(
+    async (params: {
+      vendorId: string;
+      vendorName: string;
+      email: string;
+      name?: string;
+      pageRole?: TeamPageRole;
+    }) => {
+      const cleanEmail = params.email.trim().toLowerCase();
+      const cleanName = params.name?.trim() || cleanEmail.split('@')[0];
+      const resolvedRole: TeamPageRole = params.pageRole || 'editor';
+      const ownerId = auth.currentUser?.uid || personalUser.id;
+      const addedByEmail = auth.currentUser?.email || personalUser.email || 'vendor@paikarmart.com';
+
+      const newVendorDelegate: VendorDelegate = {
+        id: `vdel_${Date.now()}`,
+        vendorId: params.vendorId,
+        vendorName: params.vendorName,
+        ownerId,
+        email: cleanEmail,
+        name: cleanName,
+        pageRole: resolvedRole,
+        status: 'active',
+        addedBy: addedByEmail,
+        addedAt: new Date().toISOString().split('T')[0],
+      };
+
+      setVendorDelegates((prev) => {
+        const filtered = prev.filter(
+          (d) => !(d.vendorId === params.vendorId && d.email.toLowerCase() === cleanEmail)
+        );
+        const updated = [newVendorDelegate, ...filtered];
+        saveStoredData('VENDOR_DELEGATES', updated);
+        return updated;
+      });
+
+      await upsertVendorDelegateInFirestore({
+        vendorId: params.vendorId,
+        vendorName: params.vendorName,
+        ownerId,
+        email: cleanEmail,
+        name: cleanName,
+        pageRole: resolvedRole,
+        addedBy: addedByEmail,
+      }).catch((err) => {
+        logAuthDebug('[AuthContext:grantVendorAccess] Firestore sync warning:', err);
+      });
+    },
+    [personalUser.email, personalUser.id]
+  );
+
+  const revokeVendorAccess = useCallback(async (vendorId: string, email: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    setVendorDelegates((prev) => {
+      const updated = prev.filter(
+        (d) => !(d.vendorId === vendorId && d.email.toLowerCase() === cleanEmail)
+      );
+      saveStoredData('VENDOR_DELEGATES', updated);
+      return updated;
+    });
+
+    await deleteVendorDelegateFromFirestore(vendorId, cleanEmail).catch((err) => {
+      logAuthDebug('[AuthContext:revokeVendorAccess] Firestore delete warning:', err);
+    });
   }, []);
 
   const handleSyncSuccess = useCallback((profile: SupabaseUserProfile, user: FirebaseUser) => {
@@ -327,6 +438,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     void validateFirestoreConnection();
   }, []);
+
+  useEffect(() => {
+    if (!firebaseUser || !firebaseUser.emailVerified || !firebaseUser.email) {
+      setIsTeamFirestoreSynced(false);
+      return;
+    }
+
+    setIsTeamFirestoreSynced(true);
+    const unsubPm = subscribePaikarMartDelegates((remoteDelegates) => {
+      setPaikarMartDelegates((prev) => {
+        const ownerBaseline = INITIAL_PAIKARMART_DELEGATES.filter(
+          (item) => item.email.toLowerCase() === 'abs.munna1@gmail.com'
+        );
+        const byEmail = new Map<string, PaikarMartDelegate>();
+        ownerBaseline.forEach((d) => byEmail.set(d.email.toLowerCase(), d));
+        if (firebaseUser.email?.toLowerCase() !== 'abs.munna1@gmail.com') {
+          prev.forEach((d) => byEmail.set(d.email.toLowerCase(), d));
+        }
+        remoteDelegates.forEach((d) => byEmail.set(d.email.toLowerCase(), d));
+        const merged = Array.from(byEmail.values());
+        saveStoredData('PAIKARMART_DELEGATES', merged);
+        return merged;
+      });
+    });
+
+    const unsubVendor = subscribeVendorDelegates((remoteVendorDelegates) => {
+      setVendorDelegates(remoteVendorDelegates);
+      saveStoredData('VENDOR_DELEGATES', remoteVendorDelegates);
+    });
+
+    return () => {
+      unsubPm();
+      unsubVendor();
+    };
+  }, [firebaseUser?.uid, firebaseUser?.emailVerified, firebaseUser?.email]);
 
   const signInWithGoogle = async () => {
     try {
@@ -590,9 +736,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         personalUser,
         paikarMartProfile,
         paikarMartDelegates,
+        vendorDelegates,
+        isTeamFirestoreSynced,
         switchProfileMode,
         grantPaikarMartAccess,
         revokePaikarMartAccess,
+        grantVendorAccess,
+        revokeVendorAccess,
         supabaseProfile,
         isSynced,
         syncError,

@@ -188,9 +188,6 @@ export const WholesalePortal: React.FC<WholesalePortalProps> = ({
 
   return (
     <div className="space-y-6 pb-12 animate-fade-in">
-      {/* Commercial Ad Poster Carousel */}
-      <PortalBannerCarousel portalType="wholesale" isBn={isBn} />
-
       {/* 2. Notification & Error Banners */}
       {recentNotification && (
         <div className="p-3.5 rounded-[1.5rem] bg-[var(--pm-success-soft)] border border-[var(--pm-success)]/30 text-xs text-[var(--pm-success)] flex items-center justify-between animate-fade-in shadow-xs">
@@ -356,45 +353,63 @@ export const WholesalePortal: React.FC<WholesalePortalProps> = ({
         <MarketplaceGridSkeleton variant="wholesale" count={6} />
       ) : filteredItems.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredItems.map((item) => (
-            <WholesaleProductCard
-              key={item.id}
-              product={item}
-              onAddToCart={onAddToCart}
-              onRequestRFQ={(product) => {
-                trackProductView(product, 'wholesale_rfq_modal');
-                setActiveRFQProduct(product);
-              }}
-              onRequestSample={(product) => {
-                trackProductView(product, 'wholesale_sample_modal');
-                setActiveSampleProduct(product);
-              }}
-            />
+          {filteredItems.map((item, index) => (
+            <React.Fragment key={item.id}>
+              <WholesaleProductCard
+                product={item}
+                onAddToCart={onAddToCart}
+                onRequestRFQ={(product) => {
+                  trackProductView(product, 'wholesale_rfq_modal');
+                  setActiveRFQProduct(product);
+                }}
+                onRequestSample={(product) => {
+                  trackProductView(product, 'wholesale_sample_modal');
+                  setActiveSampleProduct(product);
+                }}
+              />
+              {index === 1 && (
+                <PortalBannerCarousel
+                  portalType="wholesale"
+                  isBn={isBn}
+                  className="sm:col-span-2 lg:col-span-3"
+                />
+              )}
+            </React.Fragment>
           ))}
+          {filteredItems.length === 1 && (
+            <PortalBannerCarousel
+              portalType="wholesale"
+              isBn={isBn}
+              className="sm:col-span-2 lg:col-span-3"
+            />
+          )}
         </div>
       ) : (
-        <div className="text-center py-16 bg-[var(--pm-card)] rounded-[2rem] border border-[var(--pm-border)] p-8 space-y-3">
-          <div className="w-12 h-12 rounded-full bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-center mx-auto text-[var(--pm-muted)]">
-            <Package className="w-6 h-6" />
+        <>
+          <div className="text-center py-16 bg-[var(--pm-card)] rounded-[2rem] border border-[var(--pm-border)] p-8 space-y-3">
+            <div className="w-12 h-12 rounded-full bg-[var(--pm-surface)] border border-[var(--pm-border)] flex items-center justify-center mx-auto text-[var(--pm-muted)]">
+              <Package className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-[var(--pm-text)]">
+              No wholesale listings match your filter
+            </h3>
+            <p className="text-xs text-[var(--pm-muted)] max-w-sm mx-auto">
+              Try adjusting your search query, supplier category, or minimum order quantity (MOQ) filters.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedSupplierCategory('all');
+                setSelectedMOQ('all');
+              }}
+              className="px-4 py-2 text-xs font-semibold rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] transition-colors cursor-pointer"
+            >
+              Reset Filters
+            </button>
           </div>
-          <h3 className="text-sm font-semibold text-[var(--pm-text)]">
-            No wholesale listings match your filter
-          </h3>
-          <p className="text-xs text-[var(--pm-muted)] max-w-sm mx-auto">
-            Try adjusting your search query, supplier category, or minimum order quantity (MOQ) filters.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery('');
-              setSelectedSupplierCategory('all');
-              setSelectedMOQ('all');
-            }}
-            className="px-4 py-2 text-xs font-semibold rounded-[2rem] bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] transition-colors cursor-pointer"
-          >
-            Reset Filters
-          </button>
-        </div>
+          <PortalBannerCarousel portalType="wholesale" isBn={isBn} />
+        </>
       )}
 
       {/* 7. RFQ Modal */}

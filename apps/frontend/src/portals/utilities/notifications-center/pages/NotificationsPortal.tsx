@@ -10,13 +10,11 @@ import {
   Sparkles, 
   Trash2, 
   ChevronRight, 
-  Settings, 
   Filter,
   Check,
   ArrowLeft
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useSettings } from '@/contexts/SettingsContext';
 
 interface NotificationsPortalProps {
   notifications: AppNotification[];
@@ -24,7 +22,6 @@ interface NotificationsPortalProps {
   onMarkAllAsRead: () => void;
   onClearAll: () => void;
   onSelectTab: (tab: PortalTab) => void;
-  onOpenSettingsPortal?: (section?: any) => void;
 }
 
 export const NotificationsPortal: React.FC<NotificationsPortalProps> = ({
@@ -33,10 +30,8 @@ export const NotificationsPortal: React.FC<NotificationsPortalProps> = ({
   onMarkAllAsRead,
   onClearAll,
   onSelectTab,
-  onOpenSettingsPortal,
 }) => {
   const { language } = useLanguage();
-  const { openSettings } = useSettings();
   const isBn = language === 'bn';
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'orders' | 'social' | 'wallet' | 'system'>('all');
@@ -123,20 +118,6 @@ export const NotificationsPortal: React.FC<NotificationsPortalProps> = ({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenSettingsPortal) {
-                onOpenSettingsPortal('account_notifications');
-              } else {
-                openSettings('appearance');
-              }
-            }}
-            className="p-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] transition-colors cursor-pointer"
-            title={isBn ? 'নোটিফিকেশন সেটিংস' : 'Notification Preferences'}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
         </div>
       </div>
 

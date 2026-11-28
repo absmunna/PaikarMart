@@ -202,7 +202,7 @@ export const INITIAL_STORIES: Story[] = [
   }
 ];
 
-export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
+const initialCommerceItems: CommerceItem[] = [
   // --- REAL RETAIL PRODUCTS ---
   {
     id: 'prod_retail_iphone_15',
@@ -223,12 +223,16 @@ export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
     deliveryEta: '2-3 Days',
     proximityDistance: '3.5 km',
     imageUrl: '/src/assets/images/paikarmart_iphone_15_pro_max_1794490099283.jpg',
-    galleryImages: ['/src/assets/images/paikarmart_samsung_phone_1794489802379.jpg'],
     brand: 'Apple',
     specifications: { Storage: '256 GB', Display: '6.7-inch OLED', Connectivity: '5G / USB-C' },
     variantOptions: [
       { id: 'storage', label: 'Storage', values: ['256 GB', '512 GB'] },
-      { id: 'color', label: 'Color', values: ['Natural Titanium', 'Blue Titanium', 'Black Titanium'] }
+      {
+        id: 'color',
+        label: 'Color',
+        values: ['Natural Titanium', 'Blue Titanium', 'Black Titanium'],
+        swatches: { 'Natural Titanium': '#b8b2a7', 'Blue Titanium': '#7189a6', 'Black Titanium': '#303238' },
+      }
     ],
     variantOffers: [
       { key: '256 GB · Natural Titanium', label: '256 GB · Natural Titanium', sku: 'APL15PM-256-NT', price: 185000, stockQuantity: 8 },
@@ -290,6 +294,116 @@ export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
     specifications: { Screen: '43-inch 4K', Platform: 'Google Android TV', Warranty: 'Official brand warranty' },
     highlights: ['4K resolution', 'Voice control', 'Built-in streaming apps'],
     category: 'Electronics',
+    inStock: true,
+    badge: 'Popular'
+  },
+  {
+    id: 'prod_retail_walton_fridge',
+    storeId: 'vendor_walton_plaza',
+    storeName: 'Walton Official Plaza',
+    type: 'retail',
+    tradeMode: 'retail',
+    subCategory: 'brand',
+    title: 'Walton Inverter Direct Cool Refrigerator 315L',
+    description: 'Energy efficient intelligent inverter compressor, nano health care technology.',
+    price: 45900.00,
+    rating: 4.8,
+    reviewsCount: 320,
+    deliveryEta: '1-2 Days',
+    proximityDistance: '4.2 km',
+    imageUrl: '/src/assets/images/paikarmart_smart_tv_43_1794490138186.jpg',
+    brand: 'Walton',
+    specifications: { Capacity: '315 Litre', Compressor: 'Inverter', Warranty: '12 Years Compressor' },
+    highlights: ['Energy saving inverter', 'Nano health care', 'Official Walton warranty'],
+    category: 'Electronics',
+    inStock: true,
+    badge: 'Official Brand'
+  },
+  {
+    id: 'prod_retail_bata_shoes',
+    storeId: 'vendor_bata_store',
+    storeName: 'Bata Flagship Store',
+    type: 'retail',
+    tradeMode: 'retail',
+    subCategory: 'brand',
+    title: 'Bata Men’s Executive Genuine Leather Formal Shoes',
+    description: 'Classic derby style crafted with premium cow leather and cushioned comfort insoles.',
+    price: 4299.00,
+    rating: 4.6,
+    reviewsCount: 215,
+    deliveryEta: '1 Day',
+    proximityDistance: '1.8 km',
+    imageUrl: '/src/assets/images/paikarmart_sneakers_lifestyle_1794490153891.jpg',
+    brand: 'Bata',
+    specifications: { Material: '100% Genuine Leather', Sole: 'Anti-slip TPR', Style: 'Formal Derby' },
+    highlights: ['Genuine leather', 'All-day comfort cushioning', 'Bata official quality'],
+    category: 'Fashion',
+    inStock: true,
+    badge: 'Top Brand'
+  },
+  {
+    id: 'prod_retail_pran_juice',
+    storeId: 'vendor_pran_rfl_hub',
+    storeName: 'Pran-RFL Family Pack Store',
+    type: 'retail',
+    tradeMode: 'retail',
+    subCategory: 'brand',
+    title: 'Pran Frutika Mango Juice Family Pack 1L (Carton of 12)',
+    description: 'Real mango pulp refreshment, pure and delicious wholesale bundle.',
+    price: 1550.00,
+    rating: 4.9,
+    reviewsCount: 890,
+    deliveryEta: 'Same Day',
+    proximityDistance: '1.2 km',
+    imageUrl: '/src/assets/images/paikarmart_soybean_oil_5l_1794490111555.jpg',
+    brand: 'Pran',
+    specifications: { Volume: '1L x 12 Pack', Flavor: 'Real Mango', Quality: 'Export Grade' },
+    highlights: ['Real mango pulp', 'Family value pack', 'Pran certified quality'],
+    category: 'Grocery',
+    inStock: true,
+    badge: 'Best Value'
+  },
+  {
+    id: 'prod_retail_apex_loafers',
+    storeId: 'vendor_apex_gallery',
+    storeName: 'Apex Footwear Gallery',
+    type: 'retail',
+    tradeMode: 'retail',
+    subCategory: 'brand',
+    title: 'Apex Venturini Men’s Casual Slip-on Loafers',
+    description: 'Sleek Italian-inspired styling with breathable upper and flexible sole.',
+    price: 5499.00,
+    rating: 4.8,
+    reviewsCount: 180,
+    deliveryEta: '1-2 Days',
+    proximityDistance: '2.5 km',
+    imageUrl: '/src/assets/images/paikarmart_sneakers_lifestyle_1794490153891.jpg',
+    brand: 'Apex',
+    specifications: { Style: 'Slip-on Loafer', Upper: 'Premium Suede / Leather', Sole: 'Flexible Rubber' },
+    highlights: ['Italian design', 'Lightweight flexibility', 'Apex official guarantee'],
+    category: 'Fashion',
+    inStock: true,
+    badge: 'Flagship'
+  },
+  {
+    id: 'prod_retail_akij_flour',
+    storeId: 'vendor_akij_ventures',
+    storeName: 'Akij Ventures Official',
+    type: 'retail',
+    tradeMode: 'retail',
+    subCategory: 'brand',
+    title: 'Akij Premium Atta / Wheat Flour - 10 Kg Family Bag',
+    description: 'Hygienically milled from selected finest wheat grains for soft rotis and parathas.',
+    price: 620.00,
+    rating: 4.7,
+    reviewsCount: 540,
+    deliveryEta: '45 mins',
+    proximityDistance: '0.9 km',
+    imageUrl: '/src/assets/images/paikarmart_soybean_oil_5l_1794490111555.jpg',
+    brand: 'Akij',
+    specifications: { Weight: '10 Kg', Grade: 'Fine Milled Wheat', Purity: '100% Natural' },
+    highlights: ['Cleaned and hygienically packed', 'Soft rotis guaranteed', 'Akij quality assurance'],
+    category: 'Grocery',
     inStock: true,
     badge: 'Popular'
   },
@@ -370,10 +484,16 @@ export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
     reviewsCount: 240,
     deliveryEta: 'Same Day',
     proximityDistance: '1.2 km',
-    imageUrl: '/src/assets/images/paikarmart_samsung_phone_1794489802379.jpg',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Samsung_Galaxy_S24_Ultra_with_retail_box%2C_front.jpg',
+    galleryImages: ['https://upload.wikimedia.org/wikipedia/commons/b/b7/Samsung_Galaxy_S24_Ultra_Backside.jpg'],
     variantOptions: [
       { id: 'storage', label: 'Storage', values: ['256 GB', '512 GB', '1 TB'] },
-      { id: 'color', label: 'Color', values: ['Titanium Gray', 'Titanium Black', 'Titanium Violet'] }
+      {
+        id: 'color',
+        label: 'Color',
+        values: ['Titanium Gray', 'Titanium Black', 'Titanium Violet'],
+        swatches: { 'Titanium Gray': '#8d9198', 'Titanium Black': '#35383d', 'Titanium Violet': '#827c8e' },
+      }
     ],
     category: 'Electronics',
     inStock: true,
@@ -618,6 +738,11 @@ export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = [
   }
 ];
 
+export const INITIAL_COMMERCE_ITEMS: CommerceItem[] = initialCommerceItems.map((item) => ({
+  ...item,
+  serviceArea: item.serviceArea ?? { division: 'Dhaka', district: 'Dhaka' },
+}));
+
 export const INITIAL_POSTS: SocialPost[] = [
   {
     id: 'post_demand_01',
@@ -653,12 +778,12 @@ export const INITIAL_POSTS: SocialPost[] = [
     timestamp: '3h ago',
     content: 'The new S24 Ultra is redefining mobile intelligence. Order today for same-day delivery through our PaikarMart portal!',
     postType: 'regular',
-    mediaUrl: '/src/assets/images/paikarmart_samsung_phone_1794489802379.jpg',
+    mediaUrl: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Samsung_Galaxy_S24_Ultra_with_retail_box%2C_front.jpg',
     taggedProduct: {
       id: 'prod_retail_brand_01',
       title: 'Samsung Galaxy S24 Ultra',
       price: 1299.00,
-      image: '/src/assets/images/paikarmart_samsung_phone_1794489802379.jpg',
+      image: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Samsung_Galaxy_S24_Ultra_with_retail_box%2C_front.jpg',
       category: 'Electronics',
       storeName: 'Samsung Official Shop',
       type: 'retail'

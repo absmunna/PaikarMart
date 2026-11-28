@@ -4,6 +4,7 @@ import {
   ThumbsUp, 
   Heart, 
   MessageCircle, 
+  Bookmark,
   Share2, 
   Globe, 
   CheckCircle2, 
@@ -15,13 +16,18 @@ import {
 import { formatDisplayHandle, normalizeHandle } from '@paikarmart/shared';
 import { SocialPost, ReactionType, User, CommerceItem } from '@/types';
 import { DEFAULT_AVATAR_URL, DEFAULT_PRODUCT_IMAGE_URL, safeMediaSrc } from '@/shared/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { CardActionBar, CardActionButton, ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
+import { Badge } from '@/components/shared/Badge';
 
 interface FeedPostCardProps {
   post: SocialPost;
   currentUser: User;
+  isSaved: boolean;
   onReact: (postId: string, reaction: ReactionType) => void;
   onAddComment: (postId: string, commentText: string) => void;
   onAddToCart: (item: CommerceItem) => void;
+  onToggleSave: (postId: string) => void;
   commerceItems: CommerceItem[];
   onOpenStorePortal?: (storeId: string) => void;
 }
@@ -29,16 +35,20 @@ interface FeedPostCardProps {
 export const FeedPostCard: React.FC<FeedPostCardProps> = ({
   post,
   currentUser,
+  isSaved,
   onReact,
   onAddComment,
   onAddToCart,
+  onToggleSave,
   commerceItems,
 }) => {
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const isBn = language === 'bn';
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState('');
-  const [copiedShare, setCopiedShare] = useState(false);
+  const [shareStatus, setShareStatus] = useState<'shared' | 'copied' | 'unavailable' | 'failed' | null>(null);
   const [sentNotice, setSentNotice] = useState<string | null>(null);
 
   const totalReactions = 
@@ -54,9 +64,24 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
     setShowComments(true);
   };
 
-  const handleShare = () => {
-    setCopiedShare(true);
-    setTimeout(() => setCopiedShare(false), 2000);
+  const handleShare = async () => {
+    const url = new URL(window.location.href);
+    url.hash = `post-${encodeURIComponent(post.id)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.authorName, text: post.content, url: url.toString() });
+        setShareStatus('shared');
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url.toString());
+        setShareStatus('copied');
+      } else {
+        setShareStatus('unavailable');
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.error('Post sharing failed:', error);
+      setShareStatus('failed');
+    }
   };
 
   const handleProductClick = (e: React.MouseEvent) => {
@@ -72,7 +97,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
     : null;
 
   return (
-    <article className="bg-[var(--pm-card)] text-[var(--pm-text)] border border-[var(--pm-border)] rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-6 shadow-sm space-y-3 sm:space-y-4 transition-shadow duration-300 hover:shadow-md premium-shadow">
+    <ContentCard id={`post-${post.id}`} className="p-4 sm:p-6 space-y-3 sm:space-y-4 transition-shadow duration-300 hover:shadow-md premium-shadow">
       
       {/* Top Header: Author info & options */}
       <div className="flex items-center justify-between">
@@ -111,7 +136,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
               </span>
               {post.isSponsored && (
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] uppercase tracking-tighter">
-                  {post.adNetwork || 'Promoted'}
+                  {post.adNetwork || (isBn ? 'প্রচারিত' : 'Promoted')}
                 </span>
               )}
             </div>
@@ -150,9 +175,9 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             </span>
           )}
           {post.aiRiskAssessment === 'high_risk_flagged' && (
-            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-tighter border border-amber-500/30">
+            <Badge tone="warning" size="xs" className="font-black uppercase tracking-tighter">
               ⚠ Pending Review
-            </span>
+            </Badge>
           )}
           {post.postType === 'demand' && (
             <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-500 text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
@@ -160,9 +185,9 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             </span>
           )}
           {post.postType === 'sale' && (
-            <span className="px-3 py-1 rounded-full bg-[var(--pm-success-soft)] text-[var(--pm-success)] text-[10px] font-black uppercase tracking-widest border border-[var(--pm-success)]/20">
+            <Badge tone="success" size="md" className="font-black uppercase tracking-widest">
               Sale
-            </span>
+            </Badge>
           )}
           <button 
             type="button" 
@@ -183,7 +208,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
 
       {/* Attached Media Photo / Banner */}
       {post.mediaUrl?.trim() && (
-        <div className="rounded-2xl sm:rounded-[1.5rem] overflow-hidden border border-[var(--pm-border)] bg-[var(--pm-surface)] shadow-inner group">
+        <ContentCardMedia className="rounded-2xl sm:rounded-[1.5rem] border border-[var(--pm-border)] shadow-inner group">
           <img
             src={post.mediaUrl.trim()}
             alt="Post media"
@@ -192,7 +217,82 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             decoding="async"
             className="w-full max-h-[500px] object-cover group-hover:scale-[1.03] transition-transform duration-1000"
           />
-        </div>
+        </ContentCardMedia>
+      )}
+
+      <CardActionBar label={isBn ? 'পোস্টের কাজ' : 'Post actions'} className="-mx-2 -mt-3 border-b border-[var(--pm-border)] sm:-mx-3">
+        {showReactionPicker && (
+          <div
+            onMouseLeave={() => setShowReactionPicker(false)}
+            className="absolute -top-12 left-2 z-20 flex items-center gap-3 rounded-full border border-[var(--pm-border)] px-2 py-1.5 shadow-2xl pm-glass animate-scale-in"
+          >
+            {(['like', 'love', 'care', 'haha', 'wow'] as ReactionType[]).map((rx) => (
+              <button
+                key={rx}
+                type="button"
+                aria-label={rx}
+                onClick={() => {
+                  onReact(post.id, rx);
+                  setShowReactionPicker(false);
+                }}
+                className="cursor-pointer p-1 text-xl transition-transform hover:scale-125 active:scale-90"
+              >
+                {rx === 'like' ? '👍' : rx === 'love' ? '❤️' : rx === 'care' ? '🥰' : rx === 'haha' ? '😂' : '😮'}
+              </button>
+            ))}
+          </div>
+        )}
+        <CardActionButton
+          icon={post.userReaction === 'love' ? Heart : ThumbsUp}
+          label={post.userReaction ? (isBn ? 'প্রতিক্রিয়া বদলান' : 'Change reaction') : (isBn ? 'পছন্দ' : 'Like')}
+          active={Boolean(post.userReaction)}
+          activeTone={post.userReaction === 'love' ? 'danger' : 'accent'}
+          count={totalReactions}
+          onMouseEnter={() => setShowReactionPicker(true)}
+          onClick={() => onReact(post.id, post.userReaction === 'like' ? 'love' : 'like')}
+        />
+        <CardActionButton
+          icon={MessageCircle}
+          label={isBn ? 'মন্তব্য দেখুন বা লিখুন' : 'View or add comments'}
+          count={post.comments.length}
+          onClick={() => setShowComments(!showComments)}
+        />
+        {post.taggedProduct && linkedProduct && (
+          <CardActionButton
+            icon={ShoppingCart}
+            label={isBn ? 'কার্টে যোগ করুন' : 'Add tagged product to cart'}
+            onClick={() => onAddToCart(linkedProduct)}
+          />
+        )}
+        <CardActionButton
+          icon={Bookmark}
+          label={isSaved
+            ? (isBn ? 'সেভ করা পোস্ট সরান' : 'Remove saved post')
+            : (isBn ? 'পোস্ট সেভ করুন' : 'Save post')}
+          active={isSaved}
+          onClick={() => onToggleSave(post.id)}
+        />
+        <CardActionButton
+          icon={Share2}
+          label={shareStatus === 'copied'
+            ? (isBn ? 'লিংক কপি হয়েছে' : 'Link copied')
+            : shareStatus === 'failed'
+              ? (isBn ? 'শেয়ার করা যায়নি' : 'Could not share')
+              : (isBn ? 'শেয়ার করুন' : 'Share post')}
+          count={post.sharesCount}
+          onClick={handleShare}
+        />
+      </CardActionBar>
+      {shareStatus && (
+        <p role="status" className="text-center text-[11px] text-[var(--pm-muted)]">
+          {shareStatus === 'shared'
+            ? (isBn ? 'পোস্ট শেয়ার করা হয়েছে।' : 'Post shared.')
+            : shareStatus === 'copied'
+              ? (isBn ? 'পোস্টের লিংক কপি হয়েছে।' : 'Post link copied.')
+              : shareStatus === 'unavailable'
+                ? (isBn ? 'এই ডিভাইসে শেয়ার সুবিধা নেই।' : 'Sharing is unavailable on this device.')
+                : (isBn ? 'পোস্ট শেয়ার করা যায়নি।' : 'Could not share this post.')}
+        </p>
       )}
 
       {/* Embedded Tagged Commercial Item Card */}
@@ -238,20 +338,6 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
             </div>
           </div>
 
-          <div className="shrink-0">
-            {linkedProduct && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToCart(linkedProduct);
-                }}
-                className="w-10 h-10 rounded-full bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] flex items-center justify-center shadow-lg transition-all active-scale cursor-pointer"
-              >
-                <ShoppingCart className="w-5 h-5" />
-              </button>
-            )}
-          </div>
         </div>
       )}
 
@@ -277,109 +363,13 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
                   : 'bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)]'
               }`}
             >
-              {post.postType === 'demand' ? 'I Have This / Send Proposal' : 'Contact Seller'}
-            </button>
-            <button 
-              type="button"
-              onClick={handleShare}
-              className="px-6 py-3.5 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[11px] font-black uppercase tracking-widest text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors active-scale cursor-pointer"
-            >
-              {copiedShare ? 'Copied' : 'Share'}
+              {post.postType === 'demand'
+                ? isBn ? 'প্রস্তাব পাঠান' : 'I Have This / Send Proposal'
+                : isBn ? 'বিক্রেতাকে বার্তা দিন' : 'Contact Seller'}
             </button>
           </div>
         </div>
       )}
-
-      {/* Reaction Counts & Comment Summaries */}
-      <div className="flex items-center justify-between text-[11px] font-bold text-[var(--pm-muted)] px-1 pt-1">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center -space-x-1.5">
-            <div className="w-5 h-5 rounded-full bg-[var(--pm-accent)] border-2 border-[var(--pm-card)] flex items-center justify-center text-[10px] shadow-sm">
-              👍
-            </div>
-            <div className="w-5 h-5 rounded-full bg-red-500 border-2 border-[var(--pm-card)] flex items-center justify-center text-[10px] shadow-sm">
-              ❤️
-            </div>
-          </div>
-          <span className="font-mono">{totalReactions.toLocaleString()}</span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setShowComments(!showComments)}
-            className="hover:text-[var(--pm-accent)] transition-colors cursor-pointer"
-          >
-            {post.comments.length} comments
-          </button>
-          <span>{post.sharesCount} shares</span>
-        </div>
-      </div>
-
-      {/* Interactive Action Bar (Like, Comment, Share) */}
-      <div className="relative pt-3 border-t border-[var(--pm-border)] flex items-center justify-between">
-        
-        {/* Floating Reaction Hover Tray - Refined Glassmorphism */}
-        {showReactionPicker && (
-          <div 
-            onMouseLeave={() => setShowReactionPicker(false)}
-            className="absolute -top-12 left-0 pm-glass border border-[var(--pm-border)] rounded-full px-2 py-1.5 shadow-2xl flex items-center gap-3 z-20 animate-scale-in"
-          >
-            {(['like', 'love', 'care', 'haha', 'wow'] as ReactionType[]).map((rx) => (
-              <button
-                key={rx}
-                type="button"
-                onClick={() => {
-                  onReact(post.id, rx);
-                  setShowReactionPicker(false);
-                }}
-                className="hover:scale-150 active:scale-90 transition-all text-xl p-1 drop-shadow-sm cursor-pointer"
-              >
-                {rx === 'like' ? '👍' : rx === 'love' ? '❤️' : rx === 'care' ? '🥰' : rx === 'haha' ? '😂' : '😮'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onMouseEnter={() => setShowReactionPicker(true)}
-            onClick={() => onReact(post.id, post.userReaction === 'like' ? 'love' : 'like')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all active-scale cursor-pointer ${
-              post.userReaction
-                ? 'text-[var(--pm-accent)] bg-[var(--pm-accent-soft)]'
-                : 'text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)]'
-            }`}
-          >
-            {post.userReaction === 'love' ? (
-              <Heart className="w-4 h-4 fill-red-500 text-red-500" />
-            ) : (
-              <ThumbsUp className={`w-4 h-4 ${post.userReaction ? 'fill-[var(--pm-accent)] text-[var(--pm-accent)]' : ''}`} />
-            )}
-            <span>{post.userReaction || 'Like'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowComments(!showComments)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] transition-all active-scale cursor-pointer"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Comment</span>
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleShare}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-[var(--pm-muted)] hover:bg-[var(--pm-surface)] hover:text-[var(--pm-text)] transition-all active-scale cursor-pointer"
-        >
-          <Share2 className="w-4 h-4" />
-          <span>{copiedShare ? 'Copied' : 'Share'}</span>
-        </button>
-
-      </div>
 
       {/* Comment Section - Refined */}
       {showComments && (
@@ -427,12 +417,13 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
                 type="text"
                 value={commentInput}
                 onChange={(e) => setCommentInput(e.target.value)}
-                placeholder="Share your thoughts..."
+                placeholder={isBn ? 'আপনার মতামত লিখুন...' : 'Share your thoughts...'}
                 className="w-full bg-[var(--pm-input)] border border-[var(--pm-border)] rounded-full pl-4 pr-10 py-2.5 text-[13px] font-medium text-[var(--pm-text)] placeholder:text-[var(--pm-muted)] focus:border-[var(--pm-accent)] focus:ring-2 focus:ring-[var(--pm-accent)]/20 outline-none"
               />
               <button
                 type="submit"
                 disabled={!commentInput.trim()}
+                aria-label={isBn ? 'মন্তব্য পাঠান' : 'Send comment'}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] flex items-center justify-center disabled:opacity-20 transition-all active-scale shadow-sm cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
@@ -443,6 +434,6 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({
         </div>
       )}
 
-    </article>
+    </ContentCard>
   );
 };

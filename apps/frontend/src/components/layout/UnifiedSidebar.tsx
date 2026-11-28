@@ -14,18 +14,11 @@ import {
   Grid,
   Settings as SettingsIcon,
   BookOpen,
-  Wallet,
   MessageSquare,
-  ShoppingCart,
-  Bell,
   ChevronRight,
   LogOut,
-  LogIn,
-  Check,
-  Languages,
   MapPin,
   Navigation,
-  Tag,
   Shirt,
   Smartphone,
   Pill,
@@ -33,20 +26,17 @@ import {
   ClipboardList,
   Layers,
   Boxes,
-  Lock,
   Loader2,
   ChevronDown,
   User as UserIcon,
-  HelpCircle,
-  ExternalLink,
-  Heart,
+  Globe,
 } from 'lucide-react';
 import { PortalTab, SettingsSectionId, User } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTheme, ThemeMode } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useLocationSettings } from '@/contexts/LocationContext';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 import { useAuth } from '@/features/auth';
-import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
 import { DEFAULT_AVATAR_URL, safeMediaSrc } from '@/shared/utils';
 
 export interface UnifiedSidebarProps {
@@ -58,32 +48,14 @@ export interface UnifiedSidebarProps {
   currentUser: User;
   onOpenVendorModal: () => void;
   onOpenCloudGuide: () => void;
-  onOpenHub?: () => void;
-  onOpenWallet?: () => void;
-  onOpenNotifications?: () => void;
-  onOpenSettings?: () => void;
   onOpenSettingsPortal?: (section?: SettingsSectionId) => void;
   onOpenSuperAdminModal?: () => void;
-  onOpenCart?: () => void;
-  cartCount?: number;
-  unreadNotificationsCount?: number;
+  onOpenSellerInventory?: () => void;
+  onOpenSellerOrders?: () => void;
   onOpenLocationModal?: () => void;
   onOpenAuthModal?: (tab?: 'login' | 'register') => void;
   onQuickFilter?: (query: string, targetTab?: PortalTab) => void;
 }
-
-const QUICK_THEME_SWATCHES: {
-  id: ThemeMode;
-  labelEn: string;
-  labelBn: string;
-  bgClass: string;
-  dotClass: string;
-}[] = [
-  { id: 'light', labelEn: 'Light', labelBn: 'লাইট', bgClass: 'bg-slate-100', dotClass: 'bg-blue-600' },
-  { id: 'nakshiLight', labelEn: 'Nakshi', labelBn: 'নকশী', bgClass: 'bg-amber-50', dotClass: 'bg-amber-700' },
-  { id: 'greenField', labelEn: 'Green', labelBn: 'সবুজ', bgClass: 'bg-emerald-950', dotClass: 'bg-emerald-400' },
-  { id: 'deepDark', labelEn: 'Deep', labelBn: 'ডিপ', bgClass: 'bg-zinc-950', dotClass: 'bg-orange-500' },
-];
 
 export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   mode,
@@ -94,38 +66,39 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   currentUser,
   onOpenVendorModal,
   onOpenCloudGuide,
-  onOpenHub,
-  onOpenWallet,
-  onOpenNotifications,
-  onOpenSettings,
   onOpenSettingsPortal,
   onOpenSuperAdminModal,
-  onOpenCart,
-  cartCount = 0,
-  unreadNotificationsCount = 0,
+  onOpenSellerInventory,
+  onOpenSellerOrders,
   onOpenLocationModal,
   onOpenAuthModal,
   onQuickFilter,
 }) => {
-  const { language, setLanguage, t } = useLanguage();
-  const { themeMode, setThemeMode } = useTheme();
-  const { activeLocation, radarRadiusKm, detectLiveLocation, isLocating } = useLocationSettings();
+  const { language, setLanguage } = useLanguage();
+  const { themeMode, setThemeMode, presets } = useTheme();
+  const { activeLocation, activeArea, detectLiveLocation, isLocating } = useLocationSettings();
   const { firebaseUser, signOut } = useAuth();
-  const { wishlistCount } = useWishlist();
   const isBn = language === 'bn';
+  const locationSummary =
+    formatAdministrativeArea(activeArea, isBn) || activeLocation?.trim() || 'Dhaka, Bangladesh';
 
   // Collapsible category section states
   const [openSections, setOpenSections] = useState<{
     portals: boolean;
     mokams: boolean;
-    merchant: boolean;
-    system: boolean;
+    account: boolean;
+    business: boolean;
+    appSettings: boolean;
+    help: boolean;
   }>({
     portals: true,
-    mokams: true,
-    merchant: true,
-    system: true,
+    mokams: false,
+    account: true,
+    business: false,
+    appSettings: false,
+    help: false,
   });
+  const [showAllPortals, setShowAllPortals] = useState(false);
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
@@ -163,11 +136,18 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
     onClose?.();
     if (onOpenSettingsPortal) {
       onOpenSettingsPortal(section);
-    } else if (onOpenSettings) {
-      onOpenSettings();
     } else {
       onSelectTab('settings');
     }
+  };
+
+  const openAccountTarget = (section: SettingsSectionId) => {
+    if (!firebaseUser) {
+      onClose?.();
+      onOpenAuthModal?.('login');
+      return;
+    }
+    openSettingsTarget(section);
   };
 
   const isSuperAdmin =
@@ -178,29 +158,21 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
     id: PortalTab;
     labelEn: string;
     labelBn: string;
-    badgeEn?: string;
-    badgeBn?: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    { id: 'feed', labelEn: 'Social Feed', labelBn: 'সোশ্যাল ফিড', badgeEn: 'Live', badgeBn: 'লাইভ', icon: Newspaper },
-    { id: 'explore', labelEn: 'Super App Hub', labelBn: 'সুপার অ্যাপ হাব', badgeEn: 'All', badgeBn: 'সব', icon: Grid },
-    { id: 'commerce', labelEn: 'Marketplace Hub', labelBn: 'মার্কেটপ্লেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: ShoppingBag },
-    { id: 'wholesale', labelEn: 'Wholesale Hub (B2B)', labelBn: 'হোলসেল হাব (পাইকারি)', badgeEn: 'MOQ', badgeBn: 'পাইকারি', icon: Package },
-    {
-      id: 'wishlist',
-      labelEn: 'Wishlist',
-      labelBn: 'উইশলিস্ট',
-      badgeEn: String(wishlistCount),
-      badgeBn: String(wishlistCount),
-      icon: Heart,
-    },
-    { id: 'services', labelEn: 'Services Hub', labelBn: 'সার্ভিসেস হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Wrench },
-    { id: 'community-hub', labelEn: 'Community Hub', labelBn: 'কমিউনিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Sparkles },
-    { id: 'utility-hub', labelEn: 'Utility Hub', labelBn: 'ইউটিলিটি হাব', badgeEn: 'Hub', badgeBn: 'হাব', icon: Layers },
-    { id: 'rides', labelEn: 'Transit & Logistics', labelBn: 'ট্রানজিট ও লজিস্টিকস', badgeEn: 'Express', badgeBn: 'পার্সেল', icon: Car },
-    { id: 'creator', labelEn: 'Creator Studio', labelBn: 'ক্রিয়েটর স্টুডিও', badgeEn: 'OTT', badgeBn: 'ভিডিও', icon: Sparkles },
-    { id: 'messages', labelEn: 'Messages & Quotes', labelBn: 'মেসেজ ও কোটেশন', badgeEn: 'Chat', badgeBn: 'চ্যাট', icon: MessageSquare },
+    { id: 'feed', labelEn: 'Social Feed', labelBn: 'সোশ্যাল ফিড', icon: Newspaper },
+    { id: 'commerce', labelEn: 'Marketplace', labelBn: 'মার্কেটপ্লেস', icon: ShoppingBag },
+    { id: 'explore', labelEn: 'Explore', labelBn: 'এক্সপ্লোর', icon: Grid },
+    { id: 'services', labelEn: 'Services', labelBn: 'সার্ভিসেস', icon: Wrench },
+    { id: 'rides', labelEn: 'Transit', labelBn: 'ট্রানজিট', icon: Car },
+    { id: 'wholesale', labelEn: 'Wholesale', labelBn: 'পাইকারি বাজার', icon: Package },
+    { id: 'community-hub', labelEn: 'Community', labelBn: 'কমিউনিটি', icon: Sparkles },
+    { id: 'utility-hub', labelEn: 'Orders & Wallet', labelBn: 'অর্ডার ও ওয়ালেট', icon: Layers },
+    { id: 'creator', labelEn: 'Creator Studio', labelBn: 'ক্রিয়েটর স্টুডিও', icon: Sparkles },
+    { id: 'messages', labelEn: 'Messages', labelBn: 'মেসেজ', icon: MessageSquare },
   ];
+  const compactPortalList = primaryPortals.filter((portal, index) => index < 5 || portal.id === currentTab);
+  const visiblePortals = showAllPortals ? primaryPortals : compactPortalList;
 
   const commercialMokams: {
     id: string;
@@ -353,34 +325,6 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                 </div>
               </div>
 
-              {/* Quick Dual Profile & Orders Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[var(--pm-border)]">
-                <button
-                  type="button"
-                  onClick={() => navigateAndClose('profile')}
-                  className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    currentTab === 'profile'
-                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
-                      : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] border border-[var(--pm-border)]'
-                  }`}
-                >
-                  <UserIcon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{isBn ? 'প্রোফাইল' : 'Profile'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => navigateAndClose('orders')}
-                  className={`py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    currentTab === 'orders'
-                      ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
-                      : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)] border border-[var(--pm-border)]'
-                  }`}
-                >
-                  <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="truncate">{isBn ? 'অর্ডারস হাব' : 'Orders Hub'}</span>
-                </button>
-              </div>
             </>
           ) : (
             <div className="space-y-2.5">
@@ -397,187 +341,8 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose?.();
-                  onOpenAuthModal?.('login');
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{isBn ? 'লগইন বা রেজিস্টার করুন' : 'Sign In / Register'}</span>
-              </button>
             </div>
           )}
-        </div>
-
-        {/* Hyperlocal Radar Bar (Quick Interactive Location & GPS Trigger) */}
-        <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
-                <MapPin className="w-3.5 h-3.5" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-[10px] text-[var(--pm-muted)] block font-semibold">
-                  {isBn ? 'লোকাল রাডার লোকেশন' : 'Hyperlocal Radar Zone'}
-                </span>
-                <span className="text-xs font-bold text-[var(--pm-text)] truncate block">
-                  {activeLocation || 'Dhaka, Bangladesh'}
-                </span>
-              </div>
-            </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">
-              {radarRadiusKm}km
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenLocationModal) {
-                  onClose?.();
-                  onOpenLocationModal();
-                }
-              }}
-              className="py-1.5 px-2 rounded-xl bg-[var(--pm-card)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[11px] font-bold text-[var(--pm-text)] hover:text-[var(--pm-accent)] transition-all flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <MapPin className="w-3 h-3 text-[var(--pm-accent)]" />
-              <span className="truncate">{isBn ? 'মোকাম পরিবর্তন' : 'Change Mokam'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => detectLiveLocation()}
-              disabled={isLocating}
-              className="py-1.5 px-2 rounded-xl bg-[var(--pm-card)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[11px] font-bold text-[var(--pm-text)] hover:text-emerald-500 transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-            >
-              {isLocating ? (
-                <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
-              ) : (
-                <Navigation className="w-3 h-3 text-emerald-500" />
-              )}
-              <span className="truncate">{isLocating ? (isBn ? 'খুঁজছে...' : 'Locating...') : (isBn ? 'লাইভ GPS' : 'Live GPS')}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 4-Grid Quick Action Matrix with Badges (Cart, Orders, Wallet, Alerts) */}
-        <div className="grid grid-cols-2 gap-2">
-          {/* Cart / Bag Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenCart) {
-                onOpenCart();
-                onClose?.();
-              } else {
-                navigateAndClose('commerce');
-              }
-            }}
-            className="p-2.5 rounded-xl border bg-[var(--pm-card)] border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)] text-left transition-all cursor-pointer flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <ShoppingCart className="w-4 h-4 text-blue-500 shrink-0" />
-              <span className="text-[11px] font-bold truncate">{isBn ? 'শপিং ব্যাগ' : 'Cart'}</span>
-            </div>
-            {cartCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-[10px] font-mono font-bold shrink-0">
-                {cartCount}
-              </span>
-            )}
-          </button>
-
-          {/* Orders Hub */}
-          <button
-            type="button"
-            onClick={() => {
-              if (!firebaseUser) {
-                onClose?.();
-                onOpenAuthModal?.('login');
-                return;
-              }
-              navigateAndClose('orders');
-            }}
-            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              currentTab === 'orders'
-                ? 'bg-[var(--pm-accent-soft)] border-[var(--pm-accent)]/40 text-[var(--pm-accent)]'
-                : 'bg-[var(--pm-card)] border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)]'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Package className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="text-[11px] font-bold truncate">{isBn ? 'অর্ডারস' : 'Orders'}</span>
-            </div>
-            {!firebaseUser ? (
-              <Lock className="w-3 h-3 text-[var(--pm-muted)] shrink-0" />
-            ) : (
-              <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.2 rounded-md">
-                Live
-              </span>
-            )}
-          </button>
-
-          {/* Wallet & Escrow */}
-          <button
-            type="button"
-            onClick={() => {
-              if (!firebaseUser) {
-                onClose?.();
-                onOpenAuthModal?.('login');
-                return;
-              }
-              if (onOpenWallet) {
-                onOpenWallet();
-                onClose?.();
-              } else {
-                navigateAndClose('wallet');
-              }
-            }}
-            className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              currentTab === 'wallet'
-                ? 'bg-[var(--pm-accent-soft)] border-[var(--pm-accent)]/40 text-[var(--pm-accent)]'
-                : 'bg-[var(--pm-card)] border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)]'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Wallet className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span className="text-[11px] font-bold truncate">{isBn ? 'ওয়ালেট' : 'Wallet'}</span>
-            </div>
-            {!firebaseUser ? (
-              <Lock className="w-3 h-3 text-[var(--pm-muted)] shrink-0" />
-            ) : (
-              <span className="text-[10px] font-mono font-bold text-emerald-500">
-                ৳{currentUser.balance > 999 ? `${(currentUser.balance / 1000).toFixed(1)}k` : currentUser.balance}
-              </span>
-            )}
-          </button>
-
-          {/* Notifications / Alerts */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenNotifications) {
-                onOpenNotifications();
-                onClose?.();
-              } else {
-                navigateAndClose('notifications');
-              }
-            }}
-            className="p-2.5 rounded-xl border bg-[var(--pm-card)] border-[var(--pm-border)] hover:bg-[var(--pm-card-hover)] text-left transition-all cursor-pointer flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Bell className="w-4 h-4 text-sky-500 shrink-0" />
-              <span className="text-[11px] font-bold truncate">{isBn ? 'অ্যালার্ট' : 'Alerts'}</span>
-            </div>
-            {unreadNotificationsCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold shrink-0">
-                {unreadNotificationsCount}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* SECTION 1: Core Super App Portals (সুপার অ্যাপ পোর্টাল) */}
@@ -585,6 +350,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           <button
             type="button"
             onClick={() => toggleSection('portals')}
+            aria-expanded={openSections.portals}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -596,7 +362,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
           {openSections.portals && (
             <div className="space-y-1 pt-0.5">
-              {primaryPortals.map((portal) => {
+              {visiblePortals.map((portal) => {
                 const Icon = portal.icon;
                 const isActive = currentTab === portal.id;
                 return (
@@ -604,6 +370,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                     key={portal.id}
                     type="button"
                     onClick={() => navigateAndClose(portal.id)}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-bold text-left transition-all cursor-pointer active:scale-[0.98] ${
                       isActive
                         ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border border-[var(--pm-accent)]/30 shadow-2xs'
@@ -622,23 +389,24 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                       </div>
                       <span className="truncate">{isBn ? portal.labelBn : portal.labelEn}</span>
                     </div>
-
-                    {(portal.badgeBn || portal.badgeEn) && (
-                      <span
-                        className={`text-[10px] font-semibold font-mono tabular-nums px-2 py-0.5 rounded-md shrink-0 ${
-                          isActive
-                            ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
-                            : portal.id === 'wishlist' && wishlistCount > 0
-                            ? 'bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold'
-                            : 'bg-[var(--pm-surface)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
-                        }`}
-                      >
-                        {isBn ? portal.badgeBn : portal.badgeEn}
-                      </span>
-                    )}
                   </button>
                 );
               })}
+              {primaryPortals.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllPortals((expanded) => !expanded)}
+                  aria-expanded={showAllPortals}
+                  className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-bold text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)]"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--pm-surface)]">
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showAllPortals ? 'rotate-180' : ''}`} />
+                  </span>
+                  {showAllPortals
+                    ? isBn ? 'কম দেখান' : 'See less'
+                    : isBn ? 'আরও দেখুন' : 'See more'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -650,6 +418,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
           <button
             type="button"
             onClick={() => toggleSection('mokams')}
+            aria-expanded={openSections.mokams}
             className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1.5">
@@ -693,153 +462,309 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
         <div className="border-t border-[var(--pm-border)]" />
 
-        {/* SECTION 3: Merchant, Seller Central & B2B Suite (ব্যবসা ও সেলার সেন্ট্রাল) */}
         <div className="space-y-1">
           <button
             type="button"
-            onClick={() => toggleSection('merchant')}
-            className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
+            onClick={() => toggleSection('account')}
+            aria-expanded={openSections.account}
+            className="w-full px-2 py-2 flex items-center justify-between text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] rounded-xl transition-colors cursor-pointer"
           >
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span>{isBn ? 'ব্যক্তিগত ও ব্যবসায়িক সেটিংস' : 'Account & Business Suite'}</span>
+            <span className="flex items-center gap-2.5">
+              <UserIcon className="w-4 h-4 text-sky-500" />
+              <span>{isBn ? 'আমার অ্যাকাউন্ট' : 'My Account'}</span>
             </span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.merchant ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 transition-transform ${openSections.account ? 'rotate-180' : ''}`} />
           </button>
 
-          {openSections.merchant && (
-            <div className="space-y-1.5 pt-0.5">
-              {/* Personal Account Settings (Always available for signed-in users) */}
-              <div className="p-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-1">
-                <span className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider px-1 block">
-                  {isBn ? 'ব্যক্তিগত অ্যাকাউন্ট সেটিংস' : 'Personal Account'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!firebaseUser) {
+          {openSections.account && (
+            <div className="space-y-1 pl-2">
+              {firebaseUser ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigateAndClose('profile')}
+                    aria-current={currentTab === 'profile' ? 'page' : undefined}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
+                  >
+                    <span>{isBn ? 'প্রোফাইল দেখুন' : 'Profile overview'}</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />
+                  </button>
+                  {[
+                    { id: 'account_profile' as const, label: isBn ? 'ব্যক্তিগত তথ্য' : 'Personal information' },
+                    { id: 'account_security' as const, label: isBn ? 'লগইন ও নিরাপত্তা' : 'Login & security' },
+                    { id: 'account_addresses' as const, label: isBn ? 'সংরক্ষিত ঠিকানা' : 'Saved addresses' },
+                    { id: 'account_payments' as const, label: isBn ? 'পেমেন্ট মাধ্যম' : 'Payment methods' },
+                    { id: 'account_notifications' as const, label: isBn ? 'নোটিফিকেশন পছন্দ' : 'Notification preferences' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => openAccountTarget(item.id)}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
+                    >
+                      <span>{item.label}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await signOut();
                       onClose?.();
-                      onOpenAuthModal?.('login');
-                      return;
-                    }
-                    openSettingsTarget('account_profile');
-                  }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
-                >
-                  <span className="truncate">{isBn ? '👤 প্রোফাইল ও তথ্য' : '👤 Personal Profile'}</span>
-                  {!firebaseUser ? <Lock className="w-3 h-3 text-[var(--pm-muted)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!firebaseUser) {
-                      onClose?.();
-                      onOpenAuthModal?.('login');
-                      return;
-                    }
-                    openSettingsTarget('account_security');
-                  }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
-                >
-                  <span className="truncate">{isBn ? '🔒 পাসওয়ার্ড ও নিরাপত্তা' : '🔒 Login & Security'}</span>
-                  {!firebaseUser ? <Lock className="w-3 h-3 text-[var(--pm-muted)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!firebaseUser) {
-                      onClose?.();
-                      onOpenAuthModal?.('login');
-                      return;
-                    }
-                    openSettingsTarget('account_addresses');
-                  }}
-                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
-                >
-                  <span className="truncate">{isBn ? '🏠 সংরক্ষিত ঠিকানা' : '🏠 Saved Addresses'}</span>
-                  {!firebaseUser ? <Lock className="w-3 h-3 text-[var(--pm-muted)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />}
-                </button>
-              </div>
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  >
+                    <span>{isBn ? 'সাইন আউট' : 'Sign out'}</span>
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] p-3 space-y-2">
+                  <p className="text-xs text-[var(--pm-muted)]">
+                    {isBn ? 'অ্যাকাউন্ট তৈরি বা সেটিংস দেখতে সাইন ইন করুন।' : 'Sign in or create an account to manage your details.'}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose?.();
+                        onOpenAuthModal?.('login');
+                      }}
+                      className="rounded-lg bg-[var(--pm-card)] border border-[var(--pm-border)] px-2 py-2 text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+                    >
+                      {isBn ? 'সাইন ইন' : 'Sign in'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose?.();
+                        onOpenAuthModal?.('register');
+                      }}
+                      className="rounded-lg bg-[var(--pm-accent)] px-2 py-2 text-xs font-semibold text-[var(--pm-accent-fg)] hover:bg-[var(--pm-accent-hover)]"
+                    >
+                      {isBn ? 'অ্যাকাউন্ট খুলুন' : 'Create account'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-              {/* Seller Central & Business Settings */}
-              <div className="p-2 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] space-y-1">
-                <span className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider px-1 block">
-                  {isBn ? 'সেলার ও ব্যবসায়িক পোর্টাল' : 'Seller & Business Hub'}
-                </span>
-                {currentUser.isVendor ? (
+        <div className="border-t border-[var(--pm-border)]" />
+
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => toggleSection('business')}
+            aria-expanded={openSections.business}
+            className="w-full px-2 py-2 flex items-center justify-between text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] rounded-xl transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2.5">
+              <Store className="w-4 h-4 text-emerald-500" />
+              <span>{isBn ? 'আমার ব্যবসা' : 'My Business'}</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${openSections.business ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.business && (
+            <div className="space-y-1 pl-2">
+              {firebaseUser ? (
+                currentUser.isVendor ? (
                   <>
                     <button
                       type="button"
                       onClick={() => navigateAndClose('vendor-dash')}
-                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-bold text-left transition-all cursor-pointer ${
-                        currentTab === 'vendor-dash'
-                          ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-                          : 'hover:bg-[var(--pm-card-hover)] text-[var(--pm-text)]'
-                      }`}
+                      aria-current={currentTab === 'vendor-dash' ? 'page' : undefined}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Store className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span className="truncate">{isBn ? 'সেলার সেন্ট্রাল' : 'Seller Central'}</span>
-                      </div>
-                      <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded-full">
-                        Active
+                      <span>{isBn ? 'সেলার সেন্ট্রাল' : 'Seller Central'}</span>
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                        {currentUser.vendorProfile?.verified ? (isBn ? 'যাচাইকৃত' : 'Verified') : (isBn ? 'KYC বাকি' : 'KYC review')}
                       </span>
                     </button>
-
                     <button
                       type="button"
-                      onClick={() => openSettingsTarget('vendor_store')}
-                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
+                      onClick={() => {
+                        if (!onOpenSellerInventory) return;
+                        onClose?.();
+                        onOpenSellerInventory();
+                      }}
+                      disabled={!onOpenSellerInventory}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--pm-muted)]"
                     >
-                      <span className="truncate">{isBn ? '📦 ক্যাটালগ ও স্টোরফ্রন্ট' : '📦 Products & Catalog'}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />
+                      <span>{isBn ? 'পণ্য ও ইনভেন্টরি' : 'Products & inventory'}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
-
                     <button
                       type="button"
-                      onClick={() => openSettingsTarget('vendor_kyc')}
-                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
+                      onClick={() => {
+                        if (!onOpenSellerOrders) return;
+                        onClose?.();
+                        onOpenSellerOrders();
+                      }}
+                      disabled={!onOpenSellerOrders}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[var(--pm-muted)]"
                     >
-                      <span className="truncate">{isBn ? '🛡️ কেওয়াইসি ও লাইসেন্স' : '🛡️ KYC & Trade License'}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />
+                      <span>{isBn ? 'বিক্রির অর্ডার' : 'Sales orders'}</span>
+                      {onOpenSellerOrders
+                        ? <ChevronRight className="w-3.5 h-3.5" />
+                        : <span className="text-[10px]">{isBn ? 'শীঘ্রই' : 'Soon'}</span>}
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openSettingsTarget('vendor_payout')}
-                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
-                    >
-                      <span className="truncate">{isBn ? '💳 পে-আউট ও ব্যাংক অ্যাকাউন্ট' : '💳 Bank & Payouts'}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-[var(--pm-muted)]" />
-                    </button>
+                    {[
+                      { id: 'vendor_store' as const, label: isBn ? 'দোকানের পরিচিতি' : 'Store profile' },
+                      { id: 'vendor_kyc' as const, label: isBn ? 'ব্যবসা যাচাই (KYC)' : 'Business verification' },
+                      { id: 'vendor_payout' as const, label: isBn ? 'পেআউট ও ব্যাংক' : 'Payout & bank' },
+                      { id: 'vendor_fulfillment' as const, label: isBn ? 'ডেলিভারি সেটিংস' : 'Delivery settings' },
+                      { id: 'vendor_hours' as const, label: isBn ? 'দোকানের সময়' : 'Store hours' },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openAccountTarget(item.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-[var(--pm-muted)] hover:bg-[var(--pm-card-hover)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
+                      >
+                        <span>{item.label}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    ))}
                   </>
+                ) : currentUser.vendorProfile ? (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-3">
+                    <p className="text-xs font-semibold text-[var(--pm-text)]">
+                      {isBn ? 'সেলার আবেদন জমা হয়েছে' : 'Seller application received'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--pm-muted)]">
+                      {currentUser.vendorProfile.status === 'pending'
+                        ? (isBn ? 'KYC যাচাই শেষ হলে জানানো হবে।' : 'We’ll notify you when KYC review is complete.')
+                        : (isBn ? 'আপনার সেলার অ্যাকাউন্ট বর্তমানে সক্রিয় নয়।' : 'Your seller account is not currently active.')}
+                    </p>
+                  </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => {
-                      if (!firebaseUser) {
-                        onClose?.();
-                        onOpenAuthModal?.('login');
-                        return;
-                      }
                       onClose?.();
                       onOpenVendorModal();
                     }}
-                    className="w-full p-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-between shadow-xs hover:opacity-95 transition-all cursor-pointer"
+                    className="w-full flex items-center justify-between gap-3 rounded-xl bg-[var(--pm-accent)] px-3 py-3 text-left text-xs font-bold text-[var(--pm-accent-fg)] hover:bg-[var(--pm-accent-hover)] transition-colors cursor-pointer"
                   >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-white shrink-0" />
-                      <div className="text-left">
-                        <span className="block leading-tight">{isBn ? 'সেলার অ্যাকাউন্ট খুলুন' : 'Become Verified Seller'}</span>
-                        <span className="text-[9px] text-blue-100 font-normal">{isBn ? 'বিনামূল্যে ব্যবসা শুরু করুন' : 'Free B2B/B2C Registration'}</span>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>
+                      <span className="block">{isBn ? 'সেলার অ্যাকাউন্ট তৈরি করুন' : 'Create seller account'}</span>
+                      <span className="mt-0.5 block text-[10px] font-normal opacity-80">{isBn ? '৫ ধাপের ব্যবসা যাচাই' : '5-step business verification'}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0" />
                   </button>
-                )}
+                )
+              ) : (
+                <p className="rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] px-3 py-3 text-xs text-[var(--pm-muted)]">
+                  {isBn ? 'ব্যবসা পরিচালনার আগে আমার অ্যাকাউন্ট থেকে সাইন ইন করুন।' : 'Sign in from My Account before managing a business.'}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-[var(--pm-border)]" />
+
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => toggleSection('appSettings')}
+            aria-expanded={openSections.appSettings}
+            className="w-full px-2 py-2 flex items-center justify-between text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] rounded-xl transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2.5">
+              <SettingsIcon className="w-4 h-4 text-violet-500" />
+              <span>{isBn ? 'অ্যাপ সেটিংস' : 'App Settings'}</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${openSections.appSettings ? 'rotate-180' : ''}`} />
+          </button>
+
+          {openSections.appSettings && (
+            <div className="space-y-3 pl-2 pt-1">
+              <button
+                type="button"
+                onClick={() => openSettingsTarget('appearance')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-left transition-all cursor-pointer ${
+                currentTab === 'settings'
+                    ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]'
+                    : 'hover:bg-[var(--pm-card-hover)]'
+                }`}
+              >
+                <div className="p-1.5 rounded-xl bg-violet-500/15 text-violet-500 shrink-0">
+                <SettingsIcon className="w-4 h-4" />
+                </div>
+                <span className="truncate">{isBn ? 'সেটিংস সেন্টার' : 'Settings center'}</span>
+              </button>
+
+              <div className="rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="block text-xs font-semibold text-[var(--pm-text)]">
+                    {isBn ? 'আপনার অবস্থান' : 'Your location'}
+                  </span>
+                  <span className="block truncate text-[10px] text-[var(--pm-muted)]">
+                    {locationSummary}
+                  </span>
+                </div>
+                <MapPin className="h-4 w-4 shrink-0 text-[var(--pm-accent)]" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose?.();
+                    onOpenLocationModal?.();
+                  }}
+                  className="min-h-11 rounded-lg border border-[var(--pm-border)] bg-[var(--pm-card)] px-2 py-2 text-[10px] font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+                >
+                  {isBn ? 'অবস্থান বদলান' : 'Change location'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => detectLiveLocation()}
+                  disabled={isLocating}
+                  className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-[var(--pm-border)] bg-[var(--pm-card)] px-2 py-2 text-[10px] font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] disabled:opacity-50"
+                >
+                  {isLocating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Navigation className="h-3 w-3" />}
+                  {isBn ? 'লাইভ লোকেশন' : 'Use live location'}
+                </button>
+                </div>
               </div>
 
-              {/* Developer & Admin Restricted Console */}
+              <div className="rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] p-3 space-y-2">
+                <span className="text-xs font-semibold text-[var(--pm-text)]">{isBn ? 'রঙের থিম' : 'Color theme'}</span>
+                <div className="grid grid-cols-3 gap-2">
+                {presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setThemeMode(preset.id)}
+                    aria-label={isBn ? preset.nameBn : preset.nameEn}
+                    aria-pressed={themeMode === preset.id}
+                    title={isBn ? preset.nameBn : preset.nameEn}
+                    className={`flex h-8 items-center justify-center rounded-lg border transition-colors ${
+                      themeMode === preset.id
+                        ? 'border-[var(--pm-accent)] ring-2 ring-[var(--pm-accent)]/30'
+                        : 'border-[var(--pm-border)] hover:border-[var(--pm-accent)]'
+                    }`}
+                    style={{ backgroundColor: preset.bgHex }}
+                  >
+                    <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: preset.accentHex }} />
+                  </button>
+                ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')}
+                className="w-full flex items-center justify-between rounded-xl border border-[var(--pm-border)] bg-[var(--pm-surface)] px-3 py-2.5 text-xs font-semibold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)]"
+              >
+                <span className="flex items-center gap-2"><Globe className="h-4 w-4 text-[var(--pm-accent)]" />{isBn ? 'অ্যাপের ভাষা' : 'App language'}</span>
+                <span className="text-[var(--pm-muted)]">{isBn ? 'বাংলা' : 'English'}</span>
+              </button>
               {isSuperAdmin && onOpenSuperAdminModal && (
                 <button
                   type="button"
@@ -847,15 +772,13 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                     onClose?.();
                     onOpenSuperAdminModal();
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold text-purple-600 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 transition-all cursor-pointer"
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold text-purple-600 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="flex items-center gap-2.5">
                     <ShieldAlert className="w-4 h-4 text-purple-500 shrink-0" />
-                    <span className="truncate">{isBn ? 'সুপার অ্যাডমিন সেন্টার' : 'Super Admin Center'}</span>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold bg-purple-500/20 px-1.5 py-0.5 rounded">
-                    Admin
+                    <span>{isBn ? 'সুপার অ্যাডমিন সেন্টার' : 'Super Admin Center'}</span>
                   </span>
+                  <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold">Admin</span>
                 </button>
               )}
             </div>
@@ -864,124 +787,41 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
         <div className="border-t border-[var(--pm-border)]" />
 
-        {/* SECTION 4: System, Guide & Preferences (সিস্টেম ও সহায়তা) */}
         <div className="space-y-1">
           <button
             type="button"
-            onClick={() => toggleSection('system')}
-            className="w-full px-2 py-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-[var(--pm-muted)] hover:text-[var(--pm-text)] transition-colors cursor-pointer"
+            onClick={() => toggleSection('help')}
+            aria-expanded={openSections.help}
+            className="w-full px-2 py-2 flex items-center justify-between text-sm font-bold text-[var(--pm-text)] hover:bg-[var(--pm-card-hover)] rounded-xl transition-colors cursor-pointer"
           >
-            <span className="flex items-center gap-1.5">
-              <SettingsIcon className="w-3.5 h-3.5 text-violet-500" />
-              <span>{isBn ? 'সিস্টেম, গাইড ও সেটিংস' : 'System, Guide & Settings'}</span>
+            <span className="flex items-center gap-2.5">
+              <BookOpen className="w-4 h-4 text-sky-500" />
+              <span>{isBn ? 'সাহায্য ও গাইড' : 'Help & guides'}</span>
             </span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.system ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 transition-transform ${openSections.help ? 'rotate-180' : ''}`} />
           </button>
-
-          {openSections.system && (
-            <div className="space-y-1 pt-0.5">
+          {openSections.help && (
+            <div className="space-y-1 pl-2">
               <button
                 type="button"
                 onClick={() => navigateAndClose('guide')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-left transition-all cursor-pointer ${
-                  currentTab === 'guide'
-                    ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]'
-                    : 'hover:bg-[var(--pm-card-hover)]'
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                currentTab === 'guide' ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]' : 'hover:bg-[var(--pm-card-hover)]'
                 }`}
               >
-                <div className="p-1.5 rounded-xl bg-sky-500/15 text-sky-500 shrink-0">
-                  <BookOpen className="w-4 h-4" />
-                </div>
-                <span className="truncate">{isBn ? 'ব্যবহারকারী ও সেলার গাইড' : 'User & Vendor Guide'}</span>
+                <BookOpen className="w-4 h-4 text-sky-500" />
+                <span>{isBn ? 'ব্যবহারকারী ও সেলার গাইড' : 'User & seller guide'}</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => {
-                  onClose?.();
-                  onOpenCloudGuide();
+                onClose?.();
+                onOpenCloudGuide();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-left hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-left hover:bg-[var(--pm-card-hover)] transition-colors cursor-pointer"
               >
-                <div className="p-1.5 rounded-xl bg-[var(--pm-surface)] border border-[var(--pm-border)] text-[var(--pm-accent)] shrink-0">
-                  <Cloud className="w-4 h-4" />
-                </div>
-                <span className="truncate">{isBn ? 'মাল্টি-ক্লাউড ডিপ্লয় গাইড' : 'Multi-Cloud Deploy Config'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettingsTarget('appearance')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-left transition-all cursor-pointer ${
-                  currentTab === 'settings'
-                    ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)]'
-                    : 'hover:bg-[var(--pm-card-hover)]'
-                }`}
-              >
-                <div className="p-1.5 rounded-xl bg-violet-500/15 text-violet-500 shrink-0">
-                  <SettingsIcon className="w-4 h-4" />
-                </div>
-                <span className="truncate">{isBn ? 'সেটিংস সেন্টার' : 'Settings Center'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettingsTarget('account_security')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-left hover:bg-[var(--pm-card-hover)] transition-all cursor-pointer"
-              >
-                <div className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-500 shrink-0">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <span className="truncate">{isBn ? 'সিকিউরিটি ও প্রাইভেসি' : 'Security & Privacy'}</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* SECTION 5: Authentication State & Action Button */}
-        <div className="p-3 rounded-2xl bg-[var(--pm-surface)] border border-[var(--pm-border)]">
-          {firebaseUser ? (
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-[10px] text-[var(--pm-muted)] block">
-                  {isBn ? 'লগইন একাউন্ট' : 'Active Account'}
-                </span>
-                <span className="text-xs font-bold text-[var(--pm-text)] truncate block">
-                  {firebaseUser.email || currentUser.email}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await signOut();
-                  onClose?.();
-                }}
-                className="py-1.5 px-3 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{isBn ? 'লগআউট' : 'Sign Out'}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="text-[10px] text-[var(--pm-muted)] block">
-                  {isBn ? 'গেস্ট হিসেবে আছেন' : 'Browsing as Guest'}
-                </span>
-                <span className="text-xs font-bold text-[var(--pm-text)] truncate block">
-                  {isBn ? 'সকল ফিচার পেতে লগইন করুন' : 'Sign in to access all tools'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose?.();
-                  if (onOpenAuthModal) onOpenAuthModal('login');
-                }}
-                className="py-1.5 px-3 rounded-xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{isBn ? 'লগইন' : 'Sign In'}</span>
+                <Cloud className="w-4 h-4 text-[var(--pm-accent)]" />
+                <span>{isBn ? 'মাল্টি-ক্লাউড ডিপ্লয় গাইড' : 'Multi-cloud deploy guide'}</span>
               </button>
             </div>
           )}
@@ -989,68 +829,14 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
       </div>
 
-      {/* 3. Unified Sticky Footer: Theme Swatches + EN / বাংলা Switch */}
+      {/* App version footer */}
       <div
-        className={`shrink-0 border-t border-[var(--pm-border)] bg-[var(--pm-surface)] space-y-2.5 ${
+        className={`shrink-0 border-t border-[var(--pm-border)] bg-[var(--pm-surface)] ${
           mode === 'drawer' ? 'p-4' : 'p-3 mt-3 rounded-2xl border'
         }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          {/* 4 Theme Color Swatches */}
-          <div className="flex items-center gap-1.5" role="group" aria-label="Sidebar theme selector">
-            {QUICK_THEME_SWATCHES.map((swatch) => {
-              const isSelected = themeMode === swatch.id;
-              return (
-                <button
-                  key={swatch.id}
-                  type="button"
-                  onClick={() => setThemeMode(swatch.id)}
-                  title={isBn ? swatch.labelBn : swatch.labelEn}
-                  aria-label={isBn ? swatch.labelBn : swatch.labelEn}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center border transition-all cursor-pointer ${swatch.bgClass} ${
-                    isSelected
-                      ? 'ring-2 ring-[var(--pm-accent)] ring-offset-1 border-white scale-110'
-                      : 'border-[var(--pm-border)] opacity-80 hover:opacity-100 hover:scale-105'
-                  }`}
-                >
-                  {isSelected ? (
-                    <Check
-                      className={`w-3.5 h-3.5 ${
-                        swatch.id === 'light' || swatch.id === 'nakshiLight' ? 'text-slate-900' : 'text-white'
-                      }`}
-                    />
-                  ) : (
-                    <span className={`w-2.5 h-2.5 rounded-full ${swatch.dotClass}`} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* One-Click EN / বাংলা Switch */}
-          <button
-            type="button"
-            onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')}
-            className="px-2.5 py-1.5 rounded-xl bg-[var(--pm-card)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[11px] font-bold flex items-center gap-1.5 text-[var(--pm-text)] transition-all cursor-pointer shrink-0"
-            title={isBn ? 'Switch to English' : 'বাংলায় পরিবর্তন করুন'}
-          >
-            <Languages className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
-            <span>{isBn ? 'EN / বাংলা' : 'বাংলা / EN'}</span>
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between text-[10px] text-[var(--pm-muted)] pt-0.5">
+        <div className="flex items-center justify-between text-[10px] text-[var(--pm-muted)]">
           <span>PaikarMart v2.6 · Bangladesh</span>
-          {mode === 'drawer' && onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex items-center gap-1 text-[var(--pm-danger)] font-bold hover:underline cursor-pointer"
-            >
-              <LogOut className="w-3 h-3" />
-              <span>{isBn ? 'বন্ধ করুন' : 'Close'}</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

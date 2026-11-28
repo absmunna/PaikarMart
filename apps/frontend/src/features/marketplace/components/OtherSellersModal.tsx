@@ -187,11 +187,26 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
             </div>
 
             <div className="space-y-3">
+              {isLoadingOffers && rankedListings.length === 0 && (
+                <p role="status" className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] px-4 py-8 text-center text-xs text-[var(--pm-muted)]">
+                  Loading seller offers…
+                </p>
+              )}
+              {!isLoadingOffers && rankedListings.length === 0 && (
+                <div className="rounded-2xl border border-[var(--pm-border)] bg-[var(--pm-surface)] px-4 py-8 text-center">
+                  <Store className="mx-auto h-6 w-6 text-[var(--pm-muted)]" />
+                  <p className="mt-2 text-xs font-semibold text-[var(--pm-text)]">No active seller offers</p>
+                  <p className="mt-1 text-[11px] text-[var(--pm-muted)]">
+                    There are no matching offers for this exact catalog product right now.
+                  </p>
+                </div>
+              )}
               {rankedListings.map((listing) => {
                 const isCurrent = listing.id === currentSellerId || listing.sellerId === currentSellerId;
                 const hasRealPhotos = listing.sellerRealPhotos && listing.sellerRealPhotos.length > 0;
                 const shippingFee = Number(listing.shippingFee ?? 0);
                 const landed = listing.landedPrice ?? (listing.price + shippingFee);
+                const isAvailable = listing.stockQuantity > 0;
 
                 return (
                   <div
@@ -282,17 +297,20 @@ export const OtherSellersModal: React.FC<OtherSellersModalProps> = ({
 
                         <button
                           type="button"
+                          disabled={!isAvailable}
                           onClick={() => {
                             onSelectSellerListing(listing);
                             onClose();
                           }}
-                          className={`mt-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+                          className={`mt-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                             isCurrent
                               ? 'bg-[var(--pm-card)] border border-[var(--pm-border)] text-[var(--pm-text)]'
                               : 'bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)]'
                           }`}
                         >
-                          {isCurrent ? (
+                          {!isAvailable ? (
+                            'Out of stock'
+                          ) : isCurrent ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5 text-[var(--pm-accent)]" />
                               Selected

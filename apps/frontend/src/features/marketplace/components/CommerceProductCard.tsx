@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { normalizeHandle } from '@paikarmart/shared';
-import { MapPin, Star, ShieldCheck, Minus, Plus, MessageSquare, Wrench, ShoppingBag, Check, Scale, Heart } from 'lucide-react';
+import { MapPin, Star, ShieldCheck, Minus, Plus, MessageSquare, Wrench, ShoppingBag, Check, Scale } from 'lucide-react';
 import { CommerceItem, PortalTab } from '@/types';
 import { useProductComparison } from '@/features/marketplace/hooks/useProductComparison';
-import { useWishlist } from '@/features/marketplace/hooks/useWishlist';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
+import { ProductCardActionRow } from '@/features/marketplace/components/ProductCardActionRow';
 
 interface CommerceProductCardProps {
   item: any;
@@ -17,6 +19,7 @@ interface CommerceProductCardProps {
   onAddToCart: (item: CommerceItem, isWholesale: boolean) => void;
   onBuyNow: (item: CommerceItem, isWholesale: boolean) => void;
   onSelectTab?: (tab: PortalTab) => void;
+  showServiceArea?: boolean;
 }
 
 export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
@@ -29,26 +32,28 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
   onQtyChange,
   onAddToCart,
   onBuyNow,
-  onSelectTab
+  onSelectTab,
+  showServiceArea = false
 }) => {
   const navigate = useNavigate();
   const { isCompared, toggleCompare } = useProductComparison();
-  const { isWishlisted, toggleWishlist } = useWishlist();
   const compared = isCompared(item.id);
-  const wishlisted = isWishlisted(item.id);
   const isWholesale = item.tradeMode === 'wholesale';
   const isDemand = item.isDemandRequest || item.badge?.includes('Demand');
   const isUsed = item.isUsedItem || item.badge?.includes('Used');
   const isService = item.type === 'service';
+  const locationLabel = showServiceArea
+    ? formatAdministrativeArea(item.serviceArea) || item.storeAddress
+    : item.proximityDistance;
 
   const handleViewDetails = () => {
     navigate(`/hub/marketplace/product/${item.id}`);
   };
 
   return (
-    <div
+    <ContentCard
       onClick={handleViewDetails}
-      className={`p-2.5 rounded-[2rem] bg-[var(--pm-card)] text-[var(--pm-text)] border transition-all hover:shadow-2xl flex flex-col justify-between space-y-2.5 group cursor-pointer premium-shadow active-scale ${
+      className={`p-2.5 transition-all hover:shadow-xl flex flex-col justify-between space-y-2.5 group cursor-pointer premium-shadow active-scale ${
         isDemand
           ? 'border-orange-500/30 hover:border-orange-500/60'
           : isUsed
@@ -59,7 +64,7 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
       }`}
     >
       <div className="space-y-2.5">
-        <div className="relative aspect-[4/3] rounded-[1.5rem] overflow-hidden bg-[var(--pm-surface)]">
+        <ContentCardMedia className="group aspect-[4/3] rounded-[1.5rem]">
           <img
             src={item.imageUrl || 'https://images.unsplash.com/photo-1585478259715-876a6a81fc08?auto=format&fit=crop&w=600&h=450&q=80'}
             alt={item.title}
@@ -101,59 +106,20 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
             )}
           </div>
 
-          <div className="absolute top-2 right-2 flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleCompare(item);
-              }}
-              aria-pressed={compared}
-              aria-label={compared ? (isBn ? 'তুলনা থেকে সরান' : 'Remove from compare') : isBn ? 'তুলনায় যোগ করুন' : 'Add to compare'}
-              className={`px-2 py-1 rounded-full border text-[9px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                compared
-                  ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] border-transparent shadow-sm'
-                  : 'pm-glass border-[var(--pm-border)] text-[var(--pm-text)] hover:border-[var(--pm-accent)]'
-              }`}
-            >
-              {compared ? <Check className="w-2.5 h-2.5" /> : <Scale className="w-2.5 h-2.5" />}
-              <span>{compared ? (isBn ? 'তুলনায়' : 'Compared') : isBn ? 'তুলনা' : 'Compare'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleWishlist(item);
-              }}
-              aria-pressed={wishlisted}
-              aria-label={
-                wishlisted
-                  ? isBn ? 'উইশলিস্ট থেকে সরান' : 'Remove from wishlist'
-                  : isBn ? 'উইশলিস্টে যোগ করুন' : 'Save to wishlist'
-              }
-              title={
-                wishlisted
-                  ? isBn ? 'উইশলিস্ট থেকে সরান' : 'Remove from wishlist'
-                  : isBn ? 'উইশলিস্টে সংরক্ষণ করুন' : 'Save to wishlist'
-              }
-              className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                wishlisted
-                  ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
-                  : 'pm-glass border-[var(--pm-border)] text-[var(--pm-text)] hover:border-rose-500 hover:text-rose-500'
-              }`}
-            >
-              <Heart className={`w-3.5 h-3.5 ${wishlisted ? 'fill-white' : ''}`} />
-            </button>
-          </div>
-
           {item.rating && (
             <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-full pm-glass border border-[var(--pm-border)] text-amber-500 text-[8px] font-bold flex items-center gap-0.5">
               <Star className="w-2 h-2 fill-amber-500" />
               <span>{item.rating.toFixed(1)}</span>
             </div>
           )}
-        </div>
+        </ContentCardMedia>
+
+        <ProductCardActionRow
+          item={item}
+          isBn={isBn}
+          onAddToCart={onAddToCart}
+          className="-mx-2.5 -mt-2.5"
+        />
 
         <div className="space-y-1 px-0.5">
           <div className="flex items-center justify-between gap-1.5">
@@ -168,10 +134,10 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
               <span className="hover:underline truncate">{item.storeName}</span>
               <ShieldCheck className="w-2.5 h-2.5 text-[var(--pm-accent)] shrink-0" />
             </button>
-            {item.proximityDistance && !isWholesale && (
+            {locationLabel && !isWholesale && (
               <div className="flex items-center gap-0.5 text-[8px] font-bold text-[var(--pm-muted)]">
                 <MapPin className="w-2 h-2" />
-                <span>{item.proximityDistance}</span>
+                <span>{locationLabel}</span>
               </div>
             )}
           </div>
@@ -276,70 +242,77 @@ export const CommerceProductCard: React.FC<CommerceProductCardProps> = ({
             </div>
           )}
 
-          {isDemand ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); }}
-              className="w-full py-2 rounded-[2rem] bg-orange-600 hover:bg-orange-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg shadow-orange-500/20 transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <MessageSquare className="w-3 h-3" />
-              <span>{isBn ? 'প্রস্তাব পাঠান' : 'Send Quote'}</span>
-            </button>
-          ) : isUsed ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); }}
-              className="w-full py-2 rounded-[2rem] bg-teal-600 hover:bg-teal-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg shadow-teal-500/20 transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <MessageSquare className="w-3 h-3" />
-              <span>{isBn ? 'মেসেজ দিন' : 'Message'}</span>
-            </button>
-          ) : isService ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onSelectTab) onSelectTab('services');
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleCompare(item);
               }}
-              className="w-full py-2 rounded-[2rem] bg-purple-600 hover:bg-purple-700 text-white font-black text-[9px] uppercase tracking-widest shadow-lg shadow-purple-500/20 transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
+              aria-pressed={compared}
+              aria-label={compared ? (isBn ? 'তুলনা থেকে সরান' : 'Remove from compare') : (isBn ? 'তুলনায় যোগ করুন' : 'Add to compare')}
+              title={compared ? (isBn ? 'তুলনা থেকে সরান' : 'Remove from compare') : (isBn ? 'তুলনায় যোগ করুন' : 'Add to compare')}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors focus-visible:outline-2 focus-visible:outline-[var(--pm-accent)] ${
+                compared
+                  ? 'border-transparent bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'
+                  : 'border-[var(--pm-border)] bg-[var(--pm-surface)] text-[var(--pm-muted)] hover:text-[var(--pm-accent)]'
+              }`}
             >
-              <Wrench className="w-3 h-3" />
-              <span>{isBn ? 'বুকিং দিন' : 'Book Now'}</span>
+              {compared ? <Check className="h-4 w-4" /> : <Scale className="h-4 w-4" />}
             </button>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddToCart(item, isWholesale);
-                }}
-                aria-label={isBn ? 'কার্টে যোগ করুন' : 'Add product to cart'}
-                className="min-h-9 rounded-xl border border-[var(--pm-border-strong)] bg-[var(--pm-surface)] text-[var(--pm-text)] hover:border-[var(--pm-accent)] hover:text-[var(--pm-accent)] font-black text-[9px] uppercase tracking-wide transition-all active-scale flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <ShoppingBag className="w-3 h-3" />
-                <span>{isBn ? 'কার্টে নিন' : 'Add to Cart'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onBuyNow(item, isWholesale);
-                }}
-                aria-label={isBn ? 'এখনই কিনুন' : 'Buy product now'}
-                className={`min-h-9 rounded-xl font-black text-[9px] uppercase tracking-wide shadow-lg transition-all active-scale flex items-center justify-center gap-1 cursor-pointer ${
-                  isWholesale
-                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/30'
-                    : 'bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)]'
-                }`}
-              >
-                <ShoppingBag className="w-3 h-3" />
-                <span>{isBn ? 'এখনই কিনুন' : 'Buy Now'}</span>
-              </button>
+            <div className="min-w-0 flex-1">
+              {isDemand ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); }}
+                  className="w-full min-h-10 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[9px] uppercase tracking-widest shadow-sm transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  <span>{isBn ? 'প্রস্তাব পাঠান' : 'Send Quote'}</span>
+                </button>
+              ) : isUsed ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); }}
+                  className="w-full min-h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-[9px] uppercase tracking-widest shadow-sm transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  <span>{isBn ? 'মেসেজ দিন' : 'Message'}</span>
+                </button>
+              ) : isService ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onSelectTab) onSelectTab('services');
+                  }}
+                  className="w-full min-h-10 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-[9px] uppercase tracking-widest shadow-sm transition-all active-scale flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Wrench className="w-3 h-3" />
+                  <span>{isBn ? 'বুকিং দিন' : 'Book Now'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onBuyNow(item, isWholesale);
+                  }}
+                  aria-label={isBn ? 'এখনই কিনুন' : 'Buy product now'}
+                  className={`w-full min-h-10 rounded-xl font-black text-[10px] uppercase tracking-wide shadow-sm transition-all active-scale flex items-center justify-center gap-1 cursor-pointer ${
+                    isWholesale
+                      ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/30'
+                      : 'bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)]'
+                  }`}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>{isBn ? 'এখনই কিনুন' : 'Buy Now'}</span>
+                </button>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
-    </div>
+    </ContentCard>
   );
 };

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { User, PortalTab } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { EmptyState } from '@/components/shared/EmptyState';
 import {
   DemandCard,
   CreateDemandModal,
@@ -30,13 +31,11 @@ import { ROUTE_PATHS } from '@/app/router/routeIds';
 interface DemandBoardPortalProps {
   currentUser: User;
   onSelectTab?: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
 }
 
 export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
   currentUser,
-  onSelectTab,
-  onOpenVendorModal
+  onSelectTab
 }) => {
   const { language } = useLanguage();
   const isBn = language === 'bn';
@@ -155,7 +154,7 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-5 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale shadow-md shrink-0"
+            className="min-h-11 px-5 py-2.5 rounded-2xl bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-bold flex items-center gap-2 cursor-pointer active-scale shadow-md shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>{isBn ? 'নতুন চাহিদা পোস্ট করুন' : 'Post Demand Request'}</span>
@@ -167,7 +166,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'all'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'all'
                 ? 'bg-[var(--pm-text)] text-[var(--pm-bg)] shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -183,7 +183,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('products')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'products'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'products'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -199,7 +200,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('services')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'services'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'services'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -215,7 +217,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => handleDomainSwitch('logistics')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
+            aria-pressed={activeDomain === 'logistics'}
+            className={`min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all ${
               activeDomain === 'logistics'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] text-[var(--pm-muted)] border border-[var(--pm-border)]'
@@ -269,7 +272,8 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
           <button
             type="button"
             onClick={() => setUrgentOnly(!urgentOnly)}
-            className={`px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
+            aria-pressed={urgentOnly}
+            className={`min-h-11 px-3 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border ${
               urgentOnly
                 ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
                 : 'bg-[var(--pm-card)] text-[var(--pm-muted)] border-[var(--pm-border)] hover:bg-[var(--pm-surface)]'
@@ -290,27 +294,25 @@ export const DemandBoardPortal: React.FC<DemandBoardPortalProps> = ({
         </div>
 
         {filteredDemands.length === 0 ? (
-          <div className="py-16 text-center rounded-3xl bg-[var(--pm-card)] border border-[var(--pm-border)] p-6 space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-[var(--pm-surface)] text-[var(--pm-muted)] flex items-center justify-center mx-auto">
-              <ClipboardList className="w-6 h-6" />
-            </div>
-            <h4 className="text-sm font-bold text-[var(--pm-text)]">
-              {isBn ? 'কোনো চাহিদা খুঁজে পাওয়া যায়নি' : 'No demand requests found'}
-            </h4>
-            <p className="text-xs text-[var(--pm-muted)] max-w-sm mx-auto">
-              {isBn
+          <EmptyState
+            icon={ClipboardList}
+            title={isBn ? 'কোনো চাহিদা খুঁজে পাওয়া যায়নি' : 'No demand requests found'}
+            description={
+              isBn
                 ? 'আপনার ফিল্টারের সাথে মিলছে এমন কোনো চাহিদা নেই। আপনি চাইলে নতুন চাহিদা পোস্ট করতে পারেন।'
-                : 'Try adjusting your search query or post your own demand request.'}
-            </p>
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isBn ? 'চাহিদা পোস্ট করুন' : 'Post Demand'}</span>
-            </button>
-          </div>
+                : 'Try adjusting your search query or post your own demand request.'
+            }
+            action={(
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] text-xs font-bold cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isBn ? 'চাহিদা পোস্ট করুন' : 'Post Demand'}</span>
+              </button>
+            )}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredDemands.map((demand) => (

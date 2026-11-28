@@ -1,11 +1,12 @@
 import React from 'react';
 import { Tag } from 'lucide-react';
 import { InventoryProductCardProps } from '@/features/inventory/types/inventoryTypes';
+import { ContentCard, ContentCardMedia } from '@/components/shared/CardPrimitives';
 
 export const InventoryProductCard: React.FC<InventoryProductCardProps> = ({ item, isBn, isHighlighted = false, onCreatePromoPost }) => (
-  <div className={`bg-[var(--pm-card)] border rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3 transition-all flex flex-col justify-between ${isHighlighted ? 'border-[var(--pm-accent)] ring-2 ring-[var(--pm-accent)] shadow-lg' : 'border-[var(--pm-border)] hover:border-[var(--pm-accent-border)]'}`}>
+  <ContentCard className={`p-3.5 sm:p-4 space-y-3 transition-all flex flex-col justify-between ${isHighlighted ? 'border-[var(--pm-accent)] ring-2 ring-[var(--pm-accent)] shadow-lg' : 'hover:border-[var(--pm-accent-border)]'}`}>
     <div className="space-y-3">
-      <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-[var(--pm-surface)]">
+      <ContentCardMedia className="aspect-[4/3] rounded-xl">
         <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
         <span className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${item.tradeMode === 'wholesale' ? 'bg-[var(--pm-accent-soft)] text-[var(--pm-accent)] border border-[var(--pm-accent-border)]' : 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)]'}`}>
           {item.tradeMode === 'wholesale' ? 'Wholesale Tier' : 'Retail Item'}
@@ -13,7 +14,7 @@ export const InventoryProductCard: React.FC<InventoryProductCardProps> = ({ item
         <span className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold ${item.inStock ? 'bg-[var(--pm-success-soft)] text-[var(--pm-success)]' : 'bg-[var(--pm-danger-soft)] text-[var(--pm-danger)]'}`}>
           {item.inStock ? (isBn ? 'স্টকে আছে' : 'In stock') : (isBn ? 'স্টক শেষ' : 'Out of stock')}
         </span>
-      </div>
+      </ContentCardMedia>
       <div>
         <span className="text-[10px] font-bold text-[var(--pm-muted)] uppercase tracking-wider">{item.category}</span>
         <h4 className="text-xs font-bold text-[var(--pm-text)] line-clamp-1">{item.title}</h4>
@@ -27,5 +28,5 @@ export const InventoryProductCard: React.FC<InventoryProductCardProps> = ({ item
         <span>{isBn ? 'প্রমো পোস্ট' : 'Promo Post'}</span>
       </button>
     </div>
-  </div>
+  </ContentCard>
 );

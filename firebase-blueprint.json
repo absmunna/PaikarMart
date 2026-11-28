@@ -224,6 +224,119 @@
         }
       },
       "required": ["id", "userId", "productId", "productTitle", "productPrice", "createdAt"]
+    },
+    "PaikarMartDelegate": {
+      "title": "PaikarMart Organization Team Delegate",
+      "description": "Cross-device team member access control record for the standalone PaikarMart Super Admin profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["consumer", "vendor", "moderator", "admin", "super_admin"]
+        },
+        "pageRole": {
+          "type": "string",
+          "enum": ["admin", "editor", "viewer"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "invited"]
+        },
+        "addedBy": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "email", "name", "role", "pageRole", "status", "addedBy", "createdAt"]
+    },
+    "VendorDelegate": {
+      "title": "Vendor Store Page Team Delegate",
+      "description": "Facebook-page style team member access control record allowing vendor owners to assign page managers",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vendorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vendorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "pageRole": {
+          "type": "string",
+          "enum": ["admin", "editor", "viewer"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "invited", "revoked"]
+        },
+        "addedBy": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "vendorId", "vendorName", "ownerId", "email", "name", "pageRole", "status", "addedBy", "createdAt"]
     }
   },
   "firestore": {
@@ -246,6 +359,14 @@
     "/wishlists/{wishlistId}": {
       "schema": "WishlistItem",
       "description": "Owner-isolated user saved wishlist items"
+    },
+    "/paikarmart_delegates/{delegateId}": {
+      "schema": "PaikarMartDelegate",
+      "description": "Cross-device team delegates authorized for the PaikarMart organization profile"
+    },
+    "/vendor_delegates/{delegateId}": {
+      "schema": "VendorDelegate",
+      "description": "Vendor store team access delegates managed by each vendor owner"
     }
   }
 }

@@ -25,7 +25,6 @@ interface SuperAppHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal: () => void;
   onOpenCloudGuide: () => void;
   isVendor: boolean;
 }
@@ -34,7 +33,6 @@ export const SuperAppHubModal: React.FC<SuperAppHubModalProps> = ({
   isOpen,
   onClose,
   onSelectTab,
-  onOpenVendorModal,
   onOpenCloudGuide,
   isVendor,
 }) => {
@@ -228,25 +226,11 @@ export const SuperAppHubModal: React.FC<SuperAppHubModalProps> = ({
                 </h4>
                 <p className="text-xs text-[var(--pm-muted)]">
                   {isVendor
-                    ? isBn ? 'লাইভ ইনভেন্টরি ও অর্ডার পরিচালনা করুন' : 'Manage your live inventory & orders'
-                    : isBn ? '৪-ধাপের KYC ভেরিফিকেশন ও স্টোর চালু করুন' : '4-step compliance registration & KYC verification'}
+                    ? isBn ? 'ব্যবসা পরিচালনার জন্য সাইডবার খুলুন।' : 'Open My Business in the sidebar to manage your store.'
+                    : isBn ? 'ব্যবসা পরিচালনা করতে সাইডবারের “আমার ব্যবসা” খুলুন।' : 'Open My Business in the sidebar to manage a store.'}
                 </p>
               </div>
             </div>
-
-            <button
-              onClick={() => {
-                onClose();
-                if (isVendor) {
-                  onSelectTab('vendor-dash');
-                } else {
-                  onOpenVendorModal();
-                }
-              }}
-              className="px-3.5 py-1.5 rounded-lg bg-[var(--pm-accent)] hover:bg-[var(--pm-accent-hover)] text-[var(--pm-accent-fg)] text-xs font-semibold shrink-0 transition-colors cursor-pointer"
-            >
-              {isVendor ? (isBn ? 'ড্যাশবোর্ড' : 'Open Console') : (isBn ? 'স্টোর খুলুন' : 'Register Store')}
-            </button>
           </div>
 
           {/* Cloud Architecture Guide */}

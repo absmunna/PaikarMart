@@ -17,6 +17,7 @@ import { CommerceItem, ServiceBooking, ProviderServiceOffer, User } from '@/type
 import { getServiceIcon } from '@/features/services/components/ServiceCard';
 import { getProviderOffersForService } from '@/features/marketplace';
 import type { ComputedHyperlocalMeta } from '@/features/logistics';
+import { formatAdministrativeArea } from '@/utils/administrativeArea';
 
 interface ServiceBookingModalProps {
   selectedService: CommerceItem | null;
@@ -65,11 +66,11 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
     ? `${hyperlocalMeta.totalEtaMin} min (Prep ${hyperlocalMeta.estimatedPrepMin}m + Transit ${hyperlocalMeta.estimatedTransitMin}m)`
     : selectedOffer?.estimatedArrival || selectedService.serviceDuration || '45-60 min';
 
-  const activeLocation = hyperlocalMeta
-    ? `${hyperlocalMeta.distanceKm.toFixed(1)} km away (${hyperlocalMeta.radiusLimitKm}km radar)`
-    : selectedOffer
-    ? `${selectedOffer.proximityDistance} away (${selectedOffer.serviceRadiusKm}km radius)`
-    : `${selectedService.proximityDistance || 'Nearby'} away`;
+  const activeLocation =
+    formatAdministrativeArea(selectedOffer?.serviceArea || selectedService.serviceArea) ||
+    selectedService.storeAddress ||
+    selectedService.restaurantAddress ||
+    'Service area not specified';
 
   const handleConfirmBooking = () => {
     setErrorMsg(null);
@@ -165,7 +166,11 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
                         <div className="flex items-center gap-2 text-[10px] text-[var(--pm-muted)]">
                           <span className="flex items-center gap-0.5 text-amber-500 font-bold"><Star className="w-2.5 h-2.5 fill-amber-500" /> {offer.rating}</span>
                           <span>·</span>
-                          <span>{offer.proximityDistance}</span>
+                          <span>
+                            {formatAdministrativeArea(offer.serviceArea || selectedService.serviceArea) ||
+                              selectedService.storeAddress ||
+                              'Service area not set'}
+                          </span>
                         </div>
                       </div>
                     </div>

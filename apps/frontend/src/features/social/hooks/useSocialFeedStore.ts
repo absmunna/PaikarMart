@@ -9,6 +9,7 @@ import type {
 } from '@/types';
 import { INITIAL_POSTS } from '@/data/mockData';
 import { loadStoredData, saveStoredData } from '@/lib/supabase';
+import { fetchSocialFeedResult } from '../services/socialFeedApiClient';
 
 export interface UseSocialFeedStoreOptions {
   currentUser: User;
@@ -19,10 +20,21 @@ export function useSocialFeedStore({ currentUser, onPostCreated }: UseSocialFeed
   const [posts, setPosts] = useState<SocialPost[]>(() =>
     loadStoredData('POSTS', INITIAL_POSTS)
   );
+  const [savedPostIds, setSavedPostIds] = useState<string[]>(() => {
+    const storedIds = loadStoredData<unknown>('SAVED_SOCIAL_POSTS', []);
+    return Array.isArray(storedIds)
+      ? [...new Set(storedIds.filter((postId): postId is string => typeof postId === 'string'))]
+      : [];
+  });
+  const [isFeedLoading, setIsFeedLoading] = useState(true);
 
   useEffect(() => {
     saveStoredData('POSTS', posts);
   }, [posts]);
+
+  useEffect(() => {
+    saveStoredData('SAVED_SOCIAL_POSTS', savedPostIds);
+  }, [savedPostIds]);
 
   const mergeServerPosts = useCallback((serverPosts: SocialPost[]) => {
     if (!serverPosts.length) return;
@@ -38,6 +50,19 @@ export function useSocialFeedStore({ currentUser, onPostCreated }: UseSocialFeed
       return merged;
     });
   }, []);
+
+  const refreshServerPosts = useCallback(async (signal?: AbortSignal) => {
+    setIsFeedLoading(true);
+    try {
+      const feedResult = await fetchSocialFeedResult(signal);
+      if (signal?.aborted || feedResult.posts.length === 0) return;
+      mergeServerPosts(feedResult.posts);
+    } finally {
+      if (!signal?.aborted) {
+        setIsFeedLoading(false);
+      }
+    }
+  }, [mergeServerPosts]);
 
   const handleCreatePost = useCallback(
     (
@@ -130,12 +155,25 @@ export function useSocialFeedStore({ currentUser, onPostCreated }: UseSocialFeed
     [currentUser]
   );
 
+  const handleToggleSavedPost = useCallback((postId: string) => {
+    if (!postId) return;
+    setSavedPostIds((prev) =>
+      prev.includes(postId)
+        ? prev.filter((savedId) => savedId !== postId)
+        : [postId, ...prev]
+    );
+  }, []);
+
   return {
     posts,
+    savedPostIds,
+    isFeedLoading,
     setPosts,
     mergeServerPosts,
+    refreshServerPosts,
     handleCreatePost,
     handleReactToPost,
     handleAddComment,
+    handleToggleSavedPost,
   };
 }

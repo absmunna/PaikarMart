@@ -9,6 +9,7 @@ import {
   paymentRouter,
 } from '../modules/payment/paymentRoutes.js';
 import { verifyWebhookSignature } from '../modules/logistics/courierAdapters.js';
+import { isPaymentSandboxAllowed } from '../config/env.js';
 
 function startTestServer(app: express.Express): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   return new Promise((resolve) => {
@@ -114,6 +115,23 @@ test('Payment gateway adapters fail closed in production when credentials and sa
     if (prevSandbox === undefined) delete process.env.PAYMENT_SANDBOX_MODE;
     else process.env.PAYMENT_SANDBOX_MODE = prevSandbox;
     if (prevAppKey !== undefined) process.env.BKASH_APP_KEY = prevAppKey;
+  }
+});
+
+test('Payment sandbox cannot be enabled in production by an environment override', () => {
+  const prevNodeEnv = process.env.NODE_ENV;
+  const prevSandbox = process.env.PAYMENT_SANDBOX_MODE;
+
+  process.env.NODE_ENV = 'production';
+  process.env.PAYMENT_SANDBOX_MODE = 'true';
+
+  try {
+    assert.equal(isPaymentSandboxAllowed(), false);
+  } finally {
+    if (prevNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNodeEnv;
+    if (prevSandbox === undefined) delete process.env.PAYMENT_SANDBOX_MODE;
+    else process.env.PAYMENT_SANDBOX_MODE = prevSandbox;
   }
 });
 

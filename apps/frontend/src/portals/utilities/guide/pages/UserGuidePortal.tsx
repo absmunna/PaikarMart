@@ -24,7 +24,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 interface UserGuidePortalProps {
   onSelectTab: (tab: PortalTab) => void;
-  onOpenVendorModal?: () => void;
   isVendor?: boolean;
 }
 
@@ -209,7 +208,6 @@ const GUIDE_ITEMS: GuideCardItem[] = [
 
 export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
   onSelectTab,
-  onOpenVendorModal,
   isVendor,
 }) => {
   const { language, toggleLanguage } = useLanguage();
@@ -243,7 +241,6 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
     { tab: 'orders', labelEn: 'Orders Hub', labelBn: 'অর্ডারস হাব', icon: CheckCircle2 },
     { tab: 'wallet', labelEn: 'Wallet & Escrow', labelBn: 'ওয়ালেট ও এসক্রো', icon: Wallet },
     { tab: 'messages', labelEn: 'Messages & Quotes', labelBn: 'মেসেজ ও কোটেশন', icon: MessageSquare },
-    { tab: 'settings', labelEn: 'Settings Center', labelBn: 'সেটিংস সেন্টার', icon: MapPin },
   ];
 
   return (
@@ -271,7 +268,7 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
           <button
             type="button"
             onClick={toggleLanguage}
-            className="self-start px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
+            className="self-start min-h-11 px-4 py-2.5 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-card-hover)] border border-[var(--pm-border)] text-[var(--pm-text)] text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
           >
             {isBn ? 'Switch to English' : 'বাংলায় পড়ুন'}
           </button>
@@ -300,7 +297,8 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setAudienceFilter(tab.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                aria-pressed={audienceFilter === tab.id}
+                className={`min-h-10 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   audienceFilter === tab.id
                     ? 'bg-[var(--pm-accent)] text-[var(--pm-accent-fg)] shadow-sm'
                     : 'text-[var(--pm-muted)] hover:text-[var(--pm-text)]'
@@ -331,7 +329,7 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                 key={shortcut.tab}
                 type="button"
                 onClick={() => onSelectTab(shortcut.tab)}
-                className="flex items-center gap-2.5 p-3 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent-soft)] border border-[var(--pm-border)] hover:border-[var(--pm-accent-border)] text-left transition-all active:scale-[0.98] cursor-pointer"
+                className="min-h-11 flex items-center gap-2.5 p-3 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent-soft)] border border-[var(--pm-border)] hover:border-[var(--pm-accent-border)] text-left transition-all active:scale-[0.98] cursor-pointer"
               >
                 <Icon className="w-4 h-4 text-[var(--pm-accent)] shrink-0" />
                 <span className="text-xs font-bold text-[var(--pm-text)] truncate">
@@ -397,16 +395,19 @@ export const UserGuidePortal: React.FC<UserGuidePortalProps> = ({
                   if (item.isVendorOnboarding) {
                     if (isVendor) {
                       onSelectTab('vendor-dash');
-                    } else if (onOpenVendorModal) {
-                      onOpenVendorModal();
                     }
                   } else if (item.targetTab) {
                     onSelectTab(item.targetTab);
                   }
                 }}
-                className="w-full py-3 px-4 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-xs font-black uppercase tracking-wider flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer"
+                disabled={Boolean(item.isVendorOnboarding && !isVendor)}
+                className="w-full py-3 px-4 rounded-2xl bg-[var(--pm-surface)] hover:bg-[var(--pm-accent)] hover:text-[var(--pm-accent-fg)] border border-[var(--pm-border)] hover:border-[var(--pm-accent)] text-[var(--pm-text)] text-xs font-black uppercase tracking-wider flex items-center justify-between transition-all active:scale-[0.98] cursor-pointer disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-[var(--pm-surface)] disabled:hover:text-[var(--pm-text)] disabled:hover:border-[var(--pm-border)] disabled:active:scale-100"
               >
-                <span>{isBn ? item.actionLabelBn : item.actionLabelEn}</span>
+                <span>
+                  {item.isVendorOnboarding && !isVendor
+                    ? isBn ? 'সাইডবারে আমার ব্যবসা খুলুন' : 'Open My Business in the sidebar'
+                    : isBn ? item.actionLabelBn : item.actionLabelEn}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

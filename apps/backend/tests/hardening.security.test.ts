@@ -8,6 +8,8 @@ import { wholesaleRouter } from '../modules/wholesale/wholesaleRoutes.js';
 import rfqRouter from '../modules/rfq/rfqRoutes.js';
 import { vendorRouter } from '../modules/vendors/vendorRoutes.js';
 import { socialRouter } from '../modules/social/socialRoutes.js';
+import { catalogRouter } from '../modules/catalog/catalogRoutes.js';
+import { verifyCatalogProduct } from '../modules/catalog/catalogVerificationService.js';
 import { createPaymentSession, findPaymentSessionById, clearMemoryPaymentSessionsForTest } from '../modules/payment/paymentRepository.js';
 import {
   clearMemoryFlaggedPostsForTest,
@@ -102,6 +104,49 @@ test('Retail Q&A answer, RFQ quoting, and Vendor KYC endpoints enforce auth & RB
     assert.equal(feedPostRes.status, 401);
   } finally {
     await srv.close();
+  }
+});
+
+test('catalog verification preserves both API aliases and requires Firebase auth', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/catalog', catalogRouter);
+  app.use('/api/v1/catalog', catalogRouter);
+
+  const srv = await startTestServer(app);
+  try {
+    for (const route of ['/api/catalog/verify-product', '/api/v1/catalog/verify-product']) {
+      const response = await fetch(`${srv.baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Test product', category: 'Test' }),
+      });
+      assert.equal(response.status, 401, `Expected 401 on ${route}`);
+    }
+  } finally {
+    await srv.close();
+  }
+});
+
+test('catalog verification sends unavailable AI results to human review', async () => {
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const result = await verifyCatalogProduct({
+      title: 'Test product',
+      brand: 'Test brand',
+      category: 'Test category',
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.isApproved, false);
+    assert.equal(result.status, 'pending_human_review');
+    assert.deepEqual(result.suggestedTags, ['Test category', 'Test brand']);
+  } finally {
+    if (originalApiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = originalApiKey;
+    }
   }
 });
 

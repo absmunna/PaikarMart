@@ -31,13 +31,19 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
 
+    function isBootstrapAdmin() {
+      return isVerifiedEmail() && request.auth.token.email == 'abs.munna1@gmail.com';
+    }
+
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     function isAdmin() {
-      return isVerifiedEmail() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isBootstrapAdmin() || (
+        isVerifiedEmail() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
     }
 
     // 3. Entity Validation Blueprints (Anti-Update-Gap & Volumetric Size Guards)
@@ -107,6 +113,36 @@ service cloud.firestore {
         (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
+    function isValidPaikarMartDelegate(data) {
+      return data.keys().hasAll(['id', 'email', 'name', 'role', 'pageRole', 'status', 'addedBy', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'email', 'name', 'role', 'pageRole', 'status', 'addedBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.role in ['consumer', 'vendor', 'moderator', 'admin', 'super_admin'] &&
+        data.pageRole in ['admin', 'editor', 'viewer'] &&
+        data.status in ['active', 'invited'] &&
+        data.addedBy is string && data.addedBy.size() >= 3 && data.addedBy.size() <= 160 &&
+        data.createdAt is timestamp &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidVendorDelegate(data) {
+      return data.keys().hasAll(['id', 'vendorId', 'vendorName', 'ownerId', 'email', 'name', 'pageRole', 'status', 'addedBy', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'vendorId', 'vendorName', 'ownerId', 'email', 'name', 'pageRole', 'status', 'addedBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.vendorId) &&
+        data.vendorName is string && data.vendorName.size() >= 1 && data.vendorName.size() <= 120 &&
+        isValidId(data.ownerId) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.pageRole in ['admin', 'editor', 'viewer'] &&
+        data.status in ['active', 'invited', 'revoked'] &&
+        data.addedBy is string && data.addedBy.size() >= 3 && data.addedBy.size() <= 160 &&
+        data.createdAt is timestamp &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
     // 4. Test Connection Health Check Document
     match /test/{docId} {
       allow get: if true;
@@ -115,7 +151,7 @@ service cloud.firestore {
     // 5. Owner-Isolated User Account Documents (Contains PII -> Strict Owner or Admin Read Only)
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
-      allow list: if isAdmin() || (isSignedIn() && resource.data.id == request.auth.uid);
+      allow list: if isBootstrapAdmin() || (isSignedIn() && resource.data.id == request.auth.uid);
       allow create: if isSignedIn() && isValidId(userId) &&
         isOwner(userId) &&
         isValidUserProfile(incoming()) &&
@@ -165,12 +201,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 6. Customer Orders (Strict Privacy + Terminal State Locking)
+    // 7. Customer Orders (Strict Privacy + Terminal State Locking)
     match /orders/{orderId} {
       allow get: if isSignedIn() && isValidId(orderId) &&
         (existing().customerId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() &&
-        (resource.data.customerId == request.auth.uid || isAdmin());
+      allow list: if isBootstrapAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
       allow create: if isVerifiedEmail() && isValidId(orderId) &&
         isValidOrder(incoming()) &&
         incoming().id == orderId &&
@@ -194,12 +229,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 7. User Notifications (Owner-Isolated Read & Mark-Read Only)
+    // 8. User Notifications (Owner-Isolated Read & Mark-Read Only)
     match /notifications/{notificationId} {
       allow get: if isSignedIn() && isValidId(notificationId) &&
         (existing().recipientId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() &&
-        (resource.data.recipientId == request.auth.uid || isAdmin());
+      allow list: if isBootstrapAdmin() || (isSignedIn() && resource.data.recipientId == request.auth.uid);
       allow create: if isAdmin() && isValidId(notificationId) &&
         isValidNotification(incoming()) &&
         incoming().createdAt == request.time;
@@ -217,18 +251,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 8. Verified Platform Admins Collection (Read-only for self check, managed via server/console)
+    // 9. Verified Platform Admins Collection (Read-only for self check, managed via server/console)
     match /admins/{userId} {
       allow get: if isValidId(userId) && isOwner(userId);
       allow list, create, update, delete: if false;
     }
 
-    // 9. User Wishlists (Owner-Isolated Saved Products)
+    // 10. User Wishlists (Owner-Isolated Saved Products)
     match /wishlists/{wishlistId} {
       allow get: if isSignedIn() && isValidId(wishlistId) &&
         (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() &&
-        (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isBootstrapAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && isValidId(wishlistId) &&
         isValidWishlistItem(incoming()) &&
         incoming().id == wishlistId &&
@@ -249,6 +282,67 @@ service cloud.firestore {
         );
       allow delete: if isSignedIn() && isValidId(wishlistId) &&
         (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 11. PaikarMart Organization Team Delegates (Super Admin Page Roles)
+    match /paikarmart_delegates/{delegateId} {
+      allow get: if isValidId(delegateId) && (
+        isAdmin() ||
+        (isVerifiedEmail() && existing().email == request.auth.token.email)
+      );
+      allow list: if isBootstrapAdmin() ||
+        (isVerifiedEmail() && resource.data.email == request.auth.token.email);
+      allow create: if isAdmin() && isValidId(delegateId) &&
+        isValidPaikarMartDelegate(incoming()) &&
+        incoming().id == delegateId &&
+        incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(delegateId) &&
+        isValidPaikarMartDelegate(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow delete: if isAdmin() && isValidId(delegateId) &&
+        existing().email != 'abs.munna1@gmail.com';
+    }
+
+    // 12. Vendor Store Team Delegates (Facebook Page-Style Store Access Management)
+    match /vendor_delegates/{delegateId} {
+      allow get: if isValidId(delegateId) && (
+        isAdmin() ||
+        (isVerifiedEmail() && (
+          existing().ownerId == request.auth.uid ||
+          existing().email == request.auth.token.email
+        ))
+      );
+      allow list: if isBootstrapAdmin() || (
+        isVerifiedEmail() && (
+          resource.data.ownerId == request.auth.uid ||
+          resource.data.email == request.auth.token.email
+        )
+      );
+      allow create: if isVerifiedEmail() && isValidId(delegateId) &&
+        isValidVendorDelegate(incoming()) &&
+        incoming().id == delegateId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if isVerifiedEmail() && isValidId(delegateId) &&
+        isValidVendorDelegate(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().vendorId == existing().vendorId &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time) && (
+          isAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'pageRole', 'status', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedEmail() && isValidId(delegateId) && (
+        isAdmin() || existing().ownerId == request.auth.uid
+      );
     }
   }
 }
